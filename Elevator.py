@@ -1,165 +1,111 @@
-# File: Elevator.py
 import simpy
-from typing import Set
-
-# 必要なクラスをインポート
-# このファイルを実行するには、同じディレクトリに Entity.py, MessageBroker.py, GroupControlSystem.py が必要です。
 from Entity import Entity
 from MessageBroker import MessageBroker
-# from elevator_interfaces import Directions # 将来的に使う
-
-class Door:
-    """ドアの開閉をシミュレートするシンプルなクラス"""
-    def __init__(self, env: simpy.Environment, open_time: float = 1.5, close_time: float = 1.5):
-        self.env = env
-        self.open_time = open_time
-        self.close_time = close_time
-
-    def open(self):
-        """ドアを開けるプロセス"""
-        print(f"{self.env.now:.2f} [Door] Opening...")
-        yield self.env.timeout(self.open_time)
-        print(f"{self.env.now:.2f} [Door] Opened.")
-
-    def close(self):
-        """ドアを閉めるプロセス"""
-        print(f"{self.env.now:.2f} [Door] Closing...")
-        yield self.env.timeout(self.close_time)
-        print(f"{self.env.now:.2f} [Door] Closed.")
 
 class Elevator(Entity):
     """
-    エレベータ単体を表現するクラス。
-    GCSからの指示を受けて動作する。
+    セレコレ機能を持つエレベータ
     """
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_move_time: float = 2.0):
-        """
-        Elevatorを初期化します。
 
-        Args:
-            env: SimPyのシミュレーション環境。
-            name: エレベータの名前 (例: "Elevator_1")。
-            broker: 通信を仲介するメッセージブローカー。
-            num_floors: 建物の階数。
-            floor_move_time: 1フロア移動するのにかかる時間(秒)。
-        """
+    class Door:
+        """エレベータのドア（簡易版）"""
+        def __init__(self, env, open_time=1.5, close_time=1.5):
+            self.env = env
+            self.open_time = open_time
+            self.close_time = close_time
+
+        def open(self):
+            print(f"{self.env.now:.2f} [Door] Opening...")
+            yield self.env.timeout(self.open_time)
+            print(f"{self.env.now:.2f} [Door] Opened.")
+
+        def close(self):
+            print(f"{self.env.now:.2f} [Door] Closing...")
+            yield self.env.timeout(self.close_time)
+            print(f"{self.env.now:.2f} [Door] Closed.")
+
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int):
         super().__init__(env, name)
         self.broker = broker
-        self.current_floor: int = 1
-        self.num_floors: int = num_floors
-        self.floor_move_time = floor_move_time
-        self.door = Door(env)
+        self.num_floors = num_floors
         
-        self.state: str = 'idle'
-        self.car_calls: Set[int] = set()
+        # --- セレコレ用の新しい属性 ---
+        self.current_floor = 1
+        self.direction = "IDLE"  # "IDLE", "UP", "DOWN"
+        
+        # 呼び出しを記憶するためのリスト（セットを使うと重複がなくて便利）
+        self.car_calls = set()
+        self.hall_calls_up = set()
+        self.hall_calls_down = set()
+        
+        # 内部コンポーネント
+        self.door = self.Door(env)
+        
+        # 定数
+        self.floor_move_time = 2.0
+        
+        self.env.process(self.run())
+        self.env.process(self.task_listener())
 
-    def run(self):
-        """Elevatorのメインプロセス。GCSからのタスクを待ち受ける。"""
-        task_topic = f"elevator/{self.entity_id}/task"
-        print(f"{self.env.now:.2f} [{self.name}] Operational at floor {self.current_floor}. Waiting for tasks on '{task_topic}'.")
+    def task_listener(self):
+        """郵便局からタスクを受け取り、やることリストに追加し続ける"""
+        task_topic = f"elevator/{self.name}/task"
+        car_call_topic = f"elevator/{self.name}/car_call"
 
         while True:
-            task = yield self.broker.subscribe(task_topic)
-            print(f"{self.env.now:.2f} [{self.name}] Received task: {task}")
-
-            task_type = task.get("task_type")
-            if task_type == "ASSIGN_HALL_CALL":
-                pickup_floor = task.get("details", {}).get("floor")
-                if pickup_floor:
-                    yield self.env.process(self._handle_hall_call_trip(pickup_floor))
-
-    def _handle_hall_call_trip(self, pickup_floor: int):
-        """ホール呼び出しに応答し、乗客を目的地まで運ぶ一連のプロセス"""
-        # 1. 呼び出し階へ移動
-        yield self.env.process(self._move_to_floor(pickup_floor))
-        
-        # 2. ドアを開けて、乗客からの行先階指示(かご内呼び出し)を待つ
-        yield self.env.process(self.door.open())
-        
-        car_call_topic = f"elevator/{self.entity_id}/car_call"
-        print(f"{self.env.now:.2f} [{self.name}] Waiting for car call on '{car_call_topic}'...")
-        
-        boarding_timeout = 5 # 5秒以内にかご内ボタンが押されなければドアを閉める
-        car_call_event = self.broker.subscribe(car_call_topic)
-        result = yield car_call_event | self.env.timeout(boarding_timeout)
-
-        destination_floor = None
-        if car_call_event in result:
-            car_call_task = result[car_call_event]
-            destination_floor = car_call_task.get("destination")
-            print(f"{self.env.now:.2f} [{self.name}] Received car call for floor {destination_floor}.")
-            self.car_calls.add(destination_floor)
-        else:
-            print(f"{self.env.now:.2f} [{self.name}] Boarding time expired. No car call received.")
-
-        # 3. ドアを閉める
-        yield self.env.process(self.door.close())
-        
-        # 4. 行先階が指示されていれば、そこへ移動する
-        if destination_floor:
-            yield self.env.process(self._move_to_floor(destination_floor))
+            # 2種類のポストを同時に監視する
+            task_event = self.broker.get(task_topic)
+            car_call_event = self.broker.get(car_call_topic)
             
-            # 目的地でドアを開閉して乗客を降ろす
-            yield self.env.process(self.door.open())
-            print(f"{self.env.now:.2f} [{self.name}] Passenger exiting.")
-            yield self.env.timeout(1.5) # 乗客が降りる時間
-            yield self.env.process(self.door.close())
+            # どちらかの手紙が来たら、処理を始める
+            result = yield task_event | car_call_event
             
-            self.car_calls.remove(destination_floor)
-
-        print(f"{self.env.now:.2f} [{self.name}] Service trip complete. Returning to idle.")
-        self.state = 'idle'
-
-
-    def _move_to_floor(self, target_floor: int):
-        """指定された階まで移動するプロセス"""
-        if self.current_floor == target_floor:
-            return
-
-        self.state = 'moving'
-        print(f"{self.env.now:.2f} [{self.name}] Moving from {self.current_floor} to {target_floor}.")
-
-        while self.current_floor != target_floor:
-            yield self.env.timeout(self.floor_move_time)
+            if task_event in result:
+                task = result[task_event]
+                self._process_hall_call(task)
             
-            if self.current_floor < target_floor:
-                self.current_floor += 1
-            else:
-                self.current_floor -= 1
-            
-            print(f"{self.env.now:.2f} [{self.name}] Reached floor {self.current_floor}.")
+            if car_call_event in result:
+                car_call = result[car_call_event]
+                self._process_car_call(car_call)
+
+    def _process_hall_call(self, task):
+        """乗り場呼び出しをやることリストに追加する"""
+        details = task['details']
+        floor = details['floor']
+        direction = details['direction']
         
-        print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}.")
+        if direction == "UP":
+            self.hall_calls_up.add(floor)
+        elif direction == "DOWN":
+            self.hall_calls_down.add(floor)
+        
+        print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}. Lists: car={self.car_calls}, up={self.hall_calls_up}, down={self.hall_calls_down}")
 
+    def _process_car_call(self, car_call):
+        """かご呼びをやることリストに追加する"""
+        dest_floor = car_call['destination']
+        self.car_calls.add(dest_floor)
+        print(f"{self.env.now:.2f} [{self.name}] Car call registered: Floor {dest_floor}. Lists: car={self.car_calls}, up={self.hall_calls_up}, down={self.hall_calls_down}")
 
-if __name__ == '__main__':
-    # --- このクラスの動作をGCSと連携させて確認するためのテストコード ---
-    from GroupControlSystem import GroupControlSystem
+    def run(self):
+        """エレベータのメインロジック"""
+        print(f"{self.env.now:.2f} [{self.name}] Operational at floor {self.current_floor}. Waiting for calls.")
+        
+        # --- ここから下に、セレコレのアルゴリズムを実装していく ---
+        while True:
+            # 今はまだ何もしないで、1秒待つだけ
+            # TODO: decide_next_move() のような判断ロジックを実装する
+            yield self.env.timeout(1)
 
-    def dummy_passenger_process(env, broker, elevator_id, start_floor, dest_floor):
-        # 1. ホールボタンを押す
-        yield env.timeout(5)
-        hall_call_message = {"floor": start_floor, "direction": "UP"}
-        print(f"{env.now:.2f} [Passenger] Pressing hall button: {hall_call_message}")
-        broker.publish("gcs/hall_call", hall_call_message)
+    # --- これから作るセレコレ用のメソッド（今はまだ空っぽ） ---
+    def _decide_next_direction(self):
+        pass # 次の進行方向を決めるロジック
 
-        # 2. エレベータが到着してドアが開くのを待ってから、かご内ボタンを押す
-        # (ここでは固定時間でシミュレート)
-        yield env.timeout(10) # 5秒(登場) + 4秒(移動) + 1.5秒(ドア開) = 10.5秒後あたり
-        car_call_message = {"destination": dest_floor}
-        car_call_topic = f"elevator/{elevator_id}/car_call"
-        print(f"{env.now:.2f} [Passenger] Pressing car button: {car_call_message}")
-        broker.publish(car_call_topic, car_call_message)
+    def _find_next_stop(self):
+        pass # 現在の進行方向で、次に停まるべき階を見つけるロジック
 
+    def _move_to_floor(self, target_floor):
+        pass # 指定された階まで移動するロジック
 
-    env = simpy.Environment()
-    broker = MessageBroker(env)
-    gcs = GroupControlSystem(env, broker)
-    elevator1 = Elevator(env, "Elevator_1", broker, 10, floor_move_time=2)
-    gcs.register_elevator(elevator1)
-    # 3階から8階へ行きたい乗客をシミュレート
-    env.process(dummy_passenger_process(env, broker, elevator1.entity_id, 3, 8))
-
-    print("--- Elevator Integration Test Start ---")
-    env.run(until=50) # シミュレーション時間を延長
-    print("--- Elevator Integration Test End ---")
+    def _service_floor(self):
+        pass # 到着した階で乗客を乗降させるロジック
