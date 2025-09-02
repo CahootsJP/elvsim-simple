@@ -5,54 +5,47 @@ from HallButton import HallButton
 
 class Passenger(Entity):
     """
-    エレベータを利用する乗客
+    乗客エンティティ（v2.0）
     """
-    def __init__(self, env: simpy.Environment, name: str, 
-                 broker: MessageBroker, hall_buttons: list[HallButton],
-                 arrival_floor: int, destination_floor: int):
-        """
-        乗客を初期化する
-
-        Args:
-            env (simpy.Environment): SimPy環境
-            name (str): 乗客の名前
-            broker (MessageBroker): 通信に使うメッセージブローカー
-            hall_buttons (list[HallButton]): ホールボタンのリスト
-            arrival_floor (int): 乗客の出現階
-            destination_floor (int): 乗客の目的階
-        """
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, 
+                 hall_buttons, floor_queues, arrival_floor: int, destination_floor: int):
         super().__init__(env, name)
         self.broker = broker
         self.hall_buttons = hall_buttons
+        self.floor_queues = floor_queues
+        
         self.arrival_floor = arrival_floor
         self.destination_floor = destination_floor
-        self.env.process(self.run())
+        
+        self.on_board_event = env.event()
+        self.exit_event = env.event()
+        
+        print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor}.")
 
     def run(self):
-        """
-        乗客のライフサイクル（出現、ボタン押し、待機、乗車、移動、降車）
-        """
-        print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor}.")
-        
-        # 1. ホールボタンを押す
-        yield self.env.timeout(1) # ボタンを押すまでの時間
+        """乗客のライフサイクル"""
+        # 1. 乗り場ボタンを押す
+        yield self.env.timeout(1)
         direction = "UP" if self.destination_floor > self.arrival_floor else "DOWN"
-        
-        # 該当するボタンを見つけて押す
-        for button in self.hall_buttons:
-            if button.floor == self.arrival_floor and button.direction == direction:
-                button.press()
-                break
-        
-        # 2. エレベータを待つ (このシンプル版では、乗車までの待機は省略)
-        print(f"{self.env.now:.2f} [{self.name}] Now waiting for an elevator...")
-        
-        # 3. ドアが開いたら、かご内ボタンを押す (という想定)
-        # 本来はエレベータのドアが開くイベントを待つ
-        yield self.env.timeout(0) # すぐに押す
-        car_call_topic = "elevator/Elevator_1/car_call" # TODO: 将来的にはGCSから割り当てられたエレベータ名を使う
-        car_call_message = {"destination": self.destination_floor}
-        self.broker.put(car_call_topic, car_call_message)
-        print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
+        button = self.hall_buttons[self.arrival_floor][direction]
+        button.press()
 
-        # 4. 降車まで待つ (このプロセスはここで終了。実際の移動はエレベータプロセスが担う)
+        # 2. 乗り場の行列に自分自身を並ばせる
+        print(f"{self.env.now:.2f} [{self.name}] Now waiting in queue at floor {self.arrival_floor}.")
+        current_queue = self.floor_queues[self.arrival_floor]
+        yield current_queue.put(self)
+
+        # 3. エレベータに「乗ったで！」と知らされるまで、ひたすら待つ
+        yield self.on_board_event
+
+        # 4. エレベータに乗り込み、行き先ボタンを押す
+        print(f"{self.env.now:.2f} [{self.name}] Boarding elevator at floor {self.arrival_floor}.")
+        car_call_topic = "elevator/Elevator_1/car_call"
+        self.broker.put(car_call_topic, {'destination': self.destination_floor})
+        print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
+        
+        # 5. 目的地に着いて、「降りてええで！」と知らされるまで待つ
+        yield self.exit_event
+        
+        print(f"{self.env.now:.2f} [{self.name}] Exited at floor {self.destination_floor}. Journey complete.")
+

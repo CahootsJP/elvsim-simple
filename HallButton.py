@@ -3,38 +3,34 @@ from MessageBroker import MessageBroker
 
 class HallButton:
     """
-    乗り場の呼び出しボタン
+    エレベータの乗り場呼び出しボタン
     """
-    def __init__(self, env: simpy.Environment, broker: MessageBroker, floor: int, direction: str):
+    def __init__(self, env: simpy.Environment, floor: int, direction: str, broker: MessageBroker):
         """
-        ホールボタンを初期化する
-
         Args:
             env (simpy.Environment): SimPy環境
-            broker (MessageBroker): 通信に使うメッセージブローカー
             floor (int): ボタンが設置されている階
-            direction (str): ボタンの方向 ("UP" or "DOWN")
+            direction (str): 'UP' または 'DOWN'
+            broker (MessageBroker): 通信を仲介するメッセージブローカー
         """
         self.env = env
-        self.broker = broker
         self.floor = floor
         self.direction = direction
+        self.broker = broker
         self.is_pressed = False
 
     def press(self):
-        """
-        ボタンを押し、GCSに通知する
-        """
+        """ボタンが押された時の処理"""
         if not self.is_pressed:
             self.is_pressed = True
             print(f"{self.env.now:.2f} [HallButton] Button pressed at floor {self.floor} ({self.direction}). Light ON.")
-            call_message = {"floor": self.floor, "direction": self.direction}
+            
+            call_message = {'floor': self.floor, 'direction': self.direction}
+            # GCS宛のポストに手紙を投函する
             self.broker.put("gcs/hall_call", call_message)
 
     def serve(self):
-        """
-        呼び出しに応答があったときにボタンの点灯をリセットする
-        """
+        """呼び出しに応答があった時の処理（ライトを消すなど）"""
         if self.is_pressed:
             self.is_pressed = False
-            print(f"{self.env.now:.2f} [HallButton] Button served at floor {self.floor} ({self.direction}). Light OFF.")
+            print(f"{self.env.now:.2f} [HallButton] Call served at floor {self.floor} ({self.direction}). Light OFF.")

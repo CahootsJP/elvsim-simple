@@ -1,0 +1,42 @@
+--- Simulation Setup ---
+0.00: Entity "GCS" (GroupControlSystem, ID:0) が作成されました。
+0.00: Entity "Elevator_1" (Elevator, ID:1) が作成されました。
+0.00 [GCS] Elevator 'Elevator_1' registered.
+--- Simulation Start ---
+0.00 [GCS] GCS is operational. Waiting for hall calls...
+0.00 [GCS] GCS is operational. Waiting for hall calls...
+0.00 [Elevator_1] Operational at floor 1.
+0.00 [Elevator_1] State: IDLE at floor 1. Waiting for calls.
+5.00: Entity "Taro" (Passenger, ID:2) が作成されました。
+5.00 [Taro] Arrived at floor 3. Wants to go to 8.
+6.00 [HallButton] Button pressed at floor 3 (UP). Light ON.
+6.00 [Broker] Publish on 'gcs/hall_call': {'floor': 3, 'direction': 'UP'}
+6.00 [Taro] Now waiting in queue at floor 3.
+6.00 [GCS] Received hall call: {'floor': 3, 'direction': 'UP'}
+6.00 [Broker] Publish on 'elevator/Elevator_1/task': {'task_type': 'ASSIGN_HALL_CALL', 'details': {'floor': 3, 'direction': 'UP'}}
+6.00 [Elevator_1] Hall call registered: Floor 3 UP.
+6.00 [Elevator_1] Moving from 1 to 3.
+8.00 [Elevator_1] Reached floor 2.
+10.00: Entity "Hanako" (Passenger, ID:3) が作成されました。
+10.00 [Hanako] Arrived at floor 9. Wants to go to 2.
+10.00 [Elevator_1] Reached floor 3.
+10.00 [Elevator_1] Arrived at floor 3.
+10.00 [Elevator_1] Servicing floor 3.
+10.00 [Door] Opening...
+11.00 [HallButton] Button pressed at floor 9 (DOWN). Light ON.
+11.00 [Broker] Publish on 'gcs/hall_call': {'floor': 9, 'direction': 'DOWN'}
+11.00 [Hanako] Now waiting in queue at floor 9.
+11.00 [GCS] Received hall call: {'floor': 9, 'direction': 'DOWN'}
+11.00 [Broker] Publish on 'elevator/Elevator_1/task': {'task_type': 'ASSIGN_HALL_CALL', 'details': {'floor': 9, 'direction': 'DOWN'}}
+11.00 [Elevator_1] Hall call registered: Floor 9 DOWN.
+11.50 [Door] Opened.
+11.50 [Elevator_1] Picking up passengers...
+12.00: Entity "Jiro" (Passenger, ID:4) が作成されました。
+12.00 [Jiro] Arrived at floor 2. Wants to go to 10.
+13.00 [HallButton] Button pressed at floor 2 (UP). Light ON.
+13.00 [Broker] Publish on 'gcs/hall_call': {'floor': 2, 'direction': 'UP'}
+13.00 [Jiro] Now waiting in queue at floor 2.
+13.00 [GCS] Received hall call: {'floor': 2, 'direction': 'UP'}
+13.00 [Broker] Publish on 'elevator/Elevator_1/task': {'task_type': 'ASSIGN_HALL_CALL', 'details': {'floor': 2, 'direction': 'UP'}}
+13.00 [Elevator_1] Hall call registered: Floor 2 UP.
+--- Simulation End ---
