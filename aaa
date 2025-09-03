@@ -4,9 +4,8 @@
 0.00 [GCS] Elevator 'Elevator_1' registered.
 --- Simulation Start ---
 0.00 [GCS] GCS is operational. Waiting for hall calls...
-0.00 [GCS] GCS is operational. Waiting for hall calls...
 0.00 [Elevator_1] Operational at floor 1.
-0.00 [Elevator_1] State: IDLE at floor 1. Waiting for calls.
+0.00 [Elevator_1] State: IDLE at floor 1.
 5.00: Entity "Taro" (Passenger, ID:2) が作成されました。
 5.00 [Taro] Arrived at floor 3. Wants to go to 8.
 6.00 [HallButton] Button pressed at floor 3 (UP). Light ON.
@@ -15,28 +14,71 @@
 6.00 [GCS] Received hall call: {'floor': 3, 'direction': 'UP'}
 6.00 [Broker] Publish on 'elevator/Elevator_1/task': {'task_type': 'ASSIGN_HALL_CALL', 'details': {'floor': 3, 'direction': 'UP'}}
 6.00 [Elevator_1] Hall call registered: Floor 3 UP.
-6.00 [Elevator_1] Moving from 1 to 3.
-8.00 [Elevator_1] Reached floor 2.
+6.00 [Elevator_1] Direction changed from IDLE to UP.
+8.00 [Elevator_1] Moving UP to 2
 10.00: Entity "Hanako" (Passenger, ID:3) が作成されました。
 10.00 [Hanako] Arrived at floor 9. Wants to go to 2.
-10.00 [Elevator_1] Reached floor 3.
-10.00 [Elevator_1] Arrived at floor 3.
+10.00 [Elevator_1] Moving UP to 3
 10.00 [Elevator_1] Servicing floor 3.
-10.00 [Door] Opening...
+10.00 [Elevator_1] Door Opening...
 11.00 [HallButton] Button pressed at floor 9 (DOWN). Light ON.
 11.00 [Broker] Publish on 'gcs/hall_call': {'floor': 9, 'direction': 'DOWN'}
 11.00 [Hanako] Now waiting in queue at floor 9.
 11.00 [GCS] Received hall call: {'floor': 9, 'direction': 'DOWN'}
 11.00 [Broker] Publish on 'elevator/Elevator_1/task': {'task_type': 'ASSIGN_HALL_CALL', 'details': {'floor': 9, 'direction': 'DOWN'}}
 11.00 [Elevator_1] Hall call registered: Floor 9 DOWN.
-11.50 [Door] Opened.
-11.50 [Elevator_1] Picking up passengers...
+11.50 [Elevator_1] Door Opened.
+11.50 [Elevator_1] Passenger Taro boarding.
+11.50 [Elevator_1] Door Closing...
+11.50 [Taro] Boarding elevator at floor 3.
+11.50 [Broker] Publish on 'elevator/Elevator_1/car_call': {'destination': 8}
+11.50 [Taro] Pressed car button for floor 8.
 12.00: Entity "Jiro" (Passenger, ID:4) が作成されました。
 12.00 [Jiro] Arrived at floor 2. Wants to go to 10.
+13.00 [Elevator_1] Door Closed.
 13.00 [HallButton] Button pressed at floor 2 (UP). Light ON.
 13.00 [Broker] Publish on 'gcs/hall_call': {'floor': 2, 'direction': 'UP'}
 13.00 [Jiro] Now waiting in queue at floor 2.
+13.00 [Elevator_1] Service at floor 3 complete.
 13.00 [GCS] Received hall call: {'floor': 2, 'direction': 'UP'}
 13.00 [Broker] Publish on 'elevator/Elevator_1/task': {'task_type': 'ASSIGN_HALL_CALL', 'details': {'floor': 2, 'direction': 'UP'}}
 13.00 [Elevator_1] Hall call registered: Floor 2 UP.
+15.00 [Elevator_1] Moving UP to 4
+17.00 [Elevator_1] Moving UP to 5
+19.00 [Elevator_1] Moving UP to 6
+21.00 [Elevator_1] Moving UP to 7
+23.00 [Elevator_1] Moving UP to 8
+25.00 [Elevator_1] Moving UP to 9
+25.00 [Elevator_1] Servicing floor 9.
+25.00 [Elevator_1] Door Opening...
+26.50 [Elevator_1] Door Opened.
+26.50 [Elevator_1] Passenger Hanako boarding.
+26.50 [Elevator_1] Door Closing...
+26.50 [Hanako] Boarding elevator at floor 9.
+26.50 [Broker] Publish on 'elevator/Elevator_1/car_call': {'destination': 2}
+26.50 [Hanako] Pressed car button for floor 2.
+28.00 [Elevator_1] Door Closed.
+28.00 [Elevator_1] Service at floor 9 complete.
+28.00 [Elevator_1] Direction changed from UP to DOWN.
+30.00 [Elevator_1] Moving DOWN to 8
+32.00 [Elevator_1] Moving DOWN to 7
+34.00 [Elevator_1] Moving DOWN to 6
+36.00 [Elevator_1] Moving DOWN to 5
+38.00 [Elevator_1] Moving DOWN to 4
+40.00 [Elevator_1] Moving DOWN to 3
+42.00 [Elevator_1] Moving DOWN to 2
+42.00 [Elevator_1] Servicing floor 2.
+42.00 [Elevator_1] Door Opening...
+43.50 [Elevator_1] Door Opened.
+43.50 [Elevator_1] Passenger Hanako exiting.
+43.50 [Hanako] Exited at floor 2. Journey complete.
+43.50 [Elevator_1] Passenger Jiro boarding.
+43.50 [Elevator_1] Door Closing...
+43.50 [Jiro] Boarding elevator at floor 2.
+43.50 [Broker] Publish on 'elevator/Elevator_1/car_call': {'destination': 10}
+43.50 [Jiro] Pressed car button for floor 10.
+45.00 [Elevator_1] Door Closed.
+45.00 [Elevator_1] Service at floor 2 complete.
+45.00 [Elevator_1] Direction changed from DOWN to IDLE.
+45.00 [Elevator_1] State: IDLE at floor 2.
 --- Simulation End ---

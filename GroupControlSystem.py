@@ -19,7 +19,7 @@ class GroupControlSystem(Entity):
         super().__init__(env, name)
         self.broker = broker
         self.elevators = {}  # 管理下の本物のエレベータを登録する
-        self.env.process(self.run())
+        #self.env.process(self.run())
 
     def register_elevator(self, elevator: Elevator):
         """
