@@ -15,7 +15,11 @@ def run_simulation():
     broker = MessageBroker(env)
 
     # --- 共有リソースの作成 ---
-    floor_queues = [simpy.Store(env) for _ in range(NUM_FLOORS + 1)]
+    # 【師匠修正】各階に方向別の乗客待ち行列を作成
+    floor_queues = [
+        {'UP': simpy.Store(env), 'DOWN': simpy.Store(env)} 
+        for _ in range(NUM_FLOORS + 1)
+    ]
 
     # --- エンティティの作成 ---
     gcs = GroupControlSystem(env, "GCS", broker)
@@ -46,7 +50,12 @@ def passenger_generator(env, broker, hall_buttons, floor_queues):
     Passenger(env, "Hanako", broker, hall_buttons, floor_queues,
               arrival_floor=9, destination_floor=2)
 
-    yield env.timeout(2)
+    # 【師匠追加】Paulはん登場！
+    yield env.timeout(1)
+    Passenger(env, "Paul", broker, hall_buttons, floor_queues,
+              arrival_floor=9, destination_floor=2)
+
+    yield env.timeout(1)
     Passenger(env, "Jiro", broker, hall_buttons, floor_queues,
               arrival_floor=2, destination_floor=10)
 

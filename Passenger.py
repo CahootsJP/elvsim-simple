@@ -5,8 +5,8 @@ from HallButton import HallButton
 
 class Passenger(Entity):
     """
-    乗客エンティティ（v2.1）
-    【師匠修正】ログの表示順を自然な流れに変更
+    乗客エンティティ（v2.2）
+    【師匠修正】方向別の待ち行列に対応
     """
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, 
                  hall_buttons, floor_queues, arrival_floor: int, destination_floor: int):
@@ -31,23 +31,24 @@ class Passenger(Entity):
         button = self.hall_buttons[self.arrival_floor][direction]
         button.press()
 
-        # 2. 乗り場の行列に自分自身を並ばせる
-        print(f"{self.env.now:.2f} [{self.name}] Now waiting in queue at floor {self.arrival_floor}.")
-        current_queue = self.floor_queues[self.arrival_floor]
+        # 2. 自分の進行方向の正しい行列に並ぶ
+        print(f"{self.env.now:.2f} [{self.name}] Now waiting in '{direction}' queue at floor {self.arrival_floor}.")
+        current_queue = self.floor_queues[self.arrival_floor][direction]
         yield current_queue.put(self)
 
         # 3. エレベータに「乗ったで！」と知らされるまで、ひたすら待つ
         yield self.on_board_event
 
         # 4. エレベータに乗り込み、行き先ボタンを押す
-        print(f"{self.env.now:.2f} [{self.name}] Boarding elevator at floor {self.arrival_floor}.")
+        print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
         
-        # 【師匠修正】乗客がボタンを押した後に、ブローカーがメッセージを送信するように順番を変更
         print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
+        # 【師匠修正】エレベータ名がハードコーディングされていたのを修正
         car_call_topic = "elevator/Elevator_1/car_call"
-        self.broker.put(car_call_topic, {'destination': self.destination_floor})
+        self.broker.put(car_call_topic, {'destination': self.destination_floor, 'passenger_name': self.name})
         
         # 5. 目的地に着いて、「降りてええで！」と知らされるまで待つ
         yield self.exit_event
         
         print(f"{self.env.now:.2f} [{self.name}] Exited at floor {self.destination_floor}. Journey complete.")
+
