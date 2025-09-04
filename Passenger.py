@@ -5,11 +5,11 @@ from HallButton import HallButton
 
 class Passenger(Entity):
     """
-    乗客エンティティ（v2.2）
-    【師匠修正】方向別の待ち行列に対応
+    【v3.0】乗客が自身の乗降時間を持つように修正
     """
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, 
-                 hall_buttons, floor_queues, arrival_floor: int, destination_floor: int):
+                 hall_buttons, floor_queues, arrival_floor: int, destination_floor: int,
+                 move_speed: float = 1.0): # 【師匠追加】
         super().__init__(env, name)
         self.broker = broker
         self.hall_buttons = hall_buttons
@@ -17,37 +17,32 @@ class Passenger(Entity):
         
         self.arrival_floor = arrival_floor
         self.destination_floor = destination_floor
+        self.move_speed = move_speed # 【師匠追加】
         
         self.on_board_event = env.event()
         self.exit_event = env.event()
         
-        print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor}.")
+        print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor} (Move time: {self.move_speed}s).")
 
     def run(self):
         """乗客のライフサイクル"""
-        # 1. 乗り場ボタンを押す
         yield self.env.timeout(1)
         direction = "UP" if self.destination_floor > self.arrival_floor else "DOWN"
         button = self.hall_buttons[self.arrival_floor][direction]
         button.press()
 
-        # 2. 自分の進行方向の正しい行列に並ぶ
         print(f"{self.env.now:.2f} [{self.name}] Now waiting in '{direction}' queue at floor {self.arrival_floor}.")
         current_queue = self.floor_queues[self.arrival_floor][direction]
         yield current_queue.put(self)
 
-        # 3. エレベータに「乗ったで！」と知らされるまで、ひたすら待つ
         yield self.on_board_event
 
-        # 4. エレベータに乗り込み、行き先ボタンを押す
         print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
         
         print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
-        # 【師匠修正】エレベータ名がハードコーディングされていたのを修正
         car_call_topic = "elevator/Elevator_1/car_call"
         self.broker.put(car_call_topic, {'destination': self.destination_floor, 'passenger_name': self.name})
         
-        # 5. 目的地に着いて、「降りてええで！」と知らされるまで待つ
         yield self.exit_event
         
         print(f"{self.env.now:.2f} [{self.name}] Exited at floor {self.destination_floor}. Journey complete.")

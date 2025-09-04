@@ -5,7 +5,7 @@ from Passenger import Passenger # Passengerクラスをインポート
 
 class Elevator(Entity):
     """
-    【v9.0】降車をLIFO（後入れ先出し）に変更し、より現実的な動きに
+    【v11.0】乗客の個性に合わせて乗降時間を変更
     """
 
     class Door:
@@ -42,7 +42,9 @@ class Elevator(Entity):
         
         self.door = self.Door(env, self.name) 
         self.floor_move_time = 2.0
-        self.passenger_move_time = 1.0
+        
+        # 【師匠修正】固定の乗降時間は不要になるので削除
+        # self.passenger_move_time = 0.8
         
         self.new_call_event = env.event()
         
@@ -173,34 +175,29 @@ class Elevator(Entity):
         can_board_up = (self.direction == "UP" or self.direction == "IDLE" or is_down_turnaround) and self.current_floor in self.hall_calls_up
         can_board_down = (self.direction == "DOWN" or (self.direction == "IDLE" and not can_board_up) or is_up_turnaround) and self.current_floor in self.hall_calls_down
             
-        any_passengers_moved = False
-        
         if passengers_to_exit or can_board_up or can_board_down:
             yield self.env.process(self.door.open())
             
             if passengers_to_exit:
-                any_passengers_moved = True
-                # 【鴨川師匠 LIFO修正】現実の降車に近づけるため、後から乗った人（リストの後ろの方）から先に降りるようにする
-                # print(f"{self.env.now:.2f} [{self.name}] Passengers exiting (LIFO): {[p.name for p in reversed(passengers_to_exit)]}")
-                for p in reversed(passengers_to_exit): # リストを逆順に処理することでLIFOを実現
+                for p in reversed(passengers_to_exit):
                     p.exit_event.succeed()
-                    self.passengers_onboard.remove(p) # remove()は値で探すので順序は関係ない
+                    self.passengers_onboard.remove(p)
                     print(f"{self.env.now:.2f} [{self.name}] Passenger {p.name} exiting.")
-            
+                    # 【師匠修正】乗客自身の移動時間だけ待つ
+                    yield self.env.timeout(p.move_speed)
+
             boarding_queues = []
             if can_board_up: boarding_queues.append(self.floor_queues[self.current_floor]['UP'])
             if can_board_down: boarding_queues.append(self.floor_queues[self.current_floor]['DOWN'])
 
             for queue in boarding_queues:
                 while queue.items:
-                    any_passengers_moved = True
                     passenger = yield queue.get()
                     self.passengers_onboard.append(passenger)
                     passenger.on_board_event.succeed()
                     print(f"{self.env.now:.2f} [{self.name}] Passenger {passenger.name} boarding.")
-
-            if any_passengers_moved:
-                 yield self.env.timeout(self.passenger_move_time)
+                    # 【師匠修正】乗客自身の移動時間だけ待つ
+                    yield self.env.timeout(passenger.move_speed)
 
             yield self.env.process(self.door.close())
 
