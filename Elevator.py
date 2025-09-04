@@ -1,211 +1,201 @@
 import simpy
 from Entity import Entity
 from MessageBroker import MessageBroker
-from Passenger import Passenger # Passengerクラスをインポート
+from Passenger import Passenger
+from Door import Door
 
 class Elevator(Entity):
     """
-    【v11.0】乗客の個性に合わせて乗降時間を変更
+    【v13.5】セルフサービス方式に対応したエレベータ（運転手）
+    方向転換プロトコルにおける停止判断のバグを完全修正。
     """
 
-    class Door:
-        def __init__(self, env, elevator_name, open_time=1.5, close_time=1.5):
-            self.env = env
-            self.name = elevator_name
-            self.open_time = open_time
-            self.close_time = close_time
-
-        def open(self):
-            print(f"{self.env.now:.2f} [{self.name}] Door Opening...")
-            yield self.env.timeout(self.open_time)
-            print(f"{self.env.now:.2f} [{self.name}] Door Opened.")
-
-        def close(self):
-            print(f"{self.env.now:.2f} [{self.name}] Door Closing...")
-            yield self.env.timeout(self.close_time)
-            print(f"{self.env.now:.2f} [{self.name}] Door Closed.")
-
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door):
         super().__init__(env, name)
         self.broker = broker
         self.num_floors = num_floors
         self.floor_queues = floor_queues
-        
+        self.door = door
+
         self.current_floor = 1
-        self.direction = "IDLE"
-        
+        self.state = "initial_state" 
+        self._set_state("IDLE")
+
         self.car_calls = set()
         self.hall_calls_up = set()
         self.hall_calls_down = set()
         
         self.passengers_onboard = []
         
-        self.door = self.Door(env, self.name) 
-        self.floor_move_time = 2.0
-        
-        # 【師匠修正】固定の乗降時間は不要になるので削除
-        # self.passenger_move_time = 0.8
-        
-        self.new_call_event = env.event()
-        
-        self.env.process(self.hall_call_listener())
-        self.env.process(self.car_call_listener())
+        self.env.process(self._hall_call_listener())
+        self.env.process(self._car_call_listener())
 
-    def hall_call_listener(self):
+    def _set_state(self, new_state):
+        if self.state != new_state:
+            print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) 状態遷移: {self.state} -> {new_state}")
+            self.state = new_state
+
+    def _hall_call_listener(self):
         task_topic = f"elevator/{self.name}/task"
         while True:
-            message = yield self.broker.get(task_topic)
-            self._process_hall_call(message)
+            task = yield self.broker.get(task_topic)
+            details = task['details']
+            floor, direction = details['floor'], details['direction']
+            if direction == "UP":
+                self.hall_calls_up.add(floor)
+            else:
+                self.hall_calls_down.add(floor)
+            print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
 
-    def car_call_listener(self):
+    def _car_call_listener(self):
         car_call_topic = f"elevator/{self.name}/car_call"
         while True:
-            message = yield self.broker.get(car_call_topic)
-            self._process_car_call(message)
-
-    def _process_hall_call(self, task):
-        details = task['details']
-        floor, direction = details['floor'], details['direction']
-        if direction == "UP": self.hall_calls_up.add(floor)
-        else: self.hall_calls_down.add(floor)
-        print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
-        self._signal_new_call()
-
-    def _process_car_call(self, car_call):
-        dest_floor = car_call['destination']
-        passenger_name = car_call['passenger_name']
-        self.car_calls.add(dest_floor)
-        print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' registered for {dest_floor}.")
-        self._signal_new_call()
-
-    def _signal_new_call(self):
-        if self.new_call_event and not self.new_call_event.triggered:
-            self.new_call_event.succeed()
-            self.new_call_event = self.env.event()
+            car_call = yield self.broker.get(car_call_topic)
+            dest_floor = car_call['destination']
+            passenger_name = car_call['passenger_name']
+            self.car_calls.add(dest_floor)
+            print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' registered for {dest_floor}.")
 
     def run(self):
-        print(f"{self.env.now:.2f} [{self.name}] Operational at floor {self.current_floor}.")
+        print(f"{self.env.now:.2f} [{self.name}] Operational at floor 1.")
         while True:
-            if self.direction == "IDLE":
-                print(f"{self.env.now:.2f} [{self.name}] State: IDLE at floor {self.current_floor}.")
-                if not self._get_all_calls():
-                    yield self.new_call_event
-                self._decide_next_direction()
-                if self.direction == "IDLE":
-                    continue
-
             if self._should_stop_at_current_floor():
                 yield self.env.process(self._service_floor())
             
             self._decide_next_direction()
             
-            if self.direction == "IDLE":
-                continue
-
-            if self.direction == "UP":
-                yield self.env.timeout(self.floor_move_time)
+            if self.state == "UP":
+                yield self.env.timeout(2.0)
                 self.current_floor += 1
                 print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
-            elif self.direction == "DOWN":
-                yield self.env.timeout(self.floor_move_time)
+            elif self.state == "DOWN":
+                yield self.env.timeout(2.0)
                 self.current_floor -= 1
                 print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
-
-    def _should_stop_at_current_floor(self):
-        if self.current_floor in self.car_calls: return True
-        if self.direction == "UP" and self.current_floor in self.hall_calls_up: return True
-        if self.direction == "DOWN" and self.current_floor in self.hall_calls_down: return True
-        
-        all_calls = self._get_all_calls()
-        if not all_calls: return False
-
-        if self.direction == "UP":
-            has_further_up_calls = any(f > self.current_floor for f in self.car_calls | self.hall_calls_up)
-            if not has_further_up_calls and self.current_floor == max(all_calls): return True
-        
-        if self.direction == "DOWN":
-            has_further_down_calls = any(f < self.current_floor for f in self.car_calls | self.hall_calls_down)
-            if not has_further_down_calls and self.current_floor == min(all_calls): return True
-
-        return False
-        
-    def _decide_next_direction(self):
-        old_direction = self.direction
-        
-        if old_direction == "UP":
-            has_further_up_calls = any(f > self.current_floor for f in self.car_calls | self.hall_calls_up)
-            if has_further_up_calls:
-                self.direction = "UP"; return 
-            
-            all_calls = self._get_all_calls()
-            if not all_calls: self.direction = "IDLE"
-            elif self.current_floor < max(all_calls): self.direction = "UP"
-            else: self.direction = "DOWN"
-
-        elif old_direction == "DOWN":
-            has_further_down_calls = any(f < self.current_floor for f in self.car_calls | self.hall_calls_down)
-            if has_further_down_calls:
-                self.direction = "DOWN"; return
-            
-            all_calls = self._get_all_calls()
-            if not all_calls: self.direction = "IDLE"
-            elif self.current_floor > min(all_calls): self.direction = "DOWN"
-            else: self.direction = "UP"
-        
-        elif old_direction == "IDLE":
-            all_calls = self._get_all_calls()
-            if not all_calls: return
-
-            closest_call = min(all_calls, key=lambda f: abs(f - self.current_floor))
-            if closest_call > self.current_floor: self.direction = "UP"
-            elif closest_call < self.current_floor: self.direction = "DOWN"
-            else: self.direction = "UP" if self.current_floor in self.hall_calls_up else "DOWN"
-
-        if old_direction != self.direction:
-            print(f"{self.env.now:.2f} [{self.name}] Direction changed from {old_direction} to {self.direction}.")
+            else: # IDLE
+                if not self._has_any_calls():
+                    yield self.env.timeout(1)
 
     def _service_floor(self):
         print(f"{self.env.now:.2f} [{self.name}] Servicing floor {self.current_floor}.")
+        passengers_to_exit = sorted([p for p in self.passengers_onboard if p.destination_floor == self.current_floor], key=lambda p: p.entity_id, reverse=True)
+
+        boarding_queues = []
+        if self.state in ["IDLE", "UP"] and self.current_floor in self.hall_calls_up:
+            boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+        if self.state in ["IDLE", "DOWN"] and self.current_floor in self.hall_calls_down:
+            boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+        if self.state == "UP" and self.current_floor in self.hall_calls_down and not self._has_any_up_calls_above():
+             boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+        if self.state == "DOWN" and self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
+            boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+
+        service_done_event = self.env.event()
+        task_message = {
+            'task_type': 'SERVICE_FLOOR',
+            'elevator_name': self.name,
+            'passengers_to_exit': passengers_to_exit,
+            'boarding_queues': boarding_queues,
+            'callback_event': service_done_event
+        }
+        yield self.broker.put(self.door.command_topic, task_message)
         
-        passengers_to_exit = [p for p in self.passengers_onboard if p.destination_floor == self.current_floor]
+        report = yield service_done_event
         
-        is_up_turnaround = self.direction == "UP" and not any(f > self.current_floor for f in self.car_calls | self.hall_calls_up)
-        is_down_turnaround = self.direction == "DOWN" and not any(f < self.current_floor for f in self.car_calls | self.hall_calls_down)
-        
-        can_board_up = (self.direction == "UP" or self.direction == "IDLE" or is_down_turnaround) and self.current_floor in self.hall_calls_up
-        can_board_down = (self.direction == "DOWN" or (self.direction == "IDLE" and not can_board_up) or is_up_turnaround) and self.current_floor in self.hall_calls_down
+        for p in passengers_to_exit:
+            self.passengers_onboard.remove(p)
             
-        if passengers_to_exit or can_board_up or can_board_down:
-            yield self.env.process(self.door.open())
-            
-            if passengers_to_exit:
-                for p in reversed(passengers_to_exit):
-                    p.exit_event.succeed()
-                    self.passengers_onboard.remove(p)
-                    print(f"{self.env.now:.2f} [{self.name}] Passenger {p.name} exiting.")
-                    # 【師匠修正】乗客自身の移動時間だけ待つ
-                    yield self.env.timeout(p.move_speed)
-
-            boarding_queues = []
-            if can_board_up: boarding_queues.append(self.floor_queues[self.current_floor]['UP'])
-            if can_board_down: boarding_queues.append(self.floor_queues[self.current_floor]['DOWN'])
-
-            for queue in boarding_queues:
-                while queue.items:
-                    passenger = yield queue.get()
-                    self.passengers_onboard.append(passenger)
-                    passenger.on_board_event.succeed()
-                    print(f"{self.env.now:.2f} [{self.name}] Passenger {passenger.name} boarding.")
-                    # 【師匠修正】乗客自身の移動時間だけ待つ
-                    yield self.env.timeout(passenger.move_speed)
-
-            yield self.env.process(self.door.close())
+        boarded_passengers = report.get("boarded", [])
+        for p in boarded_passengers:
+            self.passengers_onboard.append(p)
 
         self.car_calls.discard(self.current_floor)
-        if can_board_up: self.hall_calls_up.discard(self.current_floor)
-        if can_board_down: self.hall_calls_down.discard(self.current_floor)
+        if any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
+            self.hall_calls_up.discard(self.current_floor)
+        if any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
+            self.hall_calls_down.discard(self.current_floor)
+        
         print(f"{self.env.now:.2f} [{self.name}] Service at floor {self.current_floor} complete.")
+    
+    def _should_stop_at_current_floor(self):
+        """【師匠最終修正】現在の階で停止すべきかどうかを判断する"""
+        if self.state == "UP":
+            # 理由1: 上昇中に、この階のかご呼びがある
+            if self.current_floor in self.car_calls: return True
+            # 理由2: 上昇中に、この階の上向きホール呼びがある
+            if self.current_floor in self.hall_calls_up: return True
+            # 理由3: 上昇方向の仕事がもう上でなく、この階が最遠の呼び出し地点（たとえ下向きでも）
+            if not self._has_any_up_calls_above() and self.current_floor == max(self.car_calls | self.hall_calls_up | self.hall_calls_down):
+                return True
 
-    def _get_all_calls(self):
-        return self.car_calls | self.hall_calls_up | self.hall_calls_down
+        elif self.state == "DOWN":
+            # 理由1: 下降中に、この階のかご呼びがある
+            if self.current_floor in self.car_calls: return True
+            # 理由2: 下降中に、この階の下向きホール呼びがある
+            if self.current_floor in self.hall_calls_down: return True
+            # 理由3: 下降方向の仕事がもう下になく、この階が最遠の呼び出し地点（たとえ上向きでも）
+            if not self._has_any_down_calls_below() and self.current_floor == min(self.car_calls | self.hall_calls_up | self.hall_calls_down):
+                return True
+
+        elif self.state == "IDLE":
+            return self._has_any_calls_at_current_floor()
+
+        return False
+
+    def _decide_next_direction(self):
+        current_direction = self.state
+        all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+
+        if not all_calls:
+            self._set_state("IDLE")
+            return
+
+        if current_direction == "UP":
+            if self._has_any_up_calls_above():
+                return
+            
+            farthest_call = max(all_calls)
+            if self.current_floor < farthest_call:
+                return
+            else:
+                self._set_state("DOWN")
+
+        elif current_direction == "DOWN":
+            if self._has_any_down_calls_below():
+                return
+            
+            farthest_call = min(all_calls)
+            if self.current_floor > farthest_call:
+                return
+            else:
+                self._set_state("UP")
+
+        elif current_direction == "IDLE":
+            if not self._has_any_calls(): return
+
+            closest_call = min(all_calls, key=lambda f: abs(f - self.current_floor))
+
+            if closest_call > self.current_floor:
+                self._set_state("UP")
+            elif closest_call < self.current_floor:
+                self._set_state("DOWN")
+            else:
+                if self.current_floor in self.hall_calls_up:
+                    self._set_state("UP")
+                elif self.current_floor in self.hall_calls_down:
+                    self._set_state("DOWN")
+
+    def _has_any_calls(self):
+        return bool(self.car_calls or self.hall_calls_up or self.hall_calls_down)
+
+    def _has_any_calls_at_current_floor(self):
+        return (self.current_floor in self.car_calls or
+                self.current_floor in self.hall_calls_up or
+                self.current_floor in self.hall_calls_down)
+
+    def _has_any_up_calls_above(self):
+        return any(f > self.current_floor for f in self.car_calls | self.hall_calls_up)
+
+    def _has_any_down_calls_below(self):
+        return any(f < self.current_floor for f in self.car_calls | self.hall_calls_down)
 
