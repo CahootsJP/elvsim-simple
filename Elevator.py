@@ -6,8 +6,8 @@ from Door import Door
 
 class Elevator(Entity):
     """
-    【v13.5】セルフサービス方式に対応したエレベータ（運転手）
-    方向転換プロトコルにおける停止判断のバグを完全修正。
+    【v14.0】セルフサービス方式に対応したエレベータ（運転手）
+    IDLE時のポーリングを廃止し、イベント駆動（無線方式）に完全移行。
     """
 
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door):
@@ -26,6 +26,9 @@ class Elevator(Entity):
         self.hall_calls_down = set()
         
         self.passengers_onboard = []
+
+        # 【師匠改造】新しい呼び出しを知らせるための無線機（イベント）
+        self.new_call_event = self.env.event()
         
         self.env.process(self._hall_call_listener())
         self.env.process(self._car_call_listener())
@@ -34,6 +37,12 @@ class Elevator(Entity):
         if self.state != new_state:
             print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) 状態遷移: {self.state} -> {new_state}")
             self.state = new_state
+
+    def _signal_new_call(self):
+        """【師匠新設】無線機を鳴らして、待機中のrunメソッドを叩き起こす"""
+        if not self.new_call_event.triggered:
+            self.new_call_event.succeed()
+            self.new_call_event = self.env.event() # 次の呼び出しのために新しい無線機を用意
 
     def _hall_call_listener(self):
         task_topic = f"elevator/{self.name}/task"
@@ -46,6 +55,7 @@ class Elevator(Entity):
             else:
                 self.hall_calls_down.add(floor)
             print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
+            self._signal_new_call() # 無線機を鳴らす
 
     def _car_call_listener(self):
         car_call_topic = f"elevator/{self.name}/car_call"
@@ -55,10 +65,16 @@ class Elevator(Entity):
             passenger_name = car_call['passenger_name']
             self.car_calls.add(dest_floor)
             print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' registered for {dest_floor}.")
+            self._signal_new_call() # 無線機を鳴らす
 
     def run(self):
         print(f"{self.env.now:.2f} [{self.name}] Operational at floor 1.")
         while True:
+            if self.state == "IDLE" and not self._has_any_calls():
+                # 【師匠改造】仕事がないときは、ポーリングせず無線を待つ
+                print(f"{self.env.now:.2f} [{self.name}] IDLE. Waiting for new call signal...")
+                yield self.new_call_event
+
             if self._should_stop_at_current_floor():
                 yield self.env.process(self._service_floor())
             
@@ -72,9 +88,6 @@ class Elevator(Entity):
                 yield self.env.timeout(2.0)
                 self.current_floor -= 1
                 print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
-            else: # IDLE
-                if not self._has_any_calls():
-                    yield self.env.timeout(1)
 
     def _service_floor(self):
         print(f"{self.env.now:.2f} [{self.name}] Servicing floor {self.current_floor}.")
@@ -118,23 +131,18 @@ class Elevator(Entity):
         print(f"{self.env.now:.2f} [{self.name}] Service at floor {self.current_floor} complete.")
     
     def _should_stop_at_current_floor(self):
-        """【師匠最終修正】現在の階で停止すべきかどうかを判断する"""
         if self.state == "UP":
-            # 理由1: 上昇中に、この階のかご呼びがある
             if self.current_floor in self.car_calls: return True
-            # 理由2: 上昇中に、この階の上向きホール呼びがある
             if self.current_floor in self.hall_calls_up: return True
-            # 理由3: 上昇方向の仕事がもう上でなく、この階が最遠の呼び出し地点（たとえ下向きでも）
-            if not self._has_any_up_calls_above() and self.current_floor == max(self.car_calls | self.hall_calls_up | self.hall_calls_down):
+            all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+            if not self._has_any_up_calls_above() and all_calls and self.current_floor == max(all_calls):
                 return True
 
         elif self.state == "DOWN":
-            # 理由1: 下降中に、この階のかご呼びがある
             if self.current_floor in self.car_calls: return True
-            # 理由2: 下降中に、この階の下向きホール呼びがある
             if self.current_floor in self.hall_calls_down: return True
-            # 理由3: 下降方向の仕事がもう下になく、この階が最遠の呼び出し地点（たとえ上向きでも）
-            if not self._has_any_down_calls_below() and self.current_floor == min(self.car_calls | self.hall_calls_up | self.hall_calls_down):
+            all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+            if not self._has_any_down_calls_below() and all_calls and self.current_floor == min(all_calls):
                 return True
 
         elif self.state == "IDLE":
