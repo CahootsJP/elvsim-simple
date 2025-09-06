@@ -6,8 +6,7 @@ from Door import Door
 
 class Elevator(Entity):
     """
-    【v14.0】セルフサービス方式に対応したエレベータ（運転手）
-    IDLE時のポーリングを廃止し、イベント駆動（無線方式）に完全移行。
+    【v15.0】店長（ドア）に直接の内線電話で指示を出す運転手
     """
 
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door):
@@ -26,8 +25,7 @@ class Elevator(Entity):
         self.hall_calls_down = set()
         
         self.passengers_onboard = []
-
-        # 【師匠改造】新しい呼び出しを知らせるための無線機（イベント）
+        
         self.new_call_event = self.env.event()
         
         self.env.process(self._hall_call_listener())
@@ -39,10 +37,9 @@ class Elevator(Entity):
             self.state = new_state
 
     def _signal_new_call(self):
-        """【師匠新設】無線機を鳴らして、待機中のrunメソッドを叩き起こす"""
         if not self.new_call_event.triggered:
             self.new_call_event.succeed()
-            self.new_call_event = self.env.event() # 次の呼び出しのために新しい無線機を用意
+            self.new_call_event = self.env.event()
 
     def _hall_call_listener(self):
         task_topic = f"elevator/{self.name}/task"
@@ -55,7 +52,7 @@ class Elevator(Entity):
             else:
                 self.hall_calls_down.add(floor)
             print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
-            self._signal_new_call() # 無線機を鳴らす
+            self._signal_new_call()
 
     def _car_call_listener(self):
         car_call_topic = f"elevator/{self.name}/car_call"
@@ -65,13 +62,12 @@ class Elevator(Entity):
             passenger_name = car_call['passenger_name']
             self.car_calls.add(dest_floor)
             print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' registered for {dest_floor}.")
-            self._signal_new_call() # 無線機を鳴らす
+            self._signal_new_call()
 
     def run(self):
         print(f"{self.env.now:.2f} [{self.name}] Operational at floor 1.")
         while True:
             if self.state == "IDLE" and not self._has_any_calls():
-                # 【師匠改造】仕事がないときは、ポーリングせず無線を待つ
                 print(f"{self.env.now:.2f} [{self.name}] IDLE. Waiting for new call signal...")
                 yield self.new_call_event
 
@@ -90,6 +86,9 @@ class Elevator(Entity):
                 print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
 
     def _service_floor(self):
+        """
+        【師匠大改造】店長（ドア）に直接内線電話をかけて、乗降サービスを依頼する
+        """
         print(f"{self.env.now:.2f} [{self.name}] Servicing floor {self.current_floor}.")
         passengers_to_exit = sorted([p for p in self.passengers_onboard if p.destination_floor == self.current_floor], key=lambda p: p.entity_id, reverse=True)
 
@@ -103,17 +102,9 @@ class Elevator(Entity):
         if self.state == "DOWN" and self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
             boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
 
-        service_done_event = self.env.event()
-        task_message = {
-            'task_type': 'SERVICE_FLOOR',
-            'elevator_name': self.name,
-            'passengers_to_exit': passengers_to_exit,
-            'boarding_queues': boarding_queues,
-            'callback_event': service_done_event
-        }
-        yield self.broker.put(self.door.command_topic, task_message)
-        
-        report = yield service_done_event
+        # 店長のメソッドを直接呼び出して、プロセスを開始し、完了報告を待つ
+        service_process = self.env.process(self.door.service_floor_process(self.name, passengers_to_exit, boarding_queues))
+        report = yield service_process
         
         for p in passengers_to_exit:
             self.passengers_onboard.remove(p)

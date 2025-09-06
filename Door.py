@@ -1,41 +1,26 @@
 import simpy
 from Entity import Entity
-from MessageBroker import MessageBroker
 
 class Door(Entity):
     """
-    【v13.2】乗降サービス全体の責任者（店長）に昇格したドア
+    【v15.0】運転手からの直接の内線電話で動く、敏腕店長になったドア
     """
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, open_time=1.5, close_time=1.5):
+    def __init__(self, env: simpy.Environment, name: str, open_time=1.5, close_time=1.5):
         super().__init__(env, name)
-        self.broker = broker
         self.open_time = open_time
         self.close_time = close_time
-        self.command_topic = f"door/{self.name}/command"
-        print(f"{self.env.now:.2f} [{self.name}] Door entity created. Listening on topic '{self.command_topic}'.")
+        print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
 
     def run(self):
         """
-        ドアのライフサイクル。エレベータからのサービス指示を待つ。
+        このメソッドはもう使わへん。店長は、運転手からの直接の電話を待つ。
         """
-        while True:
-            task = yield self.broker.get(self.command_topic)
-            task_type = task.get("task_type")
-            if task_type == "SERVICE_FLOOR":
-                yield self.env.process(self._process_service_floor(task))
-            else:
-                print(f"{self.env.now:.2f} [{self.name}] Received unknown task type: {task_type}")
+        yield self.env.timeout(0) # 何もしないプロセス
 
-    def _process_service_floor(self, task):
+    def service_floor_process(self, elevator_name, passengers_to_exit, boarding_queues):
         """
-        【師匠大改造】乗降サービス全体を取り仕切る店長の仕事
+        【師匠大改造】運転手から直接呼び出される、乗降サービス本体
         """
-        elevator_name = task.get("elevator_name")
-        passengers_to_exit = task.get("passengers_to_exit")
-        boarding_queues = task.get("boarding_queues")
-        callback_event = task.get("callback_event")
-
-        # 【師匠修正】乗車した乗客を記録するリスト
         boarded_passengers = []
 
         # 1. ドアを開ける
@@ -56,7 +41,6 @@ class Door(Entity):
                 board_permission_event = self.env.event()
                 yield passenger.board_permission_event.put(board_permission_event)
                 yield board_permission_event
-                # 【師匠修正】乗車が完了した乗客をリストに追加
                 boarded_passengers.append(passenger)
 
         # 4. ドアを閉める
@@ -64,8 +48,6 @@ class Door(Entity):
         yield self.env.timeout(self.close_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
 
-        # 5. 運転手に業務完了報告書（乗車した乗客リスト付き）を提出する
-        if callback_event and not callback_event.triggered:
-            report = {"boarded": boarded_passengers}
-            callback_event.succeed(report)
+        # 5. 運転手に直接、業務完了報告書を返す
+        return {"boarded": boarded_passengers}
 
