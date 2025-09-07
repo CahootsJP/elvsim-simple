@@ -3,38 +3,55 @@ from Entity import Entity
 from MessageBroker import MessageBroker
 from Passenger import Passenger
 from Door import Door
+import math
 
 class Elevator(Entity):
     """
-    【v15.0】店長（ドア）に直接の内線電話で指示を出す運転手
+    【v19.2】SimPyのプロセス生成のルールを正しく守るように修正した運転手。
     """
 
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict):
         super().__init__(env, name)
         self.broker = broker
         self.num_floors = num_floors
         self.floor_queues = floor_queues
         self.door = door
+        self.flight_profiles = flight_profiles
 
         self.current_floor = 1
         self.state = "initial_state" 
-        self._set_state("IDLE")
+        self.advanced_position = 1
 
         self.car_calls = set()
         self.hall_calls_up = set()
         self.hall_calls_down = set()
-        
         self.passengers_onboard = []
         
         self.new_call_event = self.env.event()
+        self.status_topic = f"elevator/{self.name}/status"
+        
+        self._set_state("IDLE")
         
         self.env.process(self._hall_call_listener())
         self.env.process(self._car_call_listener())
+
+    def _report_status(self):
+        """【師匠修正】GCSへの公式報告を、正しいプロセスの手順書（ジェネレータ）にする"""
+        status_message = {
+            "timestamp": self.env.now,
+            "physical_floor": self.current_floor,
+            "advanced_position": self.advanced_position,
+            "state": self.state,
+            "passengers": len(self.passengers_onboard)
+        }
+        # returnではなくyieldを使うことで、このメソッドはジェネレータになる
+        yield self.broker.put(self.status_topic, status_message)
 
     def _set_state(self, new_state):
         if self.state != new_state:
             print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) 状態遷移: {self.state} -> {new_state}")
             self.state = new_state
+            self.env.process(self._report_status())
 
     def _signal_new_call(self):
         if not self.new_call_event.triggered:
@@ -66,6 +83,8 @@ class Elevator(Entity):
 
     def run(self):
         print(f"{self.env.now:.2f} [{self.name}] Operational at floor 1.")
+        self.env.process(self._report_status())
+
         while True:
             if self.state == "IDLE" and not self._has_any_calls():
                 print(f"{self.env.now:.2f} [{self.name}] IDLE. Waiting for new call signal...")
@@ -76,19 +95,39 @@ class Elevator(Entity):
             
             self._decide_next_direction()
             
-            if self.state == "UP":
-                yield self.env.timeout(2.0)
-                self.current_floor += 1
-                print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
-            elif self.state == "DOWN":
-                yield self.env.timeout(2.0)
-                self.current_floor -= 1
+            if self.state != "IDLE":
+                next_stop_floor = self._get_next_stop_floor()
+
+                if next_stop_floor is None: continue
+                profile = self.flight_profiles.get((self.current_floor, next_stop_floor))
+                if not profile or not profile.get('timeline'): continue
+
+                print(f"{self.env.now:.2f} [{self.name}] Moving from floor {self.current_floor} to {next_stop_floor} (total {profile['total_time']:.2f}s)...")
+                
+                for event in profile['timeline']:
+                    yield self.env.timeout(event['time_delta'])
+                    self.current_floor = event['physical_floor']
+                    self.advanced_position = event['advanced_position']
+                    self.env.process(self._report_status())
+                
                 print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
 
+    def _get_next_stop_floor(self):
+        if self.state == "UP":
+            up_calls = [f for f in (self.car_calls | self.hall_calls_up) if f > self.current_floor]
+            if up_calls: return min(up_calls)
+            all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+            if all_calls: return max(all_calls)
+
+        elif self.state == "DOWN":
+            down_calls = [f for f in (self.car_calls | self.hall_calls_down) if f < self.current_floor]
+            if down_calls: return max(down_calls)
+            all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+            if all_calls: return min(all_calls)
+        
+        return None
+
     def _service_floor(self):
-        """
-        【師匠大改造】店長（ドア）に直接内線電話をかけて、乗降サービスを依頼する
-        """
         print(f"{self.env.now:.2f} [{self.name}] Servicing floor {self.current_floor}.")
         passengers_to_exit = sorted([p for p in self.passengers_onboard if p.destination_floor == self.current_floor], key=lambda p: p.entity_id, reverse=True)
 
@@ -102,7 +141,6 @@ class Elevator(Entity):
         if self.state == "DOWN" and self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
             boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
 
-        # 店長のメソッドを直接呼び出して、プロセスを開始し、完了報告を待つ
         service_process = self.env.process(self.door.service_floor_process(self.name, passengers_to_exit, boarding_queues))
         report = yield service_process
         
@@ -120,6 +158,7 @@ class Elevator(Entity):
             self.hall_calls_down.discard(self.current_floor)
         
         print(f"{self.env.now:.2f} [{self.name}] Service at floor {self.current_floor} complete.")
+        self.env.process(self._report_status())
     
     def _should_stop_at_current_floor(self):
         if self.state == "UP":

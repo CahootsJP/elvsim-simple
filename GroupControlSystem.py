@@ -5,28 +5,37 @@ from Elevator import Elevator
 
 class GroupControlSystem(Entity):
     """
-    複数のエレベータを管理する司令塔（GCS）
+    【v19.0】各エレベータの状況をリアルタイムで監視するようになった司令塔
     """
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker):
-        """
-        GCSを初期化する
-
-        Args:
-            env (simpy.Environment): SimPy環境
-            name (str): このGCSの名前
-            broker (MessageBroker): 通信に使うメッセージブローカー
-        """
         super().__init__(env, name)
         self.broker = broker
-        self.elevators = {}  # 管理下の本物のエレベータを登録する
-        #self.env.process(self.run())
+        self.elevators = {}
+        # 【師匠改造】各エレベータの最新状況を格納する作戦ボード
+        self.elevator_statuses = {}
 
     def register_elevator(self, elevator: Elevator):
         """
-        GCSの管理下にエレベータを登録する
+        GCSの管理下にエレベータを登録し、その状況監視を開始する
         """
         self.elevators[elevator.name] = elevator
         print(f"{self.env.now:.2f} [GCS] Elevator '{elevator.name}' registered.")
+        # このエレベータ専用の状況報告リスナーを起動する
+        self.env.process(self._status_listener(elevator.name))
+
+    def _status_listener(self, elevator_name: str):
+        """【師匠新設】特定のエレベータからの状況報告を待ち受けるプロセス"""
+        status_topic = f"elevator/{elevator_name}/status"
+        while True:
+            status_message = yield self.broker.get(status_topic)
+            self.elevator_statuses[elevator_name] = status_message
+            
+            # GCSが状況を把握したことをログで確認
+            adv_pos = status_message.get('advanced_position')
+            state = status_message.get('state')
+            phys_pos = status_message.get('physical_floor')
+            print(f"{self.env.now:.2f} [GCS] Status Update for {elevator_name}: Adv.Pos={adv_pos}F, State={state}, Phys.Pos={phys_pos}F")
+
 
     def run(self):
         """
@@ -34,23 +43,21 @@ class GroupControlSystem(Entity):
         """
         print(f"{self.env.now:.2f} [GCS] GCS is operational. Waiting for hall calls...")
         
+        hall_call_topic = 'gcs/hall_call'
         while True:
-            # 郵便局で 'gcs/hall_call' 宛の手紙を待つ
-            message = yield self.broker.get('gcs/hall_call')
+            message = yield self.broker.get(hall_call_topic)
             print(f"{self.env.now:.2f} [GCS] Received hall call: {message}")
 
-            # TODO: どのエレベータに割り当てるかの賢いロジック（セレコレなど）
+            # TODO: self.elevator_statuses を見て、最適なエレベータを選ぶ
             # 今は単純に最初のエレベータに割り当てる
             if self.elevators:
-                # 辞書から最初のエレベータを取得
                 first_elevator_name = list(self.elevators.keys())[0]
                 
-                # タスクメッセージを作成
                 task_message = {
                     "task_type": "ASSIGN_HALL_CALL",
                     "details": message
                 }
                 
-                # エレベータ宛のポストに手紙を出す
                 task_topic = f"elevator/{first_elevator_name}/task"
                 self.broker.put(task_topic, task_message)
+
