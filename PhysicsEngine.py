@@ -1,8 +1,10 @@
 import math
+import numpy as np
+import matplotlib.pyplot as plt
 
 class PhysicsEngine:
     """
-    【v18.0】「先行位置」のタイムテーブルを事前計算する、大預言者となった物理エンジン
+    【v18.1】グラフ職人(matplotlib)を雇い、自分の計算結果を可視化できるようになった大預言者
     """
     def __init__(self, floor_heights: list, max_speed: float, acceleration: float):
         self.floor_heights = floor_heights
@@ -27,9 +29,6 @@ class PhysicsEngine:
         return self.flight_profiles
 
     def _calculate_flight_profile(self, start_floor, end_floor):
-        """
-        【師匠大改造】先行位置のタイムテーブルを含む「運命の書」を作成する
-        """
         direction = 1 if end_floor > start_floor else -1
         total_distance = self.get_distance(start_floor, end_floor)
 
@@ -43,36 +42,25 @@ class PhysicsEngine:
         for physical_floor in path:
             dist_from_start = self.get_distance(start_floor, physical_floor)
             
-            # 1. 現在の物理位置での速度を計算
-            #    - 加速中か、巡航中か、減速中かで場合分け
             dist_to_start_decel = total_distance - dist_to_reach_max_speed
             
-            if dist_from_start < dist_to_reach_max_speed: # 加速フェーズ
-                # v^2 = 2ad -> v = sqrt(2ad)
+            if dist_from_start < dist_to_reach_max_speed:
                 current_speed = math.sqrt(2 * self.acceleration * dist_from_start)
-            elif dist_from_start > dist_to_start_decel: # 減速フェーズ
+            elif dist_from_start > dist_to_start_decel:
                 dist_from_end = total_distance - dist_from_start
                 current_speed = math.sqrt(2 * self.acceleration * dist_from_end)
-            else: # 巡航フェーズ
+            else:
                 current_speed = self.max_speed
             
-            # 2. その速度から止まるのに必要な制動距離を計算
-            #    d = v^2 / 2a
             braking_distance = (current_speed ** 2) / (2 * self.acceleration)
-            
-            # 3. 先行位置を計算
-            #    制動距離を階数に変換（ざっくりと）
-            braking_floors = math.ceil(braking_distance / self.get_distance(1, 2)) # 階高は一定と仮定
+            braking_floors = math.ceil(braking_distance / self.get_distance(1, 2))
             advanced_position = physical_floor + direction * braking_floors
-            
-            # 階の範囲内に収める
-            advanced_position = max(1, min(self.num_floors - 1, advanced_position))
+            advanced_position = max(1, min(self.num_floors, advanced_position))
 
-            # 4. タイムラインに記録
             time_at_this_floor = self._calculate_travel_time(dist_from_start)
             time_delta = time_at_this_floor - last_time
 
-            if time_delta > 1e-6:
+            if time_delta > 1e-6 or physical_floor == start_floor:
                 timeline.append({
                     "time_delta": time_delta, 
                     "physical_floor": physical_floor,
@@ -94,10 +82,51 @@ class PhysicsEngine:
             time_for_cruise = cruise_distance / self.max_speed
             return time_for_accel_decel + time_for_cruise
 
+    def plot_velocity_profile(self, start_floor, end_floor):
+        """【師匠新設】グラフ職人による速度プロファイルの可視化"""
+        profile = self.flight_profiles.get((start_floor, end_floor))
+        if not profile:
+            print(f"Profile for {start_floor}F -> {end_floor}F not found.")
+            return
+
+        total_time = profile['total_time']
+        total_distance = self.get_distance(start_floor, end_floor)
+        
+        time_to_reach_max_speed = self.max_speed / self.acceleration
+        dist_to_reach_max_speed = 0.5 * self.acceleration * (time_to_reach_max_speed ** 2)
+        
+        t_vals = np.linspace(0, total_time, 200)
+        v_vals = []
+
+        for t in t_vals:
+            if t < time_to_reach_max_speed: # 加速
+                # d = 0.5at^2, v = at
+                dist_covered = 0.5 * self.acceleration * t**2
+                if dist_covered > total_distance / 2 and total_distance < 2 * dist_to_reach_max_speed:
+                    # 短距離で減速に入る場合
+                    v = self.acceleration * (total_time - t)
+                else:
+                    v = self.acceleration * t
+            elif t > total_time - time_to_reach_max_speed and total_distance > 2 * dist_to_reach_max_speed: # 減速
+                v = self.max_speed - self.acceleration * (t - (total_time - time_to_reach_max_speed))
+            else: # 巡航 or 短距離の頂点
+                v = self.max_speed
+
+            v_vals.append(v)
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(t_vals, v_vals, label=f"Velocity Profile ({start_floor}F -> {end_floor}F)")
+        plt.title("Elevator Velocity Profile")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Velocity (m/s)")
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+
 # --- このファイルのテスト用コード ---
 if __name__ == '__main__':
     floor_heights_test = [0] + [i * 3.5 for i in range(1, 11)] 
-    max_speed_test = 4.0 # ちょっと速めにしてみる
+    max_speed_test = 4.0
     acceleration_test = 1.0
 
     engine = PhysicsEngine(floor_heights_test, max_speed_test, acceleration_test)
@@ -108,8 +137,12 @@ if __name__ == '__main__':
     print(f"Total time: {profile_1_10['total_time']:.2f}s")
     current_time = 0
     for event in profile_1_10['timeline']:
-        current_time += event['time_delta']
         phys_pos = event['physical_floor']
         adv_pos = event['advanced_position']
-        print(f"  - T={current_time:.2f}s: Physical Pos @ {phys_pos}F -> Advanced Pos is {adv_pos}F")
+        print(f"  - T={current_time:.2f}s -> T={current_time + event['time_delta']:.2f}s: Phys Pos @ {phys_pos}F -> Adv Pos is {adv_pos}F")
+        current_time += event['time_delta']
+
+    # グラフの表示
+    engine.plot_velocity_profile(1, 10)
+    engine.plot_velocity_profile(1, 3)
 
