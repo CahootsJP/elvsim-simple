@@ -1,4 +1,4 @@
---- Simulation Setup ---test
+--- Simulation Setup ---testtest
 0.00: Entity "GCS" (GroupControlSystem, ID:0) が作成されました。
 0.00: Entity "Elevator_1" (Elevator, ID:1) が作成されました。
 0.00 [GCS] Elevator 'Elevator_1' registered.
