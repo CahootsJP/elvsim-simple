@@ -1,0 +1,6 @@
+steps:
+# リポジトリのコンテンツをGCSバケットに同期する
+- name: 'gcr.io/cloud-builders/gsutil'
+  args: ['-m', 'rsync', '-r', '-d', '.', 'gs://${_BUCKET_NAME}']
+substitutions:
+  _BUCKET_NAME: 'elvsim-simple-code'
