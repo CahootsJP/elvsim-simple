@@ -1,9 +1,9 @@
 steps:
 # リポジトリのコンテンツをGCSバケットに同期する
 - name: 'gcr.io/cloud-builders/gsutil'
-  args: ['-m', 'rsync', '-r', '-d', '.', 'gs://${_BUCKET_NAME}']
+  # .gitフォルダを除外するオプション (-x) を追加
+  args: ['-m', 'rsync', '-r', '-d', '-x', '\.git/.*', '.', 'gs://elvsim-simple-code']
 substitutions:
   _BUCKET_NAME: 'elvsim-simple-code'
-# ログの保存場所を指定するおまじないを追加
 options:
   logging: CLOUD_LOGGING_ONLY
