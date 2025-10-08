@@ -20,6 +20,8 @@ class PhysicsEngine:
 
     def precompute_flight_profiles(self):
         print("[PhysicsEngine] Pre-computing all S-curve flight profiles...")
+        validation_errors = []
+        
         for start_floor in range(1, self.num_floors):
             for end_floor in range(1, self.num_floors):
                 if start_floor == end_floor:
@@ -27,7 +29,24 @@ class PhysicsEngine:
                 
                 profile = self._calculate_s_curve_profile(start_floor, end_floor)
                 self.flight_profiles[(start_floor, end_floor)] = profile
+                
+                # 詳細な検証を実行
+                errors = self._detailed_validation(profile, start_floor, end_floor)
+                if errors:
+                    validation_errors.extend(errors)
+        
         print("[PhysicsEngine] All flight profiles computed.")
+        
+        # 検証結果を報告
+        if validation_errors:
+            print(f"[PhysicsEngine] WARNING: Found {len(validation_errors)} validation issues:")
+            for error in validation_errors[:10]:  # 最初の10個のみ表示
+                print(f"   {error}")
+            if len(validation_errors) > 10:
+                print(f"   ... and {len(validation_errors) - 10} more issues")
+        else:
+            print("[PhysicsEngine] All flight profiles passed validation.")
+            
         return self.flight_profiles
 
     def _calculate_s_curve_profile(self, start_floor, end_floor):
@@ -99,6 +118,8 @@ class PhysicsEngine:
         if total_time not in time_points:
             time_points = np.append(time_points, total_time) # 最後に終点を追加
 
+        last_advanced_position = start_floor  # 連続性を保つための前回値
+        
         for time_step in time_points:
             dist = d_func(time_step)
             vel = v_func(time_step)
@@ -111,6 +132,33 @@ class PhysicsEngine:
             adv_dist = dist + dist_to_stop
             advanced_position = start_floor + direction * math.ceil(adv_dist / self.get_distance(1, 2) - 1e-9)
             advanced_position = max(1, min(self.num_floors, advanced_position))
+            
+            # 連続性を強制：前回値より逆戻りしないようにする
+            original_advanced_position = advanced_position
+            if direction == 1:  # 上昇
+                advanced_position = max(advanced_position, last_advanced_position)
+            elif direction == -1:  # 下降
+                advanced_position = min(advanced_position, last_advanced_position)
+            
+            # 修正が適用された場合のみエラー出力
+            if original_advanced_position != advanced_position:
+                print(f"[PhysicsEngine] WARNING: Applied fix {start_floor}F->{end_floor}F at time={time_step:.3f}, {original_advanced_position}->{advanced_position}")
+            
+            # 【修正】物理フロアの連続性も強制
+            if direction == 1:  # 上昇
+                physical_floor = max(physical_floor, start_floor)
+            elif direction == -1:  # 下降
+                physical_floor = min(physical_floor, start_floor)
+            
+            # 異常値検出
+            if start_floor != end_floor:
+                if direction == 1 and advanced_position < start_floor:
+                    print(f"[PhysicsEngine] ERROR: UP movement but adv_pos={advanced_position} < start={start_floor}")
+                elif direction == -1 and advanced_position > start_floor:
+                    print(f"[PhysicsEngine] ERROR: DOWN movement but adv_pos={advanced_position} > start={start_floor}")
+
+            # 前回値を更新
+            last_advanced_position = advanced_position
 
             if physical_floor != last_floor or advanced_position != last_adv_floor or time_step == 0:
                 time_delta = time_step - last_timeline_time
@@ -136,8 +184,104 @@ class PhysicsEngine:
                         "advanced_position": int(end_floor)
                     })
 
+        # タイムラインの妥当性を検証
+        self._validate_timeline(timeline, start_floor, end_floor)
+        
+        # 連続性チェック（エラーのみ出力）
+        if timeline and start_floor != end_floor:
+            prev_adv_pos = None
+            for i, event in enumerate(timeline):
+                adv_pos = event['advanced_position']
+                if prev_adv_pos is not None:
+                    if direction == 1 and adv_pos < prev_adv_pos:
+                        print(f"[PhysicsEngine] ERROR: Timeline {start_floor}F->{end_floor}F Event {i}: REVERSAL {prev_adv_pos} -> {adv_pos}")
+                    elif direction == -1 and adv_pos > prev_adv_pos:
+                        print(f"[PhysicsEngine] ERROR: Timeline {start_floor}F->{end_floor}F Event {i}: REVERSAL {prev_adv_pos} -> {adv_pos}")
+                prev_adv_pos = adv_pos
+        
         return {"total_time": float(total_time), "timeline": timeline}
 
+    def _validate_timeline(self, timeline, start_floor, end_floor):
+        """
+        タイムラインのadvanced_positionが物理的に正しいか検証する
+        """
+        if not timeline:
+            return
+            
+        direction = 1 if end_floor > start_floor else -1
+        prev_advanced_position = None
+        
+        for i, event in enumerate(timeline):
+            current_advanced_position = event['advanced_position']
+            
+            # 最初のイベントはスキップ
+            if prev_advanced_position is not None:
+                # 上昇中は値が増加、下降中は値が減少する必要がある
+                if direction == 1:  # 上昇
+                    if current_advanced_position < prev_advanced_position:
+                        print(f"[PhysicsEngine] WARNING: Advanced position decreased during UP movement!")
+                        print(f"   Event {i}: {prev_advanced_position} -> {current_advanced_position}")
+                        print(f"   Start: {start_floor}F, End: {end_floor}F")
+                elif direction == -1:  # 下降
+                    if current_advanced_position > prev_advanced_position:
+                        print(f"[PhysicsEngine] WARNING: Advanced position increased during DOWN movement!")
+                        print(f"   Event {i}: {prev_advanced_position} -> {current_advanced_position}")
+                        print(f"   Start: {start_floor}F, End: {end_floor}F")
+            
+            prev_advanced_position = current_advanced_position
+
+    def _detailed_validation(self, profile, start_floor, end_floor):
+        """
+        より詳細な検証を実行し、エラーメッセージのリストを返す
+        """
+        errors = []
+        timeline = profile.get('timeline', [])
+        
+        if not timeline:
+            errors.append(f"Empty timeline for {start_floor}F -> {end_floor}F")
+            return errors
+            
+        direction = 1 if end_floor > start_floor else -1
+        prev_advanced_position = None
+        prev_physical_floor = None
+        
+        for i, event in enumerate(timeline):
+            current_advanced_position = event['advanced_position']
+            current_physical_floor = event['physical_floor']
+            
+            # 範囲チェック
+            if not (1 <= current_advanced_position <= self.num_floors):
+                errors.append(f"Advanced position out of range: {current_advanced_position} (event {i}, {start_floor}F->{end_floor}F)")
+            
+            if not (1 <= current_physical_floor <= self.num_floors):
+                errors.append(f"Physical floor out of range: {current_physical_floor} (event {i}, {start_floor}F->{end_floor}F)")
+            
+            # 単調性チェック
+            if prev_advanced_position is not None:
+                if direction == 1 and current_advanced_position < prev_advanced_position:
+                    errors.append(f"Advanced position decreased during UP: {prev_advanced_position} -> {current_advanced_position} (event {i}, {start_floor}F->{end_floor}F)")
+                elif direction == -1 and current_advanced_position > prev_advanced_position:
+                    errors.append(f"Advanced position increased during DOWN: {prev_advanced_position} -> {current_advanced_position} (event {i}, {start_floor}F->{end_floor}F)")
+            
+            # 物理的整合性チェック
+            if prev_physical_floor is not None:
+                if direction == 1 and current_physical_floor < prev_physical_floor:
+                    errors.append(f"Physical floor decreased during UP: {prev_physical_floor} -> {current_physical_floor} (event {i}, {start_floor}F->{end_floor}F)")
+                elif direction == -1 and current_physical_floor > prev_physical_floor:
+                    errors.append(f"Physical floor increased during DOWN: {prev_physical_floor} -> {current_physical_floor} (event {i}, {start_floor}F->{end_floor}F)")
+            
+            prev_advanced_position = current_advanced_position
+            prev_physical_floor = current_physical_floor
+        
+        # 最終位置のチェック
+        if timeline:
+            final_event = timeline[-1]
+            if final_event['physical_floor'] != end_floor:
+                errors.append(f"Final physical floor mismatch: expected {end_floor}, got {final_event['physical_floor']} ({start_floor}F->{end_floor}F)")
+            if final_event['advanced_position'] != end_floor:
+                errors.append(f"Final advanced position mismatch: expected {end_floor}, got {final_event['advanced_position']} ({start_floor}F->{end_floor}F)")
+        
+        return errors
 
     def plot_velocity_profile(self, start_floor, end_floor):
         """【シムパイ師匠】S字プロファイルを可視化できるように改造"""

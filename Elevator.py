@@ -23,6 +23,7 @@ class Elevator(Entity):
         self.state = "initial_state" 
         self.advanced_position = 1
         self.current_destination = None # 【師匠新設】現在の最終目的地
+        self.last_advanced_position = None # 【師匠新設】前回のadvanced_position
 
         self.car_calls = set()
         self.hall_calls_up = set()
@@ -145,11 +146,32 @@ class Elevator(Entity):
 
         print(f"{self.env.now:.2f} [{self.name}] Moving from floor {self.current_floor} to {destination_floor} (total {profile['total_time']:.2f}s)...")
         
-        for event in profile['timeline']:
+        for i, event in enumerate(profile['timeline']):
+            # 割り込みチェック：移動中に目的地が変更された場合は中断
+            if self.current_destination != destination_floor:
+                break
+                
             yield self.env.timeout(event['time_delta'])
+            
+            # 再度割り込みチェック
+            if self.current_destination != destination_floor:
+                break
+            
+            old_floor = self.current_floor
             self.current_floor = event['physical_floor']
             self.advanced_position = event['advanced_position']
-            self.env.process(self._report_status())
+            
+            # 逆戻りチェック
+            if self.state == "UP" and self.current_floor < old_floor:
+                print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
+                break
+            elif self.state == "DOWN" and self.current_floor > old_floor:
+                print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
+                break
+            
+            if self.advanced_position != self.last_advanced_position:
+                self.env.process(self._report_status())
+            self.last_advanced_position = self.advanced_position
         
         print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
 

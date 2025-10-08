@@ -14,6 +14,7 @@ class MessageBroker:
         """
         self.env = env
         self.topics = {}  # トピックごとのStoreを保持する辞書
+        self.broadcast_pipe = simpy.Store(self.env)
 
     def get_pipe(self, topic: str) -> simpy.Store:
         """
@@ -29,6 +30,7 @@ class MessageBroker:
         """
         print(f"{self.env.now:.2f} [Broker] Publish on '{topic}': {message}")
         pipe = self.get_pipe(topic)
+        self.broadcast_pipe.put({'topic': topic, 'message': message})
         return pipe.put(message)
 
     def get(self, topic: str):
@@ -37,3 +39,10 @@ class MessageBroker:
         """
         pipe = self.get_pipe(topic)
         return pipe.get()
+
+    def get_broadcast_pipe(self) -> simpy.Store:
+        """
+        Statisticsクラスがこのパイプにアクセスするためのメソッド
+        全局ブロードキャスト用のパイプを返す
+        """
+        return self.broadcast_pipe

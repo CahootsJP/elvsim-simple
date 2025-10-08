@@ -6,6 +6,7 @@ from HallButton import HallButton
 from Passenger import Passenger
 from Door import Door
 from PhysicsEngine import PhysicsEngine # 物理エンジンをインポート
+from Statistics import Statistics
 
 def run_simulation():
     """シミュレーション全体をセットアップして実行する"""
@@ -22,6 +23,9 @@ def run_simulation():
     print("--- Simulation Setup ---")
     env = simpy.Environment()
     broker = MessageBroker(env)
+    broadcast_pipe = broker.get_broadcast_pipe()
+    statistics = Statistics(env, broadcast_pipe)
+    env.process(statistics.start_listening())
 
     # --- 物理エンジンの準備 ---
     floor_heights = [0] + [i * FLOOR_HEIGHT for i in range(1, NUM_FLOORS + 1)]
@@ -54,6 +58,7 @@ def run_simulation():
     print("\n--- Simulation Start ---")
     env.run(until=SIM_DURATION)
     print("--- Simulation End ---")
+    statistics.plot_trajectory_diagram()
 
 def passenger_generator(env, broker, hall_buttons, floor_queues):
     """【師匠改造】真の割り込みテスト用の乗客生成プロセス"""
