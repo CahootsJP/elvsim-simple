@@ -53,12 +53,72 @@ def run_simulation():
     gcs.register_elevator(elevator1)
 
     # --- プロセスの開始 ---
-    env.process(passenger_generator(env, broker, hall_buttons, floor_queues))
+    # 通常テスト用
+    # env.process(passenger_generator(env, broker, hall_buttons, floor_queues))
+    
+    # 統合テスト用（同じ階での乗車・降車）
+    env.process(passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues))
 
     print("\n--- Simulation Start ---")
     env.run(until=SIM_DURATION)
     print("--- Simulation End ---")
     statistics.plot_trajectory_diagram()
+
+def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues):
+    """同じ階での乗車・降車統合テスト用の乗客生成プロセス"""
+    print("--- Passenger Generation for INTEGRATED Boarding & Exit Test ---")
+
+    # === テストケース1: 3階から3人が乗車 → 8階で3人が降車 ===
+    yield env.timeout(5)
+    Passenger(env, "Alice", broker, hall_buttons, floor_queues, 
+              arrival_floor=3, destination_floor=8, move_speed=1.0)
+    
+    yield env.timeout(1)  # 1秒後に同じ階に到着
+    Passenger(env, "Bob", broker, hall_buttons, floor_queues,
+              arrival_floor=3, destination_floor=8, move_speed=1.2)
+    
+    yield env.timeout(2)  # さらに2秒後に同じ階に到着
+    Passenger(env, "Charlie", broker, hall_buttons, floor_queues,
+              arrival_floor=3, destination_floor=8, move_speed=0.8)
+
+    # === テストケース2: 6階から2人が乗車 → 9階で2人が降車 ===
+    yield env.timeout(8)
+    Passenger(env, "Diana", broker, hall_buttons, floor_queues,
+              arrival_floor=6, destination_floor=9, move_speed=1.5)
+    
+    yield env.timeout(1.5)  # 1.5秒後に同じ階に到着
+    Passenger(env, "Eve", broker, hall_buttons, floor_queues,
+              arrival_floor=6, destination_floor=9, move_speed=1.3)
+
+    # === テストケース3: 複雑なケース - 5階から4人が乗車 → 2階で4人が降車 ===
+    yield env.timeout(10)
+    Passenger(env, "Frank", broker, hall_buttons, floor_queues,
+              arrival_floor=5, destination_floor=2, move_speed=1.1)
+    
+    yield env.timeout(0.5)
+    Passenger(env, "Grace", broker, hall_buttons, floor_queues,
+              arrival_floor=5, destination_floor=2, move_speed=1.4)
+    
+    yield env.timeout(1)
+    Passenger(env, "Henry", broker, hall_buttons, floor_queues,
+              arrival_floor=5, destination_floor=2, move_speed=1.0)
+    
+    yield env.timeout(1.5)
+    Passenger(env, "Ivy", broker, hall_buttons, floor_queues,
+              arrival_floor=5, destination_floor=2, move_speed=0.9)
+
+    # === テストケース4: 混合ケース - 異なる階から乗車 → 同じ階で降車 ===
+    yield env.timeout(15)
+    Passenger(env, "Jack", broker, hall_buttons, floor_queues,
+              arrival_floor=1, destination_floor=7, move_speed=1.2)
+    
+    yield env.timeout(2)
+    Passenger(env, "Kate", broker, hall_buttons, floor_queues,
+              arrival_floor=4, destination_floor=7, move_speed=1.0)
+    
+    yield env.timeout(1)
+    Passenger(env, "Leo", broker, hall_buttons, floor_queues,
+              arrival_floor=6, destination_floor=7, move_speed=1.3)
 
 def passenger_generator(env, broker, hall_buttons, floor_queues):
     """【師匠改造】真の割り込みテスト用の乗客生成プロセス"""

@@ -24,6 +24,7 @@ class Elevator(Entity):
         self.advanced_position = 1
         self.current_destination = None # 【師匠新設】現在の最終目的地
         self.last_advanced_position = None # 【師匠新設】前回のadvanced_position
+        self.current_move_process = None # 【修正】現在の移動プロセスを追跡
 
         self.car_calls = set()
         self.hall_calls_up = set()
@@ -130,10 +131,16 @@ class Elevator(Entity):
 
             # このtryブロックが、中断可能なフライトプラン
             try:
-                yield self.env.process(self._move_process(self.current_destination))
+                # 【修正】現在の移動プロセスを追跡
+                self.current_move_process = self.env.process(self._move_process(self.current_destination))
+                yield self.current_move_process
             except Interrupt:
                 # 無線係から緊急連絡が来た！
                 print(f"{self.env.now:.2f} [{self.name}] Movement interrupted by new call. Re-evaluating next stop.")
+                # 【修正】古い移動プロセスをキャンセル
+                if self.current_move_process and self.current_move_process.is_alive:
+                    self.current_move_process.interrupt()
+                self.current_move_process = None
                 # ループの先頭に戻れば、自動的に新しい目的地が再計算される
                 continue
 
@@ -146,34 +153,42 @@ class Elevator(Entity):
 
         print(f"{self.env.now:.2f} [{self.name}] Moving from floor {self.current_floor} to {destination_floor} (total {profile['total_time']:.2f}s)...")
         
-        for i, event in enumerate(profile['timeline']):
-            # 割り込みチェック：移動中に目的地が変更された場合は中断
-            if self.current_destination != destination_floor:
-                break
+        try:
+            for i, event in enumerate(profile['timeline']):
+                # 割り込みチェック：移動中に目的地が変更された場合は中断
+                if self.current_destination != destination_floor:
+                    print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
+                    return
+                    
+                yield self.env.timeout(event['time_delta'])
                 
-            yield self.env.timeout(event['time_delta'])
+                # 再度割り込みチェック
+                if self.current_destination != destination_floor:
+                    print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
+                    return
+                
+                old_floor = self.current_floor
+                self.current_floor = event['physical_floor']
+                self.advanced_position = event['advanced_position']
+                
+                # 逆戻りチェック
+                if self.state == "UP" and self.current_floor < old_floor:
+                    print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
+                    return
+                elif self.state == "DOWN" and self.current_floor > old_floor:
+                    print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
+                    return
+                
+                if self.advanced_position != self.last_advanced_position:
+                    self.env.process(self._report_status())
+                self.last_advanced_position = self.advanced_position
             
-            # 再度割り込みチェック
-            if self.current_destination != destination_floor:
-                break
+            print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
             
-            old_floor = self.current_floor
-            self.current_floor = event['physical_floor']
-            self.advanced_position = event['advanced_position']
-            
-            # 逆戻りチェック
-            if self.state == "UP" and self.current_floor < old_floor:
-                print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
-                break
-            elif self.state == "DOWN" and self.current_floor > old_floor:
-                print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
-                break
-            
-            if self.advanced_position != self.last_advanced_position:
-                self.env.process(self._report_status())
-            self.last_advanced_position = self.advanced_position
-        
-        print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
+        except Interrupt:
+            # 【修正】割り込み時は静かに終了（ログ出力は上位で行う）
+            print(f"{self.env.now:.2f} [{self.name}] Movement process interrupted and terminated.")
+            return
 
     def _get_next_stop_floor(self):
         if self.state == "UP":
