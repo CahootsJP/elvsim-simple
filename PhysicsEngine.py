@@ -14,51 +14,78 @@ class PhysicsEngine:
         self.jerk = jerk
         self.num_floors = len(floor_heights)
         self.flight_profiles = {}
+        
+        # 【実用的な移動時間計算】事前計算テーブル
+        self.cruise_table = {}      # 巡航時間テーブル
+        self.brake_table = {}       # 制動時間テーブル
+        self.flight_time_table = {} # 総移動時間テーブル
+        
+        # 遅れ時間パラメータ（実用的な移動時間計算）
+        self.start_response_time = 0.2   # 応答時間 (200ms)
+        self.start_delay_time = 0.2   # 起動遅延時間  
+        self.stop_adjustable_time = 0.0   # 停止調整時間
+        self.use_realistic_method = False  # 実用的な移動時間計算の有効/無効フラグ
 
     def get_distance(self, floor1, floor2):
         return abs(self.floor_heights[floor1] - self.floor_heights[floor2])
 
     def precompute_flight_profiles(self):
-        print("[PhysicsEngine] Pre-computing all S-curve flight profiles...")
-        validation_errors = []
-        
-        for start_floor in range(1, self.num_floors):
-            for end_floor in range(1, self.num_floors):
-                if start_floor == end_floor:
-                    continue
-                
-                profile = self._calculate_s_curve_profile(start_floor, end_floor)
-                self.flight_profiles[(start_floor, end_floor)] = profile
-                
-                # 詳細な検証を実行
-                errors = self._detailed_validation(profile, start_floor, end_floor)
-                if errors:
-                    validation_errors.extend(errors)
-        
-        print("[PhysicsEngine] All flight profiles computed.")
-        
-        # 検証結果を報告
-        if validation_errors:
-            print(f"[PhysicsEngine] WARNING: Found {len(validation_errors)} validation issues:")
-            for error in validation_errors[:10]:  # 最初の10個のみ表示
-                print(f"   {error}")
-            if len(validation_errors) > 10:
-                print(f"   ... and {len(validation_errors) - 10} more issues")
-        else:
-            print("[PhysicsEngine] All flight profiles passed validation.")
+        """既存のインターフェースを維持しつつ、内部実装を選択可能にする"""
+        if self.use_realistic_method:
+            # 【実用的な移動時間計算】新実装を使用
+            self.precompute_flight_tables()
             
-        return self.flight_profiles
+            # 既存の形式でプロファイル生成（互換性のため）
+            for start_floor in range(1, self.num_floors):
+                for end_floor in range(1, self.num_floors):
+                    if start_floor != end_floor:
+                        profile = self._build_timeline_from_table(start_floor, end_floor)
+                        self.flight_profiles[(start_floor, end_floor)] = profile
+            
+            print("[PhysicsEngine] Flight profiles computed using realistic method.")
+            return self.flight_profiles
+        else:
+            # 【従来方式】SymPy実装を使用
+            print("[PhysicsEngine] Pre-computing all S-curve flight profiles...")
+            validation_errors = []
+            
+            for start_floor in range(1, self.num_floors):
+                for end_floor in range(1, self.num_floors):
+                    if start_floor == end_floor:
+                        continue
+                    
+                    profile = self._calculate_s_curve_profile(start_floor, end_floor)
+                    self.flight_profiles[(start_floor, end_floor)] = profile
+                    
+                    # 詳細な検証を実行
+                    errors = self._detailed_validation(profile, start_floor, end_floor)
+                    if errors:
+                        validation_errors.extend(errors)
+            
+            print("[PhysicsEngine] All flight profiles computed.")
+            
+            # 検証結果を報告
+            if validation_errors:
+                print(f"[PhysicsEngine] WARNING: Found {len(validation_errors)} validation issues:")
+                for error in validation_errors[:10]:  # 最初の10個のみ表示
+                    print(f"   {error}")
+                if len(validation_errors) > 10:
+                    print(f"   ... and {len(validation_errors) - 10} more issues")
+            else:
+                print("[PhysicsEngine] All flight profiles passed validation.")
+                
+            return self.flight_profiles
 
     def _calculate_s_curve_profile(self, start_floor, end_floor):
         """
         SymPyを使ってS字速度プロファイルのタイムラインを計算する。
-        【シムパイ師匠】エラーと速度低下の問題を修正
+        エラーと速度低下の問題を修正
         """
         j_max, a_max, v_max = self.jerk, self.acceleration, self.max_speed
         D = self.get_distance(start_floor, end_floor)
 
         # --- S字プロファイルの各フェーズの時間を計算 ---
-        # 【シムパイ師匠】短距離移動でも計算が破綻しないようにロジックを全面改修
+        # 短距離移動でも計算が破綻しないようにロジックを全面改修
         
         # Case 1: 最高速度(v_max)に達する長距離移動の場合
         dist_to_reach_max_speed = v_max * (v_max / a_max + a_max / j_max)
@@ -101,7 +128,7 @@ class PhysicsEngine:
         v_t = sp.integrate(a_t, t)
         d_t = sp.integrate(v_t, t)
 
-        # --- 【シムパイ師匠】超高速化対応！数式を高速な数値計算関数に変換 ---
+        # --- 超高速化対応！数式を高速な数値計算関数に変換 ---
         v_func = sp.lambdify(t, v_t, 'numpy')
         d_func = sp.lambdify(t, d_t, 'numpy')
 
@@ -127,7 +154,7 @@ class PhysicsEngine:
             physical_floor = start_floor + direction * math.floor(dist / self.get_distance(1, 2) + 1e-9)
             physical_floor = max(1, min(self.num_floors, physical_floor))
 
-            # 【シムパイ師匠】先行位置の計算精度を向上
+            # 先行位置の計算精度を向上
             dist_to_stop = (vel**2) / (2 * a_max) if a_max > 0 else 0
             adv_dist = dist + dist_to_stop
             advanced_position = start_floor + direction * math.ceil(adv_dist / self.get_distance(1, 2) - 1e-9)
@@ -164,7 +191,7 @@ class PhysicsEngine:
                 time_delta = time_step - last_timeline_time
                 if time_delta > 1e-9:
                     timeline.append({
-                        "time_delta": float(time_delta), # 【シムパイ師匠】ここでfloatに変換
+                        "time_delta": float(time_delta), # ここでfloatに変換
                         "physical_floor": int(physical_floor),
                         "advanced_position": int(advanced_position)
                     })
@@ -179,7 +206,7 @@ class PhysicsEngine:
             remaining_time = total_time - current_total_time
             if remaining_time > 1e-9:
                  timeline.append({
-                        "time_delta": float(remaining_time), # 【シムパイ師匠】ここでfloatに変換
+                        "time_delta": float(remaining_time), # ここでfloatに変換
                         "physical_floor": int(end_floor),
                         "advanced_position": int(end_floor)
                     })
@@ -283,8 +310,126 @@ class PhysicsEngine:
         
         return errors
 
+    # ========== 【実用的方式】 ==========
+    
+    def _calc_flight_time(self, start_floor, end_floor):
+        """実用的な移動時間計算"""
+        span = self.get_distance(start_floor, end_floor) * 1000  # mm単位に変換
+        if span == 0:
+            return 0.1, 0  # 同一階の場合
+        
+        # 最適速度計算
+        alpha = self.acceleration * 1000  # mm/s²に変換
+        beta = self.jerk * 1000          # mm/s³に変換
+        rated_vel = self.max_speed * 60   # m/min単位に変換
+        
+        t = (alpha * alpha) / (beta * 2)
+        optimal_vel = ((t*t + alpha * span) ** 0.5 - t) * 60 / 1000
+        
+        # 定格速度制限
+        if optimal_vel > rated_vel:
+            vel = rated_vel
+            dtime = alpha * 1000 / beta  # 定格速度到達時の加速時間
+        else:
+            vel = optimal_vel
+            dtime = 2 * alpha * 1000 / beta  # ジャーク制限時の加速時間
+        
+        # 総移動時間計算（実用的な移動時間計算）
+        accel_time = vel * 1000 * 1000 / (alpha * 60)
+        jerk_time = alpha * 1000 / beta
+        travel_time = span * 60 / vel
+        
+        total_time_ms = self.start_delay_time * 1000 + travel_time + accel_time + jerk_time + self.stop_adjustable_time * 1000
+        total_time = total_time_ms / 1000  # 秒単位に変換
+        
+        return max(0.1, total_time), vel
+    
+    def _calc_brake_time(self, vel):
+        """制動時間の計算"""
+        if vel == 0:
+            return 0.1
+        
+        alpha = self.acceleration * 1000
+        beta = self.jerk * 1000
+        
+        # 制動時間 = 加速時間と同じ
+        brake_time_ms = vel * 1000 * 1000 / (alpha * 60) + alpha * 1000 / beta
+        return max(0.1, brake_time_ms / 1000)
+    
+    def precompute_flight_tables(self):
+        """実用的な事前計算テーブル方式"""
+        print("[PhysicsEngine] Computing flight tables (realistic style)...")
+        
+        for i in range(1, self.num_floors):
+            # 上昇方向の計算
+            cruise_time = 0
+            for j in range(i + 1, self.num_floors):
+                total_time, vel = self._calc_flight_time(i, j)
+                brake_time = self._calc_brake_time(vel)
+                
+                # 巡航時間 = 制動開始までの猶予時間
+                cruise_duration = total_time - cruise_time - brake_time
+                
+                self.cruise_table[(i, j)] = max(0.05, cruise_duration)
+                self.brake_table[(i, j)] = brake_time
+                self.flight_time_table[(i, j)] = total_time
+                
+                cruise_time += self.cruise_table[(i, j)]
+            
+            # 下降方向の計算
+            cruise_time = 0
+            for j in range(i - 1, 0, -1):
+                total_time, vel = self._calc_flight_time(i, j)
+                brake_time = self._calc_brake_time(vel)
+                
+                cruise_duration = total_time - cruise_time - brake_time
+                
+                self.cruise_table[(i, j)] = max(0.05, cruise_duration)
+                self.brake_table[(i, j)] = brake_time
+                self.flight_time_table[(i, j)] = total_time
+                
+                cruise_time += self.cruise_table[(i, j)]
+        
+        print("[PhysicsEngine] Flight tables computed (realistic method).")
+    
+    def _build_timeline_from_table(self, start_floor, end_floor):
+        """事前計算テーブルからタイムラインを構築"""
+        if start_floor == end_floor:
+            return {'total_time': 0.1, 'timeline': []}
+        
+        timeline = []
+        direction = 1 if end_floor > start_floor else -1
+        
+        # 各階層での移動を区間分割
+        current_floor = start_floor
+        while current_floor != end_floor:
+            next_floor = current_floor + direction
+            
+            # テーブルから時間を取得
+            cruise_time = self.cruise_table.get((start_floor, next_floor), 0.1)
+            
+            timeline.append({
+                'time_delta': cruise_time,
+                'physical_floor': current_floor,
+                'advanced_position': next_floor
+            })
+            
+            current_floor = next_floor
+        
+        # 最終制動区間
+        brake_time = self.brake_table.get((start_floor, end_floor), 0.1)
+        if brake_time > 0.05:
+            timeline.append({
+                'time_delta': brake_time,
+                'physical_floor': end_floor,
+                'advanced_position': end_floor
+            })
+        
+        total_time = sum(e['time_delta'] for e in timeline)
+        return {'total_time': total_time, 'timeline': timeline}
+
     def plot_velocity_profile(self, start_floor, end_floor):
-        """【シムパイ師匠】S字プロファイルを可視化できるように改造"""
+        """S字プロファイルを可視化できるように改造"""
         profile = self.flight_profiles.get((start_floor, end_floor))
         if not profile:
             print(f"Profile for {start_floor}F -> {end_floor}F not found.")
@@ -345,15 +490,43 @@ if __name__ == '__main__':
     acceleration_test = 1.0
     jerk_test = 1.0
 
-    engine = PhysicsEngine(floor_heights_test, max_speed_test, acceleration_test, jerk_test)
-    profiles = engine.precompute_flight_profiles()
+    print("=== 従来方式（SymPy）のテスト ===")
+    engine_old = PhysicsEngine(floor_heights_test, max_speed_test, acceleration_test, jerk_test)
+    engine_old.use_realistic_method = False
+    profiles_old = engine_old.precompute_flight_profiles()
 
-    print("\n--- Sample S-Curve Flight Profile: 1F -> 10F ---")
-    profile_1_10 = profiles.get((1, 10))
-    if profile_1_10:
-        print(f"Total time: {profile_1_10['total_time']:.2f}s")
+    print("\n=== 新方式（実用的な移動時間計算）のテスト ===")
+    engine_new = PhysicsEngine(floor_heights_test, max_speed_test, acceleration_test, jerk_test)
+    engine_new.use_realistic_method = True
+    profiles_new = engine_new.precompute_flight_profiles()
+
+    print("\n--- 比較テスト: 1F -> 10F ---")
+    profile_old = profiles_old.get((1, 10))
+    profile_new = profiles_new.get((1, 10))
     
-    # グラフの表示
-    engine.plot_velocity_profile(1, 10)
-    engine.plot_velocity_profile(1, 3)
+    if profile_old and profile_new:
+        print(f"従来方式: Total time: {profile_old['total_time']:.2f}s, Events: {len(profile_old['timeline'])}")
+        print(f"新方式:   Total time: {profile_new['total_time']:.2f}s, Events: {len(profile_new['timeline'])}")
+        
+        # タイムライン比較
+        print("\n--- タイムライン比較（最初の5イベント） ---")
+        print("従来方式:")
+        for i, event in enumerate(profile_old['timeline'][:5]):
+            print(f"  Event {i}: Δt={event['time_delta']:.3f}s, Floor={event['physical_floor']}, Adv={event['advanced_position']}")
+        
+        print("新方式:")
+        for i, event in enumerate(profile_new['timeline'][:5]):
+            print(f"  Event {i}: Δt={event['time_delta']:.3f}s, Floor={event['physical_floor']}, Adv={event['advanced_position']}")
+    
+    print("\n--- 実用的な事前計算テーブル内容（サンプル） ---")
+    print("Cruise table (1F -> 上昇):")
+    for j in range(2, min(6, engine_new.num_floors)):
+        cruise_time = engine_new.cruise_table.get((1, j), 0)
+        brake_time = engine_new.brake_table.get((1, j), 0)
+        total_time = engine_new.flight_time_table.get((1, j), 0)
+        print(f"  1F -> {j}F: cruise={cruise_time:.3f}s, brake={brake_time:.3f}s, total={total_time:.3f}s")
+    
+    # グラフの表示（従来方式のみ）
+    # engine_old.plot_velocity_profile(1, 10)
+    # engine_old.plot_velocity_profile(1, 3)
 

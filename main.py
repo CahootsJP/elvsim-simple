@@ -30,6 +30,10 @@ def run_simulation():
     # --- 物理エンジンの準備 ---
     floor_heights = [0] + [i * FLOOR_HEIGHT for i in range(1, NUM_FLOORS + 1)]
     physics_engine = PhysicsEngine(floor_heights, MAX_SPEED, ACCELERATION, JERK)
+    
+    # 【テスト】実用的な移動時間計算方式を有効化
+    physics_engine.use_realistic_method = True
+    
     flight_profiles = physics_engine.precompute_flight_profiles()
 
     # --- 共有リソースの作成 ---
@@ -121,7 +125,7 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues)
               arrival_floor=6, destination_floor=7, move_speed=1.3)
 
 def passenger_generator(env, broker, hall_buttons, floor_queues):
-    """【師匠改造】真の割り込みテスト用の乗客生成プロセス"""
+    """真の割り込みテスト用の乗客生成プロセス"""
     print("--- Passenger Generation for REAL Interrupt Test ---")
 
     # シナリオ1： Saburoが10階へ向かう
@@ -129,7 +133,7 @@ def passenger_generator(env, broker, hall_buttons, floor_queues):
     Passenger(env, "Saburo", broker, hall_buttons, floor_queues, 
               arrival_floor=2, destination_floor=10, move_speed=1.0)
 
-    # シナリオ2： Saburoを乗せたエレベータが2階->10階へ飛行中の【15秒】に割り込みをかける！
+    # シナリオ2： Saburoを乗せたエレベータが2階->10階へ飛行中の15秒に割り込みをかける！
     yield env.timeout(9) # 5秒 + 9秒 = 14秒にShiroが登場 -> 15秒にボタンを押す
     Passenger(env, "Shiro", broker, hall_buttons, floor_queues,
               arrival_floor=6, destination_floor=9, move_speed=1.2)
