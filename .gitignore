@@ -10,3 +10,8 @@ pycache/
 venv/
 ENV/
 env/
+
+*.log
+*.c
+*.json
+commit_message.md
