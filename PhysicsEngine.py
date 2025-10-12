@@ -24,7 +24,7 @@ class PhysicsEngine:
         self.start_response_time = 0.2   # 応答時間 (200ms)
         self.start_delay_time = 0.2   # 起動遅延時間  
         self.stop_adjustable_time = 0.0   # 停止調整時間
-        self.use_realistic_method = False  # 実用的な移動時間計算の有効/無効フラグ
+        self.use_realistic_method = True  # 実用的な移動時間計算の有効/無効フラグ（デフォルト：実用的方式）
 
     def get_distance(self, floor1, floor2):
         return abs(self.floor_heights[floor1] - self.floor_heights[floor2])

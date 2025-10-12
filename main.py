@@ -31,9 +31,7 @@ def run_simulation():
     floor_heights = [0] + [i * FLOOR_HEIGHT for i in range(1, NUM_FLOORS + 1)]
     physics_engine = PhysicsEngine(floor_heights, MAX_SPEED, ACCELERATION, JERK)
     
-    # 【テスト】実用的な移動時間計算方式を有効化
-    physics_engine.use_realistic_method = True
-    
+    # 【デフォルト】実用的テーブル方式を使用
     flight_profiles = physics_engine.precompute_flight_profiles()
 
     # --- 共有リソースの作成 ---
@@ -52,7 +50,9 @@ def run_simulation():
     ]
 
     door1 = Door(env, "Elevator_1_Door")
-    elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles)
+    elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles, physics_engine=physics_engine)
+    
+    # 【デフォルト】実用的テーブル方式を使用（明示的設定は不要）
     
     gcs.register_elevator(elevator1)
 
