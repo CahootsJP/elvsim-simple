@@ -18,16 +18,16 @@ class Elevator(Entity):
         self.floor_queues = floor_queues
         self.door = door
         self.flight_profiles = flight_profiles
-        self.physics_engine = physics_engine  # 【プロ仕様】PhysicsEngineへのアクセス
+        self.physics_engine = physics_engine  # PhysicsEngineへのアクセス
 
         self.current_floor = 1
         self.state = "initial_state" 
         self.advanced_position = 1
-        self.current_destination = None # 【師匠新設】現在の最終目的地
-        self.last_advanced_position = None # 【師匠新設】前回のadvanced_position
+        self.current_destination = None # 現在の最終目的地
+        self.last_advanced_position = None # 前回のadvanced_position
         self.current_move_process = None # 【修正】現在の移動プロセスを追跡
         
-        # 【プロ仕様】テーブル方式の有効化フラグ（デフォルト：実用的テーブル方式）
+        # テーブル方式の有効化フラグ（デフォルト：実用タイムライン方式）
         self.use_table_method = True
 
         self.car_calls = set()
@@ -60,7 +60,7 @@ class Elevator(Entity):
             self.env.process(self._report_status())
 
     def _should_interrupt(self, new_floor, new_direction):
-        """【師匠新設】現在の走行を中断すべきか判断する"""
+        """現在の走行を中断すべきか判断する"""
         if self.state == "IDLE" or self.current_destination is None:
             return False # 止まってるなら中断の必要なし
 
@@ -85,7 +85,7 @@ class Elevator(Entity):
             else: self.hall_calls_down.add(floor)
             print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
             
-            # 【師匠改造】緊急ボタンを押すか判断！
+            # 緊急ボタンを押すか判断
             if self._should_interrupt(floor, direction):
                 print(f"{self.env.now:.2f} [{self.name}] New valid call on the way! INTERRUPTING.")
                 self.process.interrupt()
@@ -126,7 +126,7 @@ class Elevator(Entity):
                     yield self.new_call_event
                 continue # ループの先頭に戻って再判断
 
-            # 【師匠大改造】ここからが新しい運転ロジック
+            # ここからが新しい運転ロジック
             self.current_destination = self._get_next_stop_floor()
 
             if self.current_destination is None:
@@ -149,80 +149,74 @@ class Elevator(Entity):
                 continue
 
     def _move_process(self, destination_floor):
-        """【プロ仕様】cruise_table/brake_tableを使った移動プロセス"""
+        """cruise_table/brake_tableを使った移動プロセス"""
         if self.use_table_method and self.physics_engine:
             return self._move_process_with_tables(destination_floor)
         else:
             return self._move_process_with_timeline(destination_floor)
     
     def _move_process_with_tables(self, destination_floor):
-        """【プロ仕様】テーブル方式による移動プロセス - エレベータシミュレータのプロが使う方式"""
+        """【修正版】テーブル方式による移動プロセス - flight.c準拠の正しいテーブル参照"""
         if self.current_floor == destination_floor:
             print(f"{self.env.now:.2f} [{self.name}] Already at destination floor {destination_floor}")
             return
         
-        direction = 1 if destination_floor > self.current_floor else -1
-        total_time = self.physics_engine.flight_time_table.get((self.current_floor, destination_floor), 0)
+        # 🔧【修正点1】この連続走行の「出発階」を最初に記憶する
+        start_floor_of_this_trip = self.current_floor
         
-        print(f"{self.env.now:.2f} [{self.name}] Moving from floor {self.current_floor} to {destination_floor} (total {total_time:.2f}s) [TABLE METHOD]...")
+        direction = 1 if destination_floor > start_floor_of_this_trip else -1
+        total_time = self.physics_engine.flight_time_table.get((start_floor_of_this_trip, destination_floor), 0)
+        
+        print(f"{self.env.now:.2f} [{self.name}] Moving from floor {start_floor_of_this_trip} to {destination_floor} (total {total_time:.2f}s) [TABLE METHOD]...")
         
         try:
-            current_floor = self.current_floor
+            current_floor_in_trip = start_floor_of_this_trip
             
             # 各階層を順次移動（巡航フェーズ）
-            while current_floor != destination_floor:
+            while current_floor_in_trip != destination_floor:
                 # 割り込みチェック
                 if self.current_destination != destination_floor:
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
                     return
                 
-                next_floor = current_floor + direction
+                next_floor = current_floor_in_trip + direction
                 
-                # プロ仕様：cruise_tableから巡航時間を取得
-                cruise_time = self.physics_engine.cruise_table.get((self.current_floor, next_floor), 0.1)
+                # 🔧【完全修正】タイムライン方式と完全に同じタイミングで状態更新
+                # Step 1: 🔧【修正点2】記憶した「出発階」をキーとして使用する
+                cruise_time = self.physics_engine.cruise_table.get((start_floor_of_this_trip, next_floor), 0.1)
                 
-                # 巡航フェーズの実行
+                # Step 2: 先に巡航フェーズを実行して時間を進める（タイムライン方式と同じ）
                 yield self.env.timeout(cruise_time)
                 
-                # 再度割り込みチェック
+                # Step 3: 再度割り込みチェック
                 if self.current_destination != destination_floor:
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
                     return
                 
-                # フロア更新
-                old_floor = current_floor
-                current_floor = next_floor
-                self.current_floor = current_floor
+                # Step 4: 時間経過後に物理的なフロアを更新する
+                old_floor = current_floor_in_trip
+                current_floor_in_trip = next_floor
+                self.current_floor = current_floor_in_trip
                 
-                # 【プロ仕様】advanced_positionの動的計算
-                if direction == 1:  # 上昇
-                    # 次の階層への予測位置を計算
-                    if current_floor < destination_floor:
-                        self.advanced_position = min(current_floor + 1, destination_floor)
-                    else:
-                        self.advanced_position = current_floor
-                else:  # 下降
-                    # 次の階層への予測位置を計算
-                    if current_floor > destination_floor:
-                        self.advanced_position = max(current_floor - 1, destination_floor)
-                    else:
-                        self.advanced_position = current_floor
+                # Step 5: 予測位置 (advanced_position) を更新する
+                # タイムライン方式と同じロジック：現在到達した階と同じ値
+                self.advanced_position = current_floor_in_trip
                 
-                # 逆戻りチェック
-                if self.state == "UP" and current_floor < old_floor:
-                    print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor}F")
-                    return
-                elif self.state == "DOWN" and current_floor > old_floor:
-                    print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor}F")
-                    return
-                
-                # 状態報告
+                # Step 6: 状態を報告する（時間経過後）
                 if self.advanced_position != self.last_advanced_position:
                     self.env.process(self._report_status())
                 self.last_advanced_position = self.advanced_position
+                
+                # 逆戻りチェック
+                if self.state == "UP" and current_floor_in_trip < old_floor:
+                    print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor_in_trip}F")
+                    return
+                elif self.state == "DOWN" and current_floor_in_trip > old_floor:
+                    print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor_in_trip}F")
+                    return
             
-            # プロ仕様：brake_tableから制動時間を取得
-            brake_time = self.physics_engine.brake_table.get((self.current_floor, destination_floor), 0.1)
+            # 🔧【修正点3】ここでも記憶した「出発階」をキーとして使用する
+            brake_time = self.physics_engine.brake_table.get((start_floor_of_this_trip, destination_floor), 0.1)
             
             # 最終制動フェーズ
             if brake_time > 0.05:
@@ -240,7 +234,7 @@ class Elevator(Entity):
             return
     
     def _move_process_with_timeline(self, destination_floor):
-        """【従来方式】タイムライン方式による移動プロセス"""
+        """タイムライン方式による移動プロセス"""
         profile = self.flight_profiles.get((self.current_floor, destination_floor))
         if not profile or not profile.get('timeline'):
             print(f"[{self.name}] Warning: No profile found for {self.current_floor} -> {destination_floor}")
@@ -263,7 +257,7 @@ class Elevator(Entity):
                     return
                 
                 old_floor = self.current_floor
-                self.current_floor = event['physical_floor']
+                self.current_floor = event['advanced_position'] # Fixed: changed from physical_floor to advanced_position
                 self.advanced_position = event['advanced_position']
                 
                 # 逆戻りチェック
