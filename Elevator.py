@@ -53,6 +53,18 @@ class Elevator(Entity):
         }
         yield self.broker.put(self.status_topic, status_message)
 
+    def _broadcast_hall_calls_status(self):
+        """hall_calls状態を送信する"""
+        hall_calls_message = {
+            "timestamp": self.env.now,
+            "elevator_name": self.name,
+            "hall_calls_up": list(self.hall_calls_up),
+            "hall_calls_down": list(self.hall_calls_down),
+            "current_floor": self.current_floor
+        }
+        hall_calls_topic = f"elevator/{self.name}/hall_calls"
+        yield self.broker.put(hall_calls_topic, hall_calls_message)
+
     def _set_state(self, new_state):
         if self.state != new_state:
             print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) 状態遷移: {self.state} -> {new_state}")
@@ -84,6 +96,9 @@ class Elevator(Entity):
             if direction == "UP": self.hall_calls_up.add(floor)
             else: self.hall_calls_down.add(floor)
             print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
+            
+            # hall_calls状態を送信
+            self.env.process(self._broadcast_hall_calls_status())
             
             # 緊急ボタンを押すか判断
             if self._should_interrupt(floor, direction):
@@ -319,10 +334,17 @@ class Elevator(Entity):
             self.passengers_onboard.append(p)
 
         self.car_calls.discard(self.current_floor)
+        hall_calls_changed = False
         if any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
             self.hall_calls_up.discard(self.current_floor)
+            hall_calls_changed = True
         if any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
             self.hall_calls_down.discard(self.current_floor)
+            hall_calls_changed = True
+        
+        # hall_callsが変更された場合は状態を送信
+        if hall_calls_changed:
+            self.env.process(self._broadcast_hall_calls_status())
         
         print(f"{self.env.now:.2f} [{self.name}] Service at floor {self.current_floor} complete.")
         self.env.process(self._report_status())

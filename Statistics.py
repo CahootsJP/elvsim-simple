@@ -11,6 +11,7 @@ class Statistics:
         self.env = env
         self.broadcast_pipe = broadcast_pipe
         self.elevator_trajectories = {}
+        self.hall_calls_history = {}  # エレベータ別のhall_calls履歴
 
     def start_listening(self):
         """
@@ -23,9 +24,9 @@ class Statistics:
             message = data.get('message', {})
 
             # エレベーターの状態報告の中から、先行位置だけを記録する
-            match = re.search(r'elevator/(.*?)/status', topic)
-            if match and 'advanced_position' in message:
-                elevator_name = match.group(1)
+            status_match = re.search(r'elevator/(.*?)/status', topic)
+            if status_match and 'advanced_position' in message:
+                elevator_name = status_match.group(1)
                 if elevator_name not in self.elevator_trajectories:
                     self.elevator_trajectories[elevator_name] = []
                 
@@ -35,6 +36,24 @@ class Statistics:
                 # 最後のデータ点と全く同じでなければ、記録する
                 if not self.elevator_trajectories[elevator_name] or self.elevator_trajectories[elevator_name][-1] != (timestamp, advanced_position):
                     self.elevator_trajectories[elevator_name].append((timestamp, advanced_position))
+            
+            # hall_calls情報を記録する
+            hall_calls_match = re.search(r'elevator/(.*?)/hall_calls', topic)
+            if hall_calls_match:
+                elevator_name = hall_calls_match.group(1)
+                if elevator_name not in self.hall_calls_history:
+                    self.hall_calls_history[elevator_name] = []
+                
+                timestamp = message.get('timestamp')
+                hall_calls_up = message.get('hall_calls_up', [])
+                hall_calls_down = message.get('hall_calls_down', [])
+                
+                # hall_calls情報を記録
+                self.hall_calls_history[elevator_name].append({
+                    'timestamp': timestamp,
+                    'hall_calls_up': hall_calls_up.copy(),
+                    'hall_calls_down': hall_calls_down.copy()
+                })
 
     def plot_trajectory_diagram(self):
         """シミュレーション終了後、運行線図を描画する"""
@@ -48,6 +67,9 @@ class Statistics:
             times, floors = zip(*sorted_trajectory)
             
             plt.step(times, floors, where='post', label=name)
+            
+            # hall_calls矢印を描画
+            self._plot_hall_calls_arrows(name)
 
         plt.title("Elevator Trajectory Diagram (Travel Diagram, Advanced Position)")
         plt.xlabel("Time (s)")
@@ -62,3 +84,27 @@ class Statistics:
 
         plt.legend()
         plt.show()
+    
+    def _plot_hall_calls_arrows(self, elevator_name):
+        """指定されたエレベータのhall_calls矢印を描画する"""
+        if elevator_name not in self.hall_calls_history:
+            return
+        
+        for hall_call_data in self.hall_calls_history[elevator_name]:
+            timestamp = hall_call_data['timestamp']
+            hall_calls_up = hall_call_data['hall_calls_up']
+            hall_calls_down = hall_call_data['hall_calls_down']
+            
+            # 上向き矢印（緑色）
+            for floor in hall_calls_up:
+                plt.annotate('↑', (timestamp, floor), 
+                           fontsize=12, color='green', fontweight='bold',
+                           ha='center', va='center',
+                           bbox=dict(boxstyle='round,pad=0.2', facecolor='lightgreen', alpha=0.7))
+            
+            # 下向き矢印（赤色）
+            for floor in hall_calls_down:
+                plt.annotate('↓', (timestamp, floor), 
+                           fontsize=12, color='red', fontweight='bold',
+                           ha='center', va='center',
+                           bbox=dict(boxstyle='round,pad=0.2', facecolor='lightcoral', alpha=0.7))
