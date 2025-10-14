@@ -65,6 +65,29 @@ class Elevator(Entity):
         hall_calls_topic = f"elevator/{self.name}/hall_calls"
         yield self.broker.put(hall_calls_topic, hall_calls_message)
 
+    def _broadcast_car_calls_status(self):
+        """car_calls状態を送信する"""
+        car_calls_message = {
+            "timestamp": self.env.now,
+            "elevator_name": self.name,
+            "car_calls": list(self.car_calls),
+            "current_floor": self.current_floor
+        }
+        car_calls_topic = f"elevator/{self.name}/car_calls"
+        yield self.broker.put(car_calls_topic, car_calls_message)
+
+    def _broadcast_new_car_call_registration(self, dest_floor, passenger_name):
+        """新規car_call登録を可視化用に送信する"""
+        new_car_call_message = {
+            "timestamp": self.env.now,
+            "elevator_name": self.name,
+            "destination": dest_floor,
+            "passenger_name": passenger_name,
+            "current_floor": self.current_floor
+        }
+        new_car_call_topic = f"elevator/{self.name}/new_car_call"
+        yield self.broker.put(new_car_call_topic, new_car_call_message)
+
     def _set_state(self, new_state):
         if self.state != new_state:
             print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) 状態遷移: {self.state} -> {new_state}")
@@ -115,8 +138,21 @@ class Elevator(Entity):
             car_call = yield self.broker.get(car_call_topic)
             dest_floor = car_call['destination']
             passenger_name = car_call['passenger_name']
+            
+            # 【修正】既に登録済みのcar_callは無視する（実際のエレベータの動作）
+            if dest_floor in self.car_calls:
+                print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' for {dest_floor} - already registered (button already lit).")
+                continue
+            
+            # 新しいcar_callのみ登録
             self.car_calls.add(dest_floor)
             print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' registered for {dest_floor}.")
+            
+            # 【新規】可視化用の新規car_call登録メッセージを送信
+            self.env.process(self._broadcast_new_car_call_registration(dest_floor, passenger_name))
+            
+            # car_calls状態を送信
+            self.env.process(self._broadcast_car_calls_status())
             
             # TODO: かご呼びでも割り込みを実装する
             if not self.new_call_event.triggered:
@@ -333,7 +369,11 @@ class Elevator(Entity):
         for p in boarded_passengers:
             self.passengers_onboard.append(p)
 
-        self.car_calls.discard(self.current_floor)
+        car_calls_changed = False
+        if self.current_floor in self.car_calls:
+            self.car_calls.discard(self.current_floor)
+            car_calls_changed = True
+        
         hall_calls_changed = False
         if any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
             self.hall_calls_up.discard(self.current_floor)
@@ -341,6 +381,10 @@ class Elevator(Entity):
         if any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
             self.hall_calls_down.discard(self.current_floor)
             hall_calls_changed = True
+        
+        # car_callsが変更された場合は状態を送信
+        if car_calls_changed:
+            self.env.process(self._broadcast_car_calls_status())
         
         # hall_callsが変更された場合は状態を送信
         if hall_calls_changed:
