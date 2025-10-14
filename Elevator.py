@@ -11,7 +11,7 @@ class Elevator(Entity):
     【v20.0】走行中の割り込みに対応できる、エースパイロットになった運転手
     """
 
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None):
         super().__init__(env, name)
         self.broker = broker
         self.num_floors = num_floors
@@ -19,6 +19,7 @@ class Elevator(Entity):
         self.door = door
         self.flight_profiles = flight_profiles
         self.physics_engine = physics_engine  # PhysicsEngineへのアクセス
+        self.hall_buttons = hall_buttons  # ホールボタンへの参照
 
         self.current_floor = 1
         self.state = "initial_state" 
@@ -375,12 +376,22 @@ class Elevator(Entity):
             car_calls_changed = True
         
         hall_calls_changed = False
+        serviced_directions = []  # 消灯すべき方向を記録
+        
         if any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
             self.hall_calls_up.discard(self.current_floor)
             hall_calls_changed = True
+            serviced_directions.append("UP")
         if any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
             self.hall_calls_down.discard(self.current_floor)
             hall_calls_changed = True
+            serviced_directions.append("DOWN")
+        
+        # 【新規】サービス完了した方向のホールボタンを消灯
+        if serviced_directions and self.hall_buttons:
+            for direction in serviced_directions:
+                button = self.hall_buttons[self.current_floor][direction]
+                button.serve()  # ボタン消灯
         
         # car_callsが変更された場合は状態を送信
         if car_calls_changed:

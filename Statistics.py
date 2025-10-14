@@ -56,6 +56,32 @@ class Statistics:
                     'hall_calls_down': hall_calls_down.copy()
                 })
             
+            # 新規hall_call登録を記録する（可視化用）
+            new_hall_call_match = re.search(r'hall_button/floor_(.*?)/new_hall_call', topic)
+            if new_hall_call_match:
+                floor = int(new_hall_call_match.group(1))
+                
+                # 新規登録されたhall_callのみを記録
+                timestamp = message.get('timestamp')
+                direction = message.get('direction')
+                passenger_name = message.get('passenger_name')
+                
+                if timestamp is not None and direction is not None:
+                    # hall_calls_historyに新規登録として追加（エレベータ名は'ALL'として統一）
+                    elevator_name = 'ALL'  # Hall Callはエレベータ固有ではない
+                    if elevator_name not in self.hall_calls_history:
+                        self.hall_calls_history[elevator_name] = []
+                    
+                    # 新規登録専用のデータ構造
+                    new_hall_call_data = {
+                        'timestamp': timestamp,
+                        'floor': floor,
+                        'direction': direction,
+                        'passenger_name': passenger_name,
+                        'is_new_registration': True  # 新規登録フラグ
+                    }
+                    self.hall_calls_history[elevator_name].append(new_hall_call_data)
+            
             # 新規car_call登録を記録する（可視化用）
             new_car_call_match = re.search(r'elevator/(.*?)/new_car_call', topic)
             if new_car_call_match:
@@ -109,28 +135,40 @@ class Statistics:
         plt.show()
     
     def _plot_hall_calls_arrows(self, elevator_name):
-        """指定されたエレベータのhall_calls矢印を描画する"""
-        if elevator_name not in self.hall_calls_history:
+        """新規hall_call登録のみを矢印で描画する（重複回避版）"""
+        # 新規登録データは'ALL'キーに格納されている
+        if 'ALL' not in self.hall_calls_history:
             return
         
-        for hall_call_data in self.hall_calls_history[elevator_name]:
+        # 既に描画した(timestamp, floor, direction)の組み合わせを追跡
+        plotted_positions = set()
+        
+        for hall_call_data in self.hall_calls_history['ALL']:
+            # 新規登録フラグがあるデータのみ処理
+            if not hall_call_data.get('is_new_registration', False):
+                continue
+                
             timestamp = hall_call_data['timestamp']
-            hall_calls_up = hall_call_data['hall_calls_up']
-            hall_calls_down = hall_call_data['hall_calls_down']
+            floor = hall_call_data['floor']
+            direction = hall_call_data['direction']
             
-            # 上向き矢印（緑色）
-            for floor in hall_calls_up:
-                plt.annotate('↑', (timestamp, floor), 
-                           fontsize=12, color='green', fontweight='bold',
-                           ha='center', va='center',
-                           bbox=dict(boxstyle='round,pad=0.2', facecolor='lightgreen', alpha=0.7))
+            position_key = (round(timestamp, 2), floor, direction)  # 時刻を丸めて重複判定
             
-            # 下向き矢印（赤色）
-            for floor in hall_calls_down:
-                plt.annotate('↓', (timestamp, floor), 
-                           fontsize=12, color='red', fontweight='bold',
-                           ha='center', va='center',
-                           bbox=dict(boxstyle='round,pad=0.2', facecolor='lightcoral', alpha=0.7))
+            if position_key not in plotted_positions:
+                if direction == 'UP':
+                    # 上向き矢印（緑色）
+                    plt.annotate('↑', (timestamp, floor), 
+                               fontsize=12, color='green', fontweight='bold',
+                               ha='center', va='center',
+                               bbox=dict(boxstyle='round,pad=0.2', facecolor='lightgreen', alpha=0.7))
+                elif direction == 'DOWN':
+                    # 下向き矢印（赤色）
+                    plt.annotate('↓', (timestamp, floor), 
+                               fontsize=12, color='red', fontweight='bold',
+                               ha='center', va='center',
+                               bbox=dict(boxstyle='round,pad=0.2', facecolor='lightcoral', alpha=0.7))
+                
+                plotted_positions.add(position_key)
     
     def _plot_car_calls_circles(self, elevator_name):
         """指定されたエレベータのcar_calls丸印を描画する（重複回避版）"""

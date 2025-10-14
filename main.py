@@ -50,7 +50,7 @@ def run_simulation():
     ]
 
     door1 = Door(env, "Elevator_1_Door")
-    elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles, physics_engine=physics_engine)
+    elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons)
     
     # 【デフォルト】実用的テーブル方式を使用（明示的設定は不要）
     

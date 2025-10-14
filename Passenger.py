@@ -27,11 +27,16 @@ class Passenger(Entity):
 
     def run(self):
         """【師匠大改造】乗客の自立したライフサイクル"""
-        # 1. 乗り場ボタンを押す
+        # 1. 乗り場ボタンを押す（重複チェック機能付き）
         yield self.env.timeout(1)
         direction = "UP" if self.destination_floor > self.arrival_floor else "DOWN"
         button = self.hall_buttons[self.arrival_floor][direction]
-        button.press()
+        
+        # 【新規】ボタンの点灯状態をチェックしてから押下
+        if button.is_lit():
+            print(f"{self.env.now:.2f} [{self.name}] Hall button at floor {self.arrival_floor} ({direction}) already lit. No need to press.")
+        else:
+            button.press(passenger_name=self.name)
 
         # 2. 正しい方向の行列に並ぶ
         current_queue = self.floor_queues[self.arrival_floor][direction]
