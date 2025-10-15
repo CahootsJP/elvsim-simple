@@ -8,7 +8,7 @@ import math
 
 class Elevator(Entity):
     """
-    【v20.0】走行中の割り込みに対応できる、エースパイロットになった運転手
+    Elevator that can handle interruptions during movement
     """
 
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None):
@@ -18,17 +18,17 @@ class Elevator(Entity):
         self.floor_queues = floor_queues
         self.door = door
         self.flight_profiles = flight_profiles
-        self.physics_engine = physics_engine  # PhysicsEngineへのアクセス
-        self.hall_buttons = hall_buttons  # ホールボタンへの参照
+        self.physics_engine = physics_engine  # Access to PhysicsEngine
+        self.hall_buttons = hall_buttons  # Reference to hall buttons
 
         self.current_floor = 1
         self.state = "initial_state" 
         self.advanced_position = 1
-        self.current_destination = None # 現在の最終目的地
-        self.last_advanced_position = None # 前回のadvanced_position
-        self.current_move_process = None # 【修正】現在の移動プロセスを追跡
+        self.current_destination = None  # Current final destination
+        self.last_advanced_position = None  # Previous advanced_position
+        self.current_move_process = None  # Track current movement process
         
-        # テーブル方式の有効化フラグ（デフォルト：実用タイムライン方式）
+        # Table method enable flag (default: practical timeline method)
         self.use_table_method = True
 
         self.car_calls = set()
@@ -55,7 +55,7 @@ class Elevator(Entity):
         yield self.broker.put(self.status_topic, status_message)
 
     def _broadcast_hall_calls_status(self):
-        """hall_calls状態を送信する"""
+        """Send hall_calls status"""
         hall_calls_message = {
             "timestamp": self.env.now,
             "elevator_name": self.name,
@@ -67,7 +67,7 @@ class Elevator(Entity):
         yield self.broker.put(hall_calls_topic, hall_calls_message)
 
     def _broadcast_car_calls_status(self):
-        """car_calls状態を送信する"""
+        """Send car_calls status"""
         car_calls_message = {
             "timestamp": self.env.now,
             "elevator_name": self.name,
@@ -78,7 +78,7 @@ class Elevator(Entity):
         yield self.broker.put(car_calls_topic, car_calls_message)
 
     def _broadcast_new_car_call_registration(self, dest_floor, passenger_name):
-        """新規car_call登録を可視化用に送信する"""
+        """Send new car_call registration for visualization"""
         new_car_call_message = {
             "timestamp": self.env.now,
             "elevator_name": self.name,
@@ -96,16 +96,16 @@ class Elevator(Entity):
             self.env.process(self._report_status())
 
     def _should_interrupt(self, new_floor, new_direction):
-        """現在の走行を中断すべきか判断する"""
+        """Determine if current movement should be interrupted"""
         if self.state == "IDLE" or self.current_destination is None:
-            return False # 止まってるなら中断の必要なし
+            return False  # No need to interrupt if stopped
 
         if self.state == "UP" and new_direction == "UP":
-            # 上昇中に、今の位置より上で、目的地より手前の呼び出しが入ったか？
+            # During upward movement, is there a call above current position but before destination?
             return self.current_floor < new_floor < self.current_destination
         
         if self.state == "DOWN" and new_direction == "DOWN":
-            # 下降中に、今の位置より下で、目的地より手前の呼び出しが入ったか？
+            # During downward movement, is there a call below current position but before destination?
             return self.current_floor > new_floor > self.current_destination
 
         return False
@@ -121,10 +121,10 @@ class Elevator(Entity):
             else: self.hall_calls_down.add(floor)
             print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
             
-            # hall_calls状態を送信
+            # Send hall_calls status
             self.env.process(self._broadcast_hall_calls_status())
             
-            # 緊急ボタンを押すか判断
+            # Determine if emergency button should be pressed
             if self._should_interrupt(floor, direction):
                 print(f"{self.env.now:.2f} [{self.name}] New valid call on the way! INTERRUPTING.")
                 self.process.interrupt()
@@ -140,22 +140,22 @@ class Elevator(Entity):
             dest_floor = car_call['destination']
             passenger_name = car_call['passenger_name']
             
-            # 【修正】既に登録済みのcar_callは無視する（実際のエレベータの動作）
+            # Ignore already registered car_calls (actual elevator behavior)
             if dest_floor in self.car_calls:
                 print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' for {dest_floor} - already registered (button already lit).")
                 continue
             
-            # 新しいcar_callのみ登録
+            # Register only new car_calls
             self.car_calls.add(dest_floor)
             print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' registered for {dest_floor}.")
             
-            # 【新規】可視化用の新規car_call登録メッセージを送信
+            # Send new car_call registration message for visualization
             self.env.process(self._broadcast_new_car_call_registration(dest_floor, passenger_name))
             
-            # car_calls状態を送信
+            # Send car_calls status
             self.env.process(self._broadcast_car_calls_status())
             
-            # TODO: かご呼びでも割り込みを実装する
+            # TODO: Implement interruption for car calls as well
             if not self.new_call_event.triggered:
                 self.new_call_event.succeed()
                 self.new_call_event = self.env.event()
@@ -176,44 +176,44 @@ class Elevator(Entity):
                 if not self._has_any_calls():
                     print(f"{self.env.now:.2f} [{self.name}] IDLE. Waiting for new call signal...")
                     yield self.new_call_event
-                continue # ループの先頭に戻って再判断
+                continue  # Return to loop start for re-evaluation
 
-            # ここからが新しい運転ロジック
+            # New operation logic starts here
             self.current_destination = self._get_next_stop_floor()
 
             if self.current_destination is None:
                 self._set_state("IDLE")
                 continue
 
-            # このtryブロックが、中断可能なフライトプラン
+            # This try block is the interruptible flight plan
             try:
-                # 【修正】現在の移動プロセスを追跡
+                # Track current movement process
                 self.current_move_process = self.env.process(self._move_process(self.current_destination))
                 yield self.current_move_process
             except Interrupt:
-                # 無線係から緊急連絡が来た！
+                # Emergency call from radio operator!
                 print(f"{self.env.now:.2f} [{self.name}] Movement interrupted by new call. Re-evaluating next stop.")
-                # 【修正】古い移動プロセスをキャンセル
+                # Cancel old movement process
                 if self.current_move_process and self.current_move_process.is_alive:
                     self.current_move_process.interrupt()
                 self.current_move_process = None
-                # ループの先頭に戻れば、自動的に新しい目的地が再計算される
+                # Return to loop start will automatically recalculate new destination
                 continue
 
     def _move_process(self, destination_floor):
-        """cruise_table/brake_tableを使った移動プロセス"""
+        """Movement process using cruise_table/brake_table"""
         if self.use_table_method and self.physics_engine:
             return self._move_process_with_tables(destination_floor)
         else:
             return self._move_process_with_timeline(destination_floor)
     
     def _move_process_with_tables(self, destination_floor):
-        """【修正版】テーブル方式による移動プロセス - flight.c準拠の正しいテーブル参照"""
+        """Table-based movement process (corrected version)"""
         if self.current_floor == destination_floor:
             print(f"{self.env.now:.2f} [{self.name}] Already at destination floor {destination_floor}")
             return
         
-        # 🔧【修正点1】この連続走行の「出発階」を最初に記憶する
+        # Remember the "departure floor" for this continuous trip
         start_floor_of_this_trip = self.current_floor
         
         direction = 1 if destination_floor > start_floor_of_this_trip else -1
@@ -224,42 +224,42 @@ class Elevator(Entity):
         try:
             current_floor_in_trip = start_floor_of_this_trip
             
-            # 各階層を順次移動（巡航フェーズ）
+            # Move through each floor sequentially (cruise phase)
             while current_floor_in_trip != destination_floor:
-                # 割り込みチェック
+                # Interruption check
                 if self.current_destination != destination_floor:
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
                     return
                 
                 next_floor = current_floor_in_trip + direction
                 
-                # 🔧【完全修正】タイムライン方式と完全に同じタイミングで状態更新
-                # Step 1: 🔧【修正点2】記憶した「出発階」をキーとして使用する
+                # Complete fix: Update state with same timing as timeline method
+                # Step 1: Use remembered "departure floor" as key
                 cruise_time = self.physics_engine.cruise_table.get((start_floor_of_this_trip, next_floor), 0.1)
                 
-                # Step 2: 先に巡航フェーズを実行して時間を進める（タイムライン方式と同じ）
+                # Step 2: Execute cruise phase first to advance time (same as timeline method)
                 yield self.env.timeout(cruise_time)
                 
-                # Step 3: 再度割り込みチェック
+                # Step 3: Re-check for interruption
                 if self.current_destination != destination_floor:
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
                     return
                 
-                # Step 4: 時間経過後に物理的なフロアを更新する
+                # Step 4: Update physical floor after time has passed
                 old_floor = current_floor_in_trip
                 current_floor_in_trip = next_floor
                 self.current_floor = current_floor_in_trip
                 
-                # Step 5: 予測位置 (advanced_position) を更新する
-                # タイムライン方式と同じロジック：現在到達した階と同じ値
+                # Step 5: Update predicted position (advanced_position)
+                # Same logic as timeline method: same value as currently reached floor
                 self.advanced_position = current_floor_in_trip
                 
-                # Step 6: 状態を報告する（時間経過後）
+                # Step 6: Report status (after time has passed)
                 if self.advanced_position != self.last_advanced_position:
                     self.env.process(self._report_status())
                 self.last_advanced_position = self.advanced_position
                 
-                # 逆戻りチェック
+                # Reverse movement check
                 if self.state == "UP" and current_floor_in_trip < old_floor:
                     print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor_in_trip}F")
                     return
@@ -267,14 +267,23 @@ class Elevator(Entity):
                     print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor_in_trip}F")
                     return
             
-            # 🔧【修正点3】ここでも記憶した「出発階」をキーとして使用する
+            # Use remembered "departure floor" as key here as well
             brake_time = self.physics_engine.brake_table.get((start_floor_of_this_trip, destination_floor), 0.1)
             
-            # 最終制動フェーズ
+            # Final braking phase
             if brake_time > 0.05:
+                # Pre-determine next direction at start of braking
+                predicted_direction = self._predict_next_direction_at_arrival(destination_floor)
+                if predicted_direction != self.state and predicted_direction != "IDLE":
+                    print(f"{self.env.now:.2f} [{self.name}] Direction will change to {predicted_direction} during braking approach to floor {destination_floor}")
+                    self._set_state(predicted_direction)
+                elif predicted_direction == "IDLE" and self.state != "IDLE":
+                    print(f"{self.env.now:.2f} [{self.name}] Will become IDLE after arriving at floor {destination_floor}")
+                    # IDLE change is done after arrival (as before)
+                
                 yield self.env.timeout(brake_time)
                 
-                # 最終割り込みチェック
+                # Final interruption check
                 if self.current_destination != destination_floor:
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled during final braking.")
                     return
@@ -286,7 +295,7 @@ class Elevator(Entity):
             return
     
     def _move_process_with_timeline(self, destination_floor):
-        """タイムライン方式による移動プロセス"""
+        """Timeline-based movement process"""
         profile = self.flight_profiles.get((self.current_floor, destination_floor))
         if not profile or not profile.get('timeline'):
             print(f"[{self.name}] Warning: No profile found for {self.current_floor} -> {destination_floor}")
@@ -296,23 +305,33 @@ class Elevator(Entity):
         
         try:
             for i, event in enumerate(profile['timeline']):
-                # 割り込みチェック：移動中に目的地が変更された場合は中断
+                # Interruption check: abort if destination changed during movement
                 if self.current_destination != destination_floor:
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
                     return
+                
+                # Pre-determine direction at timing equivalent to braking start
+                if i == len(profile['timeline']) - 2:  # Second to last event (equivalent to braking start)
+                    predicted_direction = self._predict_next_direction_at_arrival(destination_floor)
+                    if predicted_direction != self.state and predicted_direction != "IDLE":
+                        print(f"{self.env.now:.2f} [{self.name}] Direction will change to {predicted_direction} during approach to floor {destination_floor}")
+                        self._set_state(predicted_direction)
+                    elif predicted_direction == "IDLE" and self.state != "IDLE":
+                        print(f"{self.env.now:.2f} [{self.name}] Will become IDLE after arriving at floor {destination_floor}")
+                        # IDLE change is done after arrival (as before)
                     
                 yield self.env.timeout(event['time_delta'])
                 
-                # 再度割り込みチェック
+                # Re-check for interruption
                 if self.current_destination != destination_floor:
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
                     return
                 
                 old_floor = self.current_floor
-                self.current_floor = event['advanced_position'] # Fixed: changed from physical_floor to advanced_position
+                self.current_floor = event['advanced_position']  # Fixed: changed from physical_floor to advanced_position
                 self.advanced_position = event['advanced_position']
                 
-                # 逆戻りチェック
+                # Reverse movement check
                 if self.state == "UP" and self.current_floor < old_floor:
                     print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
                     return
@@ -327,7 +346,7 @@ class Elevator(Entity):
             print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.current_floor}")
             
         except Interrupt:
-            # 【修正】割り込み時は静かに終了（ログ出力は上位で行う）
+            # Quietly exit on interruption (logging is done at higher level)
             print(f"{self.env.now:.2f} [{self.name}] Movement process interrupted and terminated.")
             return
 
@@ -376,7 +395,7 @@ class Elevator(Entity):
             car_calls_changed = True
         
         hall_calls_changed = False
-        serviced_directions = []  # 消灯すべき方向を記録
+        serviced_directions = []  # Record directions that should be turned off
         
         if any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
             self.hall_calls_up.discard(self.current_floor)
@@ -387,17 +406,17 @@ class Elevator(Entity):
             hall_calls_changed = True
             serviced_directions.append("DOWN")
         
-        # 【新規】サービス完了した方向のホールボタンを消灯
+        # Turn off hall buttons for serviced directions
         if serviced_directions and self.hall_buttons:
             for direction in serviced_directions:
                 button = self.hall_buttons[self.current_floor][direction]
-                button.serve()  # ボタン消灯
+                button.serve()  # Turn off button
         
-        # car_callsが変更された場合は状態を送信
+        # Send status if car_calls changed
         if car_calls_changed:
             self.env.process(self._broadcast_car_calls_status())
         
-        # hall_callsが変更された場合は状態を送信
+        # Send status if hall_calls changed
         if hall_calls_changed:
             self.env.process(self._broadcast_hall_calls_status())
         
@@ -466,4 +485,50 @@ class Elevator(Entity):
 
     def _has_any_down_calls_below(self):
         return any(f < self.current_floor for f in self.car_calls | self.hall_calls_down)
+
+    def _predict_next_direction_at_arrival(self, arrival_floor):
+        """Predict next direction at arrival floor in advance"""
+        # Simulate post-arrival situation (assuming service completion at arrival floor)
+        future_car_calls = self.car_calls.copy()
+        future_hall_calls_up = self.hall_calls_up.copy()
+        future_hall_calls_down = self.hall_calls_down.copy()
+        
+        # Remove calls at arrival floor (will be serviced)
+        future_car_calls.discard(arrival_floor)
+        
+        # Remove hall_calls to be serviced based on current state
+        if self.state in ["IDLE", "UP"] and arrival_floor in future_hall_calls_up:
+            future_hall_calls_up.discard(arrival_floor)
+        if self.state in ["IDLE", "DOWN"] and arrival_floor in future_hall_calls_down:
+            future_hall_calls_down.discard(arrival_floor)
+        # Service DOWN calls even during UP movement when reaching top floor
+        if self.state == "UP" and arrival_floor in future_hall_calls_down:
+            up_calls_above = any(f > arrival_floor for f in future_car_calls | future_hall_calls_up)
+            if not up_calls_above:
+                future_hall_calls_down.discard(arrival_floor)
+        # Service UP calls even during DOWN movement when reaching bottom floor
+        if self.state == "DOWN" and arrival_floor in future_hall_calls_up:
+            down_calls_below = any(f < arrival_floor for f in future_car_calls | future_hall_calls_down)
+            if not down_calls_below:
+                future_hall_calls_up.discard(arrival_floor)
+        
+        # Determine next direction from remaining calls
+        all_remaining_calls = future_car_calls | future_hall_calls_up | future_hall_calls_down
+        
+        if not all_remaining_calls:
+            return "IDLE"
+        
+        # Check upward and downward calls
+        up_calls = [f for f in all_remaining_calls if f > arrival_floor]
+        down_calls = [f for f in all_remaining_calls if f < arrival_floor]
+        
+        if up_calls and not down_calls:
+            return "UP"
+        elif down_calls and not up_calls:
+            return "DOWN"
+        elif up_calls and down_calls:
+            # If calls in both directions, continue current direction
+            return self.state if self.state in ["UP", "DOWN"] else "UP"
+        else:
+            return "IDLE"
 

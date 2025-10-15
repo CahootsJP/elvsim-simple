@@ -4,19 +4,19 @@ import re
 
 class Statistics:
     """
-    シミュレーション世界の全ての通信を傍受し、
-    必要な情報を分析・記録する、独立した「記録係」。
+    Receives all communications and
+    analyzes and records necessary information as an independent "recorder".
     """
     def __init__(self, env, broadcast_pipe):
         self.env = env
         self.broadcast_pipe = broadcast_pipe
         self.elevator_trajectories = {}
-        self.hall_calls_history = {}  # エレベータ別のhall_calls履歴
-        self.car_calls_history = {}   # エレベータ別のcar_calls履歴
+        self.hall_calls_history = {}  # Hall calls history by elevator
+        self.car_calls_history = {}   # Car calls history by elevator
 
     def start_listening(self):
         """
-        全局放送の傍受を開始するメインプロセス。
+        Main process to start intercepting global broadcasts.
         """
         while True:
             data = yield self.broadcast_pipe.get()
@@ -24,7 +24,7 @@ class Statistics:
             topic = data.get('topic', '')
             message = data.get('message', {})
 
-            # エレベーターの状態報告の中から、先行位置だけを記録する
+            # Record only advanced position from elevator status reports
             status_match = re.search(r'elevator/(.*?)/status', topic)
             if status_match and 'advanced_position' in message:
                 elevator_name = status_match.group(1)
@@ -34,11 +34,11 @@ class Statistics:
                 timestamp = message.get('timestamp')
                 advanced_position = message.get('advanced_position')
 
-                # 最後のデータ点と全く同じでなければ、記録する
+                # Record if not exactly the same as the last data point
                 if not self.elevator_trajectories[elevator_name] or self.elevator_trajectories[elevator_name][-1] != (timestamp, advanced_position):
                     self.elevator_trajectories[elevator_name].append((timestamp, advanced_position))
             
-            # hall_calls情報を記録する
+            # Record hall_calls information
             hall_calls_match = re.search(r'elevator/(.*?)/hall_calls', topic)
             if hall_calls_match:
                 elevator_name = hall_calls_match.group(1)
@@ -49,47 +49,47 @@ class Statistics:
                 hall_calls_up = message.get('hall_calls_up', [])
                 hall_calls_down = message.get('hall_calls_down', [])
                 
-                # hall_calls情報を記録
+                # Record hall_calls information
                 self.hall_calls_history[elevator_name].append({
                     'timestamp': timestamp,
                     'hall_calls_up': hall_calls_up.copy(),
                     'hall_calls_down': hall_calls_down.copy()
                 })
             
-            # 新規hall_call登録を記録する（可視化用）
+            # Record new hall_call registrations (for visualization)
             new_hall_call_match = re.search(r'hall_button/floor_(.*?)/new_hall_call', topic)
             if new_hall_call_match:
                 floor = int(new_hall_call_match.group(1))
                 
-                # 新規登録されたhall_callのみを記録
+                # Record only newly registered hall_calls
                 timestamp = message.get('timestamp')
                 direction = message.get('direction')
                 passenger_name = message.get('passenger_name')
                 
                 if timestamp is not None and direction is not None:
-                    # hall_calls_historyに新規登録として追加（エレベータ名は'ALL'として統一）
-                    elevator_name = 'ALL'  # Hall Callはエレベータ固有ではない
+                    # Add as new registration to hall_calls_history (unified as elevator name 'ALL')
+                    elevator_name = 'ALL'  # Hall Calls are not elevator-specific
                     if elevator_name not in self.hall_calls_history:
                         self.hall_calls_history[elevator_name] = []
                     
-                    # 新規登録専用のデータ構造
+                    # Data structure dedicated to new registrations
                     new_hall_call_data = {
                         'timestamp': timestamp,
                         'floor': floor,
                         'direction': direction,
                         'passenger_name': passenger_name,
-                        'is_new_registration': True  # 新規登録フラグ
+                        'is_new_registration': True  # New registration flag
                     }
                     self.hall_calls_history[elevator_name].append(new_hall_call_data)
             
-            # 新規car_call登録を記録する（可視化用）
+            # Record new car_call registrations (for visualization)
             new_car_call_match = re.search(r'elevator/(.*?)/new_car_call', topic)
             if new_car_call_match:
                 elevator_name = new_car_call_match.group(1)
                 if elevator_name not in self.car_calls_history:
                     self.car_calls_history[elevator_name] = []
                 
-                # 新規登録されたcar_callのみを記録
+                # Record only newly registered car_calls
                 timestamp = message.get('timestamp')
                 destination = message.get('destination')
                 passenger_name = message.get('passenger_name')
@@ -97,12 +97,12 @@ class Statistics:
                 if destination is not None and timestamp is not None:
                     self.car_calls_history[elevator_name].append({
                         'timestamp': timestamp,
-                        'car_calls': [destination],  # 新規登録された1つの階のみ
+                        'car_calls': [destination],  # Only the one newly registered floor
                         'passenger_name': passenger_name
                     })
 
     def plot_trajectory_diagram(self):
-        """シミュレーション終了後、運行線図を描画する"""
+        """Draw trajectory diagram after simulation ends"""
         print("\n--- Plotting: Elevator Trajectory Diagram ---")
         plt.figure(figsize=(14, 8))
 
@@ -114,10 +114,10 @@ class Statistics:
             
             plt.step(times, floors, where='post', label=name)
             
-            # hall_calls矢印を描画
+            # Draw hall_calls arrows
             self._plot_hall_calls_arrows(name)
             
-            # car_calls丸印を描画
+            # Draw car_calls circles
             self._plot_car_calls_circles(name)
 
         plt.title("Elevator Trajectory Diagram (Travel Diagram, Advanced Position)")
@@ -135,16 +135,16 @@ class Statistics:
         plt.show()
     
     def _plot_hall_calls_arrows(self, elevator_name):
-        """新規hall_call登録のみを矢印で描画する（重複回避版）"""
-        # 新規登録データは'ALL'キーに格納されている
+        """Draw only new hall_call registrations with arrows"""
+        # New registration data is stored under 'ALL' key
         if 'ALL' not in self.hall_calls_history:
             return
         
-        # 既に描画した(timestamp, floor, direction)の組み合わせを追跡
+        # Track already drawn (timestamp, floor, direction) combinations
         plotted_positions = set()
         
         for hall_call_data in self.hall_calls_history['ALL']:
-            # 新規登録フラグがあるデータのみ処理
+            # Process only data with new registration flag
             if not hall_call_data.get('is_new_registration', False):
                 continue
                 
@@ -152,17 +152,17 @@ class Statistics:
             floor = hall_call_data['floor']
             direction = hall_call_data['direction']
             
-            position_key = (round(timestamp, 2), floor, direction)  # 時刻を丸めて重複判定
+            position_key = (round(timestamp, 2), floor, direction)  # Round time for duplicate detection
             
             if position_key not in plotted_positions:
                 if direction == 'UP':
-                    # 上向き矢印（緑色）
+                    # Upward arrow (green)
                     plt.annotate('↑', (timestamp, floor), 
                                fontsize=12, color='green', fontweight='bold',
                                ha='center', va='center',
                                bbox=dict(boxstyle='round,pad=0.2', facecolor='lightgreen', alpha=0.7))
                 elif direction == 'DOWN':
-                    # 下向き矢印（赤色）
+                    # Downward arrow (red)
                     plt.annotate('↓', (timestamp, floor), 
                                fontsize=12, color='red', fontweight='bold',
                                ha='center', va='center',
@@ -171,20 +171,20 @@ class Statistics:
                 plotted_positions.add(position_key)
     
     def _plot_car_calls_circles(self, elevator_name):
-        """指定されたエレベータのcar_calls丸印を描画する（重複回避版）"""
+        """Draw car_calls circles for the specified elevator"""
         if elevator_name not in self.car_calls_history:
             return
         
-        # 既に描画した(timestamp, floor)の組み合わせを追跡
+        # Track already drawn (timestamp, floor) combinations
         plotted_positions = set()
         
         for car_call_data in self.car_calls_history[elevator_name]:
             timestamp = car_call_data['timestamp']
             car_calls = car_call_data['car_calls']
             
-            # 丸印（青色）でcar_callsを表示（重複回避）
+            # Display car_calls with circles (blue)
             for floor in car_calls:
-                position_key = (round(timestamp, 2), floor)  # 時刻を丸めて重複判定
+                position_key = (round(timestamp, 2), floor)  # Round time for duplicate detection
                 
                 if position_key not in plotted_positions:
                     plt.scatter(timestamp, floor, 
@@ -193,6 +193,6 @@ class Statistics:
                               label='Car Calls' if not hasattr(self, '_car_calls_legend_added') else "")
                     plotted_positions.add(position_key)
         
-        # 凡例の重複を防ぐ
+        # Prevent duplicate legends
         if not hasattr(self, '_car_calls_legend_added'):
             self._car_calls_legend_added = True

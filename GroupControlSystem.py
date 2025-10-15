@@ -5,32 +5,32 @@ from Elevator import Elevator
 
 class GroupControlSystem(Entity):
     """
-    【v19.0】各エレベータの状況をリアルタイムで監視するようになった司令塔
+    Group Control System that monitors each elevator's status in real-time
     """
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker):
         super().__init__(env, name)
         self.broker = broker
         self.elevators = {}
-        # 【師匠改造】各エレベータの最新状況を格納する作戦ボード
+        # Operation board to store the latest status of each elevator
         self.elevator_statuses = {}
 
     def register_elevator(self, elevator: Elevator):
         """
-        GCSの管理下にエレベータを登録し、その状況監視を開始する
+        Register an elevator under GCS management and start monitoring its status
         """
         self.elevators[elevator.name] = elevator
         print(f"{self.env.now:.2f} [GCS] Elevator '{elevator.name}' registered.")
-        # このエレベータ専用の状況報告リスナーを起動する
+        # Start a dedicated status report listener for this elevator
         self.env.process(self._status_listener(elevator.name))
 
     def _status_listener(self, elevator_name: str):
-        """【師匠新設】特定のエレベータからの状況報告を待ち受けるプロセス"""
+        """Process that listens for status reports from a specific elevator"""
         status_topic = f"elevator/{elevator_name}/status"
         while True:
             status_message = yield self.broker.get(status_topic)
             self.elevator_statuses[elevator_name] = status_message
             
-            # GCSが状況を把握したことをログで確認
+            # Log to confirm that GCS has understood the situation
             adv_pos = status_message.get('advanced_position')
             state = status_message.get('state')
             phys_pos = status_message.get('physical_floor')
@@ -39,7 +39,7 @@ class GroupControlSystem(Entity):
 
     def run(self):
         """
-        GCSのメインプロセス。ホール呼び出しを待ち受ける
+        Main process of GCS. Listens for hall calls
         """
         print(f"{self.env.now:.2f} [GCS] GCS is operational. Waiting for hall calls...")
         
@@ -48,8 +48,8 @@ class GroupControlSystem(Entity):
             message = yield self.broker.get(hall_call_topic)
             print(f"{self.env.now:.2f} [GCS] Received hall call: {message}")
 
-            # TODO: self.elevator_statuses を見て、最適なエレベータを選ぶ
-            # 今は単純に最初のエレベータに割り当てる
+            # TODO: Look at self.elevator_statuses to select the optimal elevator
+            # For now, simply assign to the first elevator
             if self.elevators:
                 first_elevator_name = list(self.elevators.keys())[0]
                 

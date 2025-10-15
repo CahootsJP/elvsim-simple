@@ -2,23 +2,23 @@ import simpy
 
 class MessageBroker:
     """
-    シミュレーション内の各コンポーネント間の通信を仲介する。
-    トピックベースの出版購読モデルを実装する。
+    Mediates communication between components within the simulation.
+    Implements a topic-based publish-subscribe model.
     """
     def __init__(self, env: simpy.Environment):
         """
-        メッセージブローカーを初期化する
+        Initialize the message broker
 
         Args:
-            env (simpy.Environment): SimPy環境
+            env (simpy.Environment): SimPy environment
         """
         self.env = env
-        self.topics = {}  # トピックごとのStoreを保持する辞書
+        self.topics = {}  # Dictionary to hold Store for each topic
         self.broadcast_pipe = simpy.Store(self.env)
 
     def get_pipe(self, topic: str) -> simpy.Store:
         """
-        指定されたトピック用の通信パイプ（Store）を取得または作成する
+        Get or create a communication pipe (Store) for the specified topic
         """
         if topic not in self.topics:
             self.topics[topic] = simpy.Store(self.env)
@@ -26,7 +26,7 @@ class MessageBroker:
 
     def put(self, topic: str, message):
         """
-        指定されたトピックにメッセージを発行（put）する
+        Publish (put) a message to the specified topic
         """
         print(f"{self.env.now:.2f} [Broker] Publish on '{topic}': {message}")
         pipe = self.get_pipe(topic)
@@ -35,14 +35,14 @@ class MessageBroker:
 
     def get(self, topic: str):
         """
-        指定されたトピックからメッセージを受信（get）するのを待つ
+        Wait to receive (get) a message from the specified topic
         """
         pipe = self.get_pipe(topic)
         return pipe.get()
 
     def get_broadcast_pipe(self) -> simpy.Store:
         """
-        Statisticsクラスがこのパイプにアクセスするためのメソッド
-        全局ブロードキャスト用のパイプを返す
+        Method for Statistics class to access this pipe
+        Returns the global broadcast pipe
         """
         return self.broadcast_pipe

@@ -1,83 +1,83 @@
 # File: Entity.py
 import simpy
 from abc import ABC, abstractmethod
-import itertools # エンティティIDカウンター用のヘルパー
-from typing import Optional # 型ヒントのために Optional を追加
+import itertools  # Helper for entity ID counter
+from typing import Optional  # Add Optional for type hints
 
 class Entity(ABC):
     """
-    SimPy シミュレーションにおけるエンティティの抽象基底クラス。
+    Abstract base class for entities in SimPy simulation.
 
-    このクラスは、SimPy プロセスとして動作するエンティティに共通する
-    基本的な属性と振る舞いを定義し、SimPy 環境におけるエンティティの
-    ライフサイクル管理の基盤を提供します。
+    This class defines common attributes and behaviors for entities that operate
+    as SimPy processes, providing a foundation for entity lifecycle management
+    in the SimPy environment.
     """
-    # クラス全体で共有するエンティティIDのカウンター
+    # Entity ID counter shared across all class instances
     _entity_id_counter = itertools.count()
 
     def __init__(self, env: simpy.Environment, name: str = None):
         """
-        エンティティの初期化。
+        Initialize the entity.
 
         Args:
-            env: このエンティティが所属する SimPy シミュレーション環境。
-            name: エンティティの名前。省略可能。指定しない場合はクラス名とIDから自動生成されます。
+            env: The SimPy simulation environment this entity belongs to.
+            name: Entity name. Optional. If not specified, auto-generated from class name and ID.
         """
         self.env = env
-        # 一意のエンティティIDを生成
+        # Generate unique entity ID
         self.entity_id: int = next(self._entity_id_counter)
-        # エンティティの名前を設定
+        # Set entity name
         self.name: str = name if name is not None else f"{self.__class__.__name__}_{self.entity_id}"
 
-        # エンティティの現在の状態を保持する変数
-        # 具体的な状態の値は具象クラスで定義・使用されます (例: 'idle', 'moving', 'waiting' など)。
-        self.state: str = "initial_state" # 初期状態としてデフォルト値を設定（具象クラスで上書き推奨）
+        # Variable to hold the current state of the entity
+        # Specific state values are defined and used in concrete classes (e.g., 'idle', 'moving', 'waiting', etc.)
+        self.state: str = "initial_state"  # Set default value as initial state (recommended to override in concrete classes)
 
-        # このエンティティに対応する SimPy プロセス オブジェクト
-        # コンストラクタ内で run() メソッドを実行するプロセスとして開始します。
-        # run() メソッドはサブクラスで実装されます。
+        # SimPy process object corresponding to this entity
+        # Start as a process that executes the run() method within the constructor
+        # The run() method is implemented in subclasses
         self._process = self.env.process(self.run())
 
-        # 初期化完了のログ
-        print(f'{self.env.now:.2f}: Entity "{self.name}" ({self.__class__.__name__}, ID:{self.entity_id}) が作成されました。')
-        # 初期状態への遷移ログ（初期状態が 'initial_state' から変わる場合を想定）
-        # もし初期状態が具象クラスで設定される場合は、具象クラスの __init__ で
-        # set_state を呼び出す方が適切かもしれません。ここでは作成直後の状態としてログ。
-        # self._log_state_change(self.state) # 初期状態のログが必要であれば有効化
+        # Initialization completion log
+        print(f'{self.env.now:.2f}: Entity "{self.name}" ({self.__class__.__name__}, ID:{self.entity_id}) created.')
+        # Initial state transition log (assuming initial state changes from 'initial_state')
+        # If initial state is set in concrete class, it might be more appropriate to call
+        # set_state in the concrete class's __init__. Here we log as the state immediately after creation.
+        # self._log_state_change(self.state)  # Enable if initial state logging is needed
 
 
     @abstractmethod
     def run(self):
         """
-        エンティティの SimPy プロセス本体となるジェネレーターメソッド（抽象メソッド）。
+        Generator method that serves as the main SimPy process body for the entity (abstract method).
 
-        このメソッドは SimPy 環境によって実行され、エンティティのシミュレーション上の
-        主要な振る舞いを定義します。このメソッド内で yield を使用してイベントの完了を待ち、
-        シミュレーション時間を進めます。
-        サブクラスで必ず実装する必要があります。通常は無限ループで状態に応じた
-        処理を呼び出す構造になります。
+        This method is executed by the SimPy environment and defines the main behavior
+        of the entity in the simulation. Within this method, use yield to wait for event
+        completion and advance simulation time.
+        Must be implemented in subclasses. Typically structured as an infinite loop
+        that calls processing based on state.
 
-        例:
+        Example:
             while True:
-                if self.state == '状態A':
+                if self.state == 'StateA':
                     yield from self._state_A()
-                elif self.state == '状態B':
+                elif self.state == 'StateB':
                     yield from self._state_B()
                 else:
-                    # 未定義の状態の場合の処理 (エラーログなど)
-                    print(f'{self.env.now:.2f}: Entity "{self.name}" ({self.__class__.__name__}) 不明な状態: {self.state}')
-                    yield self.env.timeout(1) # 無限ループ防止のため待機
+                    # Handle undefined state (error logging, etc.)
+                    print(f'{self.env.now:.2f}: Entity "{self.name}" ({self.__class__.__name__}) unknown state: {self.state}')
+                    yield self.env.timeout(1)  # Wait to prevent infinite loop
         """
-        pass # 抽象メソッドなので具体的な実装はなし
+        pass  # No concrete implementation as this is an abstract method
 
-    # --- 共通で役立つメソッド ---
+    # --- Common utility methods ---
 
     def set_state(self, new_state: str):
         """
-        エンティティの状態を遷移させます。
+        Transition the entity's state.
 
         Args:
-            new_state: 遷移先の状態を表す文字列。
+            new_state: String representing the target state for transition.
         """
         if self.state != new_state:
             old_state = self.state
@@ -86,40 +86,41 @@ class Entity(ABC):
 
     def get_state(self) -> str:
         """
-        現在のエンティティの状態を取得します。
+        Get the current state of the entity.
 
         Returns:
-            現在の状態を表す文字列。
+            String representing the current state.
         """
         return self.state
 
     def _log_state_change(self, old_state: str, new_state: str):
         """
-        状態遷移をログに出力する内部ヘルパーメソッド。
-        ロギングの詳細度や形式は必要に応じてカスタマイズできます。
+        Internal helper method to log state transitions.
+        Logging verbosity and format can be customized as needed.
         """
-        print(f'{self.env.now:.2f}: Entity "{self.name}" ({self.__class__.__name__}, ID:{self.entity_id}) 状態遷移: {old_state} -> {new_state}')
+        print(f'{self.env.now:.2f}: Entity "{self.name}" ({self.__class__.__name__}, ID:{self.entity_id}) state transition: {old_state} -> {new_state}')
 
-    # SimPy プロセス オブジェクトへのアクセス
+    # Access to SimPy process object
     @property
     def process(self) -> simpy.Process:
         """
-        このエンティティの SimPy プロセス オブジェクトを取得します。
-        Interrupt をかける際などに使用できます。
+        Get the SimPy process object for this entity.
+        Can be used for operations like interrupting the process.
         """
         return self._process
 
-    # 必要に応じて、状態ごとの抽象メソッドなども追加
+    # Add state-specific abstract methods as needed
     # @abstractmethod
     # def _state_some_state(self):
-    #     """ 'some_state' 状態での処理（サブクラスで実装）"""
+    #     """ Processing for 'some_state' state (implement in subclass)"""
     #     pass
 
-    # ESM.java の delays() に相当する概念は、SimPy では各状態メソッド内で
-    # yield self.env.timeout(時間) の形で直接記述されることが多いです。
-    # 状態に応じた遅延時間を計算する共通メソッドが必要であれば、それもここに追加できます。
-    # 例:
+    # The concept equivalent to delays() in ESM.java is often written directly
+    # in each state method in SimPy as yield self.env.timeout(time).
+    # If a common method for calculating delay times based on state is needed,
+    # it can also be added here.
+    # Example:
     # def get_delay_for_current_state(self) -> float:
-    #    """現在の状態に対応する標準的な遅延時間を返します。"""
-    #    # 具象クラスで状態に応じた遅延時間を返すロジックを実装
-    #    return 0.0 # デフォルト値
+    #    """Return standard delay time corresponding to current state."""
+    #    # Implement logic to return delay time based on state in concrete class
+    #    return 0.0  # Default value
