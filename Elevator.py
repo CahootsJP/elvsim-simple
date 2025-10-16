@@ -22,6 +22,13 @@ class Elevator(Entity):
         self.hall_buttons = hall_buttons  # Reference to hall buttons
 
         self.current_floor = 1
+        
+        # DoorオブジェクトにMessageBrokerとエレベータ名を設定
+        if hasattr(self.door, 'set_broker_and_elevator'):
+            self.door.set_broker_and_elevator(self.broker, self.name)
+        # Doorオブジェクトに現在の階数を設定
+        if hasattr(self.door, 'set_current_floor'):
+            self.door.set_current_floor(self.current_floor)
         self.state = "initial_state" 
         self.advanced_position = 1
         self.current_destination = None  # Current final destination
@@ -250,6 +257,10 @@ class Elevator(Entity):
                 current_floor_in_trip = next_floor
                 self.current_floor = current_floor_in_trip
                 
+                # Doorオブジェクトの現在階数も更新
+                if hasattr(self.door, 'set_current_floor'):
+                    self.door.set_current_floor(self.current_floor)
+                
                 # Step 5: Update predicted position (advanced_position)
                 # Same logic as timeline method: same value as currently reached floor
                 self.advanced_position = current_floor_in_trip
@@ -330,6 +341,10 @@ class Elevator(Entity):
                 old_floor = self.current_floor
                 self.current_floor = event['advanced_position']  # Fixed: changed from physical_floor to advanced_position
                 self.advanced_position = event['advanced_position']
+                
+                # Doorオブジェクトの現在階数も更新
+                if hasattr(self.door, 'set_current_floor'):
+                    self.door.set_current_floor(self.current_floor)
                 
                 # Reverse movement check
                 if self.state == "UP" and self.current_floor < old_floor:

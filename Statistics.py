@@ -15,6 +15,7 @@ class Statistics:
         self.car_calls_history = {}   # Car calls history by elevator
         self.hall_call_off_history = {}  # Hall call OFF events history
         self.car_call_off_history = {}   # Car call OFF events history
+        self.door_events_history = {}  # Door events history by elevator
 
     def start_listening(self):
         """
@@ -143,6 +144,26 @@ class Statistics:
                         'destination': destination,
                         'action': 'OFF'
                     })
+            
+            # Record door events (for visualization)
+            door_events_match = re.search(r'elevator/(.*?)/door_events', topic)
+            if door_events_match:
+                elevator_name = door_events_match.group(1)
+                if elevator_name not in self.door_events_history:
+                    self.door_events_history[elevator_name] = []
+                
+                timestamp = message.get('timestamp')
+                event_type = message.get('event_type')
+                floor = message.get('floor')
+                door_id = message.get('door_id')
+                
+                if timestamp is not None and event_type is not None:
+                    self.door_events_history[elevator_name].append({
+                        'timestamp': timestamp,
+                        'event_type': event_type,
+                        'floor': floor,
+                        'door_id': door_id
+                    })
 
     def plot_trajectory_diagram(self):
         """Draw trajectory diagram after simulation ends"""
@@ -168,6 +189,9 @@ class Statistics:
             
             # Draw car_calls OFF events
             self._plot_car_calls_off_events(name)
+            
+            # Draw door events
+            self._plot_door_events(name)
 
         plt.title("Elevator Trajectory Diagram (Travel Diagram, Advanced Position)")
         plt.xlabel("Time (s)")
@@ -303,3 +327,60 @@ class Statistics:
         # Prevent duplicate legends
         if not hasattr(self, '_car_calls_off_legend_added'):
             self._car_calls_off_legend_added = True
+
+    def _plot_door_events(self, elevator_name):
+        """Draw door events with different markers for each event type"""
+        if elevator_name not in self.door_events_history:
+            return
+        
+        # Track already drawn (timestamp, floor, event_type) combinations
+        plotted_positions = set()
+        
+        # ドアイベントの垂直オフセット（階数の上に少しずらす）
+        door_event_offset = 0.15
+        
+        for door_event in self.door_events_history[elevator_name]:
+            timestamp = door_event['timestamp']
+            floor = door_event['floor']
+            event_type = door_event['event_type']
+            
+            position_key = (round(timestamp, 2), floor, event_type)  # Round time for duplicate detection
+            
+            if position_key not in plotted_positions:
+                if event_type == "DOOR_OPENING_START":
+                    # 戸開動作開始 (緑の三角形) - 停止位置より少し上
+                    plt.scatter(timestamp, floor + door_event_offset, 
+                              s=100, facecolors='none', marker='<', alpha=0.8, 
+                              edgecolors='green', linewidth=1.5,
+                              label='Door Opening Start' if not hasattr(self, '_door_opening_start_legend_added') else "")
+                    if not hasattr(self, '_door_opening_start_legend_added'):
+                        self._door_opening_start_legend_added = True
+                        
+                elif event_type == "DOOR_OPENING_COMPLETE":
+                    # 戸開完了 (緑の四角) - 停止位置より少し上
+                    plt.scatter(timestamp, floor + door_event_offset, 
+                              s=100, facecolors='none', marker='>', alpha=0.8, 
+                              edgecolors='green', linewidth=1.5,
+                              label='Door Opening Complete' if not hasattr(self, '_door_opening_complete_legend_added') else "")
+                    if not hasattr(self, '_door_opening_complete_legend_added'):
+                        self._door_opening_complete_legend_added = True
+                        
+                elif event_type == "DOOR_CLOSING_START":
+                    # 戸閉動作開始 (赤の三角形) - 停止位置より少し上
+                    plt.scatter(timestamp, floor + door_event_offset, 
+                              s=100, facecolors='none', marker='>', alpha=0.8, 
+                              edgecolors='red', linewidth=1.5,
+                              label='Door Closing Start' if not hasattr(self, '_door_closing_start_legend_added') else "")
+                    if not hasattr(self, '_door_closing_start_legend_added'):
+                        self._door_closing_start_legend_added = True
+                        
+                elif event_type == "DOOR_CLOSING_COMPLETE":
+                    # 戸閉完了 (赤の四角) - 停止位置より少し上
+                    plt.scatter(timestamp, floor + door_event_offset, 
+                              s=100, facecolors='none', marker='<', alpha=0.8, 
+                              edgecolors='red', linewidth=1.5,
+                              label='Door Closing Complete' if not hasattr(self, '_door_closing_complete_legend_added') else "")
+                    if not hasattr(self, '_door_closing_complete_legend_added'):
+                        self._door_closing_complete_legend_added = True
+                
+                plotted_positions.add(position_key)
