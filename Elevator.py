@@ -393,6 +393,16 @@ class Elevator(Entity):
         if self.current_floor in self.car_calls:
             self.car_calls.discard(self.current_floor)
             car_calls_changed = True
+            
+            # Send car call OFF message for visualization
+            car_call_off_message = {
+                "timestamp": self.env.now,
+                "elevator_name": self.name,
+                "destination": self.current_floor,
+                "action": "OFF"
+            }
+            car_call_off_topic = f"elevator/{self.name}/car_call_off"
+            self.broker.put(car_call_off_topic, car_call_off_message)
         
         hall_calls_changed = False
         serviced_directions = []  # Record directions that should be turned off

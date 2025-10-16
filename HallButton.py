@@ -56,3 +56,13 @@ class HallButton:
         if self.is_pressed:
             self.is_pressed = False
             print(f"{self.env.now:.2f} [HallButton] Call served at floor {self.floor} ({self.direction}). Light OFF.")
+            
+            # Send hall call OFF message for visualization
+            hall_call_off_message = {
+                "timestamp": self.env.now,
+                "floor": self.floor,
+                "direction": self.direction,
+                "action": "OFF"
+            }
+            hall_call_off_topic = f"hall_button/floor_{self.floor}/call_off"
+            self.broker.put(hall_call_off_topic, hall_call_off_message)
