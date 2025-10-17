@@ -336,7 +336,7 @@ class Statistics:
         # Track already drawn (timestamp, floor, event_type) combinations
         plotted_positions = set()
         
-        # ドアイベントの垂直オフセット（階数の上に少しずらす）
+        # Vertical offset for door events (shift slightly above floor)
         door_event_offset = 0.15
         
         for door_event in self.door_events_history[elevator_name]:
@@ -348,7 +348,7 @@ class Statistics:
             
             if position_key not in plotted_positions:
                 if event_type == "DOOR_OPENING_START":
-                    # 戸開動作開始 (緑の三角形) - 停止位置より少し上
+                    # Door opening start (green triangle) - slightly above stop position
                     plt.scatter(timestamp, floor + door_event_offset, 
                               s=100, facecolors='none', marker='<', alpha=0.8, 
                               edgecolors='green', linewidth=1.5,
@@ -357,7 +357,7 @@ class Statistics:
                         self._door_opening_start_legend_added = True
                         
                 elif event_type == "DOOR_OPENING_COMPLETE":
-                    # 戸開完了 (緑の四角) - 停止位置より少し上
+                    # Door opening complete (green square) - slightly above stop position
                     plt.scatter(timestamp, floor + door_event_offset, 
                               s=100, facecolors='none', marker='>', alpha=0.8, 
                               edgecolors='green', linewidth=1.5,
@@ -366,7 +366,7 @@ class Statistics:
                         self._door_opening_complete_legend_added = True
                         
                 elif event_type == "DOOR_CLOSING_START":
-                    # 戸閉動作開始 (赤の三角形) - 停止位置より少し上
+                    # Door closing start (red triangle) - slightly above stop position
                     plt.scatter(timestamp, floor + door_event_offset, 
                               s=100, facecolors='none', marker='>', alpha=0.8, 
                               edgecolors='red', linewidth=1.5,
@@ -375,7 +375,7 @@ class Statistics:
                         self._door_closing_start_legend_added = True
                         
                 elif event_type == "DOOR_CLOSING_COMPLETE":
-                    # 戸閉完了 (赤の四角) - 停止位置より少し上
+                    # Door closing complete (red square) - slightly above stop position
                     plt.scatter(timestamp, floor + door_event_offset, 
                               s=100, facecolors='none', marker='<', alpha=0.8, 
                               edgecolors='red', linewidth=1.5,

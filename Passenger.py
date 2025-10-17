@@ -23,40 +23,61 @@ class Passenger(Entity):
         self.board_permission_event = simpy.Store(env, capacity=1)
         self.exit_permission_event = simpy.Store(env, capacity=1)
         
+        # For boarding failure notification
+        self.boarding_failed_event = simpy.Store(env, capacity=1)
+        
         print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor} (Move time: {self.move_speed:.1f}s).")
 
     def run(self):
-        """Passenger's autonomous lifecycle"""
-        # 1. Press hall button (with duplicate check functionality)
+        """Passenger's autonomous lifecycle with retry logic"""
         yield self.env.timeout(1)
         direction = "UP" if self.destination_floor > self.arrival_floor else "DOWN"
         button = self.hall_buttons[self.arrival_floor][direction]
         
-        # Check button's lit state before pressing
-        if button.is_lit():
-            print(f"{self.env.now:.2f} [{self.name}] Hall button at floor {self.arrival_floor} ({direction}) already lit. No need to press.")
-        else:
-            button.press(passenger_name=self.name)
+        boarded_successfully = False
+        
+        # Loop until boarding succeeds
+        while not boarded_successfully:
+            # 1. Press hall button (with duplicate check functionality)
+            if button.is_lit():
+                print(f"{self.env.now:.2f} [{self.name}] Hall button at floor {self.arrival_floor} ({direction}) already lit. No need to press.")
+            else:
+                button.press(passenger_name=self.name)
 
-        # 2. Join the queue in the correct direction
-        current_queue = self.floor_queues[self.arrival_floor][direction]
-        print(f"{self.env.now:.2f} [{self.name}] Now waiting in '{direction}' queue at floor {self.arrival_floor}.")
-        yield current_queue.put(self)
+            # 2. Join the queue in the correct direction
+            current_queue = self.floor_queues[self.arrival_floor][direction]
+            print(f"{self.env.now:.2f} [{self.name}] Now waiting in '{direction}' queue at floor {self.arrival_floor}.")
+            yield current_queue.put(self)
 
-        # 3. Wait for "please board" permission from Door
-        completion_event = yield self.board_permission_event.get()
+            # 3. Wait for either "please board" or "boarding failed" notification
+            # Use AnyOf to wait for either event
+            board_get = self.board_permission_event.get()
+            fail_get = self.boarding_failed_event.get()
+            results = yield board_get | fail_get
+            
+            # Check which event fired
+            if board_get in results:
+                # Boarding permission received
+                completion_event = results[board_get]
+                print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
+                yield self.env.timeout(self.move_speed)
 
-        # 4. Board the elevator at own pace
-        print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
-        yield self.env.timeout(self.move_speed)
+                # 5. Board the elevator and press destination button
+                print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
+                car_call_topic = "elevator/Elevator_1/car_call"
+                self.broker.put(car_call_topic, {'destination': self.destination_floor, 'passenger_name': self.name})
 
-        # 5. Board the elevator and press destination button
-        print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
-        car_call_topic = "elevator/Elevator_1/car_call"
-        self.broker.put(car_call_topic, {'destination': self.destination_floor, 'passenger_name': self.name})
-
-        # 6. Report to Door that "boarding is complete"
-        completion_event.succeed()
+                # 6. Report to Door that "boarding is complete"
+                completion_event.succeed()
+                
+                boarded_successfully = True
+                
+            else:
+                # Boarding failure notification received
+                print(f"{self.env.now:.2f} [{self.name}] Failed to board (capacity full). Waiting for button OFF to retry...")
+                button_off_event = button.wait_for_button_off()
+                yield button_off_event
+                print(f"{self.env.now:.2f} [{self.name}] Button OFF detected. Will retry boarding.")
 
         # 7. Wait for "please exit" permission from Door at destination
         completion_event = yield self.exit_permission_event.get()

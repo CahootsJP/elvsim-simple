@@ -11,7 +11,7 @@ class Door(Entity):
         self.close_time = close_time
         self.broker = broker
         self.elevator_name: str = elevator_name
-        self._current_floor: int = 1  # デフォルト階数
+        self._current_floor: int = 1  # Default floor
         print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
 
     def run(self):
@@ -21,11 +21,11 @@ class Door(Entity):
         yield self.env.timeout(0)  # Idle process
 
     def _broadcast_door_event(self, event_type: str, current_floor: int = None):
-        """ドアイベントをメッセージブローカーに送信します。"""
+        """Broadcast door event to message broker."""
         if not self.broker or not self.elevator_name:
             return
         
-        # current_floorが指定されていない場合は、内部の_current_floorを使用
+        # Use internal _current_floor if current_floor is not specified
         floor = current_floor if current_floor is not None else self._current_floor
         
         door_event_message = {
@@ -39,33 +39,41 @@ class Door(Entity):
         self.env.process(self._send_message(door_event_topic, door_event_message))
 
     def _send_message(self, topic: str, message: dict):
-        """メッセージをブローカーに送信するプロセス。"""
+        """Process to send message to broker."""
         if self.broker:
             yield self.broker.put(topic, message)
 
     def set_broker_and_elevator(self, broker, elevator_name: str):
-        """後からMessageBrokerとエレベータ名を設定します。"""
+        """Set MessageBroker and elevator name after initialization."""
         self.broker = broker
         self.elevator_name = elevator_name
 
     def set_current_floor(self, floor: int):
-        """現在の階数を設定します。"""
+        """Set current floor number."""
         self._current_floor = floor
 
-    def service_floor_process(self, elevator_name, passengers_to_exit, boarding_queues):
+    def handle_boarding_and_alighting_process(self, elevator_name, passengers_to_exit, boarding_queues, current_capacity=0, max_capacity=None):
         """
-        Main boarding/alighting service process called directly by the elevator operator
+        Main boarding and alighting process called directly by the elevator operator
+        
+        Args:
+            elevator_name: Name of the elevator
+            passengers_to_exit: List of passengers exiting
+            boarding_queues: Queues of passengers waiting to board
+            current_capacity: Current number of passengers in elevator
+            max_capacity: Maximum capacity of elevator (None = unlimited)
         """
         boarded_passengers = []
+        failed_to_board_passengers = []  # List of passengers who failed to board
 
         # 1. Open the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opening...")
-        # 戸開動作開始イベントを送信
+        # Send door opening start event
         self._broadcast_door_event("DOOR_OPENING_START")
         
         yield self.env.timeout(self.open_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
-        # 戸開完了イベントを送信
+        # Send door opening complete event
         self._broadcast_door_event("DOOR_OPENING_COMPLETE")
         
         # 2. Let passengers exit one by one at their own pace
@@ -74,9 +82,24 @@ class Door(Entity):
             yield p.exit_permission_event.put(exit_permission_event)
             yield exit_permission_event
 
-        # 3. Let passengers board one by one at their own pace
+        # 3. Let passengers board one by one at their own pace (with capacity check)
+        # Calculate current capacity after passengers exit
+        actual_current_capacity = current_capacity - len(passengers_to_exit)
+        
         for queue in boarding_queues:
             while len(queue.items) > 0:
+                # Check capacity (including already boarded passengers)
+                if max_capacity is not None:
+                    available_space = max_capacity - (actual_current_capacity + len(boarded_passengers))
+                    if available_space <= 0:
+                        # Capacity reached - record remaining passengers
+                        print(f"{self.env.now:.2f} [{elevator_name}] Capacity reached ({max_capacity} passengers). Cannot board more passengers.")
+                        # Extract all remaining passengers from queue and record them
+                        while len(queue.items) > 0:
+                            failed_passenger = yield queue.get()
+                            failed_to_board_passengers.append(failed_passenger)
+                        break
+                
                 passenger = yield queue.get()
                 board_permission_event = self.env.event()
                 yield passenger.board_permission_event.put(board_permission_event)
@@ -85,14 +108,17 @@ class Door(Entity):
 
         # 4. Close the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")
-        # 戸閉動作開始イベントを送信
+        # Send door closing start event
         self._broadcast_door_event("DOOR_CLOSING_START")
         
         yield self.env.timeout(self.close_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
-        # 戸閉完了イベントを送信
+        # Send door closing complete event
         self._broadcast_door_event("DOOR_CLOSING_COMPLETE")
 
         # 5. Return completion report directly to the elevator operator
-        return {"boarded": boarded_passengers}
+        return {
+            "boarded": boarded_passengers,
+            "failed_to_board": failed_to_board_passengers
+        }
 

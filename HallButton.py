@@ -18,10 +18,17 @@ class HallButton:
         self.direction = direction
         self.broker = broker
         self.is_pressed = False
+        self.button_off_events = []  # List of events waiting for button OFF
 
     def is_lit(self):
         """Check if the button is lit"""
         return self.is_pressed
+    
+    def wait_for_button_off(self):
+        """Create and return an event to wait for button OFF"""
+        event = self.env.event()
+        self.button_off_events.append(event)
+        return event
     
     def press(self, passenger_name=None):
         """Process when button is pressed"""
@@ -66,3 +73,9 @@ class HallButton:
             }
             hall_call_off_topic = f"hall_button/floor_{self.floor}/call_off"
             self.broker.put(hall_call_off_topic, hall_call_off_message)
+            
+            # Fire all events that were waiting for button OFF
+            for event in self.button_off_events:
+                if not event.triggered:
+                    event.succeed()
+            self.button_off_events = []  # Clear list

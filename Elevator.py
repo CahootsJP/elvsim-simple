@@ -11,7 +11,7 @@ class Elevator(Entity):
     Elevator that can handle interruptions during movement
     """
 
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10):
         super().__init__(env, name)
         self.broker = broker
         self.num_floors = num_floors
@@ -20,13 +20,14 @@ class Elevator(Entity):
         self.flight_profiles = flight_profiles
         self.physics_engine = physics_engine  # Access to PhysicsEngine
         self.hall_buttons = hall_buttons  # Reference to hall buttons
+        self.max_capacity = max_capacity  # Maximum number of passengers
 
         self.current_floor = 1
         
-        # DoorオブジェクトにMessageBrokerとエレベータ名を設定
+        # Set MessageBroker and elevator name to Door object
         if hasattr(self.door, 'set_broker_and_elevator'):
             self.door.set_broker_and_elevator(self.broker, self.name)
-        # Doorオブジェクトに現在の階数を設定
+        # Set current floor to Door object
         if hasattr(self.door, 'set_current_floor'):
             self.door.set_current_floor(self.current_floor)
         self.state = "initial_state" 
@@ -98,7 +99,7 @@ class Elevator(Entity):
 
     def _set_state(self, new_state):
         if self.state != new_state:
-            print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) 状態遷移: {self.state} -> {new_state}")
+            print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) State transition: {self.state} -> {new_state}")
             self.state = new_state
             self.env.process(self._report_status())
 
@@ -174,7 +175,7 @@ class Elevator(Entity):
 
         while True:
             if self._should_stop_at_current_floor():
-                yield self.env.process(self._service_floor())
+                yield self.env.process(self._handle_boarding_and_alighting())
             
             self._decide_next_direction()
             
@@ -257,7 +258,7 @@ class Elevator(Entity):
                 current_floor_in_trip = next_floor
                 self.current_floor = current_floor_in_trip
                 
-                # Doorオブジェクトの現在階数も更新
+                # Update Door object's current floor as well
                 if hasattr(self.door, 'set_current_floor'):
                     self.door.set_current_floor(self.current_floor)
                 
@@ -342,7 +343,7 @@ class Elevator(Entity):
                 self.current_floor = event['advanced_position']  # Fixed: changed from physical_floor to advanced_position
                 self.advanced_position = event['advanced_position']
                 
-                # Doorオブジェクトの現在階数も更新
+                # Update Door object's current floor as well
                 if hasattr(self.door, 'set_current_floor'):
                     self.door.set_current_floor(self.current_floor)
                 
@@ -380,8 +381,8 @@ class Elevator(Entity):
         
         return None
 
-    def _service_floor(self):
-        print(f"{self.env.now:.2f} [{self.name}] Servicing floor {self.current_floor}.")
+    def _handle_boarding_and_alighting(self):
+        print(f"{self.env.now:.2f} [{self.name}] Handling boarding and alighting at floor {self.current_floor}.")
         passengers_to_exit = sorted([p for p in self.passengers_onboard if p.destination_floor == self.current_floor], key=lambda p: p.entity_id, reverse=True)
 
         boarding_queues = []
@@ -394,8 +395,12 @@ class Elevator(Entity):
         if self.state == "DOWN" and self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
             boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
 
-        service_process = self.env.process(self.door.service_floor_process(self.name, passengers_to_exit, boarding_queues))
-        report = yield service_process
+        # Call door boarding and alighting process (pass capacity information)
+        current_capacity = len(self.passengers_onboard)
+        boarding_process = self.env.process(self.door.handle_boarding_and_alighting_process(
+            self.name, passengers_to_exit, boarding_queues, 
+            current_capacity=current_capacity, max_capacity=self.max_capacity))
+        report = yield boarding_process
         
         for p in passengers_to_exit:
             self.passengers_onboard.remove(p)
@@ -403,6 +408,15 @@ class Elevator(Entity):
         boarded_passengers = report.get("boarded", [])
         for p in boarded_passengers:
             self.passengers_onboard.append(p)
+        
+        # Send failure notification to passengers who couldn't board
+        failed_to_board_passengers = report.get("failed_to_board", [])
+        for p in failed_to_board_passengers:
+            print(f"{self.env.now:.2f} [{self.name}] Notifying {p.name} that boarding failed.")
+            # Notify passenger of boarding failure
+            failed_notification = self.env.event()
+            failed_notification.succeed()
+            yield p.boarding_failed_event.put(failed_notification)
 
         car_calls_changed = False
         if self.current_floor in self.car_calls:
@@ -445,7 +459,7 @@ class Elevator(Entity):
         if hall_calls_changed:
             self.env.process(self._broadcast_hall_calls_status())
         
-        print(f"{self.env.now:.2f} [{self.name}] Service at floor {self.current_floor} complete.")
+        print(f"{self.env.now:.2f} [{self.name}] Boarding and alighting at floor {self.current_floor} complete.")
         self.env.process(self._report_status())
     
     def _should_stop_at_current_floor(self):
