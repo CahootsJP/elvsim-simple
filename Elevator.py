@@ -24,9 +24,9 @@ class Elevator(Entity):
 
         self.current_floor = 1
         
-        # Set MessageBroker and elevator name to Door object
+        # Set MessageBroker, elevator name, and reference to this elevator in Door object
         if hasattr(self.door, 'set_broker_and_elevator'):
-            self.door.set_broker_and_elevator(self.broker, self.name)
+            self.door.set_broker_and_elevator(self.broker, self.name, self)
         # Set current floor to Door object
         if hasattr(self.door, 'set_current_floor'):
             self.door.set_current_floor(self.current_floor)
@@ -102,6 +102,14 @@ class Elevator(Entity):
             print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) State transition: {self.state} -> {new_state}")
             self.state = new_state
             self.env.process(self._report_status())
+
+    def get_current_capacity(self):
+        """Get current number of passengers in elevator."""
+        return len(self.passengers_onboard)
+    
+    def get_max_capacity(self):
+        """Get maximum capacity of elevator."""
+        return self.max_capacity
 
     def _should_interrupt(self, new_floor, new_direction):
         """Determine if current movement should be interrupted"""
@@ -395,11 +403,10 @@ class Elevator(Entity):
         if self.state == "DOWN" and self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
             boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
 
-        # Call door boarding and alighting process (pass capacity information)
-        current_capacity = len(self.passengers_onboard)
+        # Call door boarding and alighting process
+        # Door will get capacity information from elevator via getters
         boarding_process = self.env.process(self.door.handle_boarding_and_alighting_process(
-            self.name, passengers_to_exit, boarding_queues, 
-            current_capacity=current_capacity, max_capacity=self.max_capacity))
+            passengers_to_exit, boarding_queues))
         report = yield boarding_process
         
         for p in passengers_to_exit:

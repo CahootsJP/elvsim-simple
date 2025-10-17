@@ -5,12 +5,13 @@ class Door(Entity):
     """
     Door that operates via direct communication from the elevator operator
     """
-    def __init__(self, env: simpy.Environment, name: str, open_time=1.5, close_time=1.5, broker=None, elevator_name: str = None):
+    def __init__(self, env: simpy.Environment, name: str, open_time=1.5, close_time=1.5, broker=None, elevator_name: str = None, elevator=None):
         super().__init__(env, name)
         self.open_time = open_time
         self.close_time = close_time
         self.broker = broker
         self.elevator_name: str = elevator_name
+        self.elevator = elevator  # Reference to parent elevator
         self._current_floor: int = 1  # Default floor
         print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
 
@@ -43,28 +44,35 @@ class Door(Entity):
         if self.broker:
             yield self.broker.put(topic, message)
 
-    def set_broker_and_elevator(self, broker, elevator_name: str):
-        """Set MessageBroker and elevator name after initialization."""
+    def set_broker_and_elevator(self, broker, elevator_name: str, elevator=None):
+        """Set MessageBroker, elevator name, and elevator reference after initialization."""
         self.broker = broker
         self.elevator_name = elevator_name
+        if elevator is not None:
+            self.elevator = elevator
 
     def set_current_floor(self, floor: int):
         """Set current floor number."""
         self._current_floor = floor
 
-    def handle_boarding_and_alighting_process(self, elevator_name, passengers_to_exit, boarding_queues, current_capacity=0, max_capacity=None):
+    def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues):
         """
         Main boarding and alighting process called directly by the elevator operator
         
         Args:
-            elevator_name: Name of the elevator
             passengers_to_exit: List of passengers exiting
             boarding_queues: Queues of passengers waiting to board
-            current_capacity: Current number of passengers in elevator
-            max_capacity: Maximum capacity of elevator (None = unlimited)
+        
+        Returns:
+            dict: Report containing boarded and failed_to_board passengers
         """
         boarded_passengers = []
         failed_to_board_passengers = []  # List of passengers who failed to board
+        
+        # Get capacity information from elevator
+        current_capacity = self.elevator.get_current_capacity() if self.elevator else 0
+        max_capacity = self.elevator.get_max_capacity() if self.elevator else None
+        elevator_name = self.elevator_name or "Unknown"
 
         # 1. Open the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opening...")
