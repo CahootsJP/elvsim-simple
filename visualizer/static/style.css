@@ -52,10 +52,28 @@ header {
     align-items: center;
 }
 
-header h1 {
+/* Header title with subtitle */
+.header-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.header-title h1 {
     font-size: 1.75rem;
     font-weight: 700;
     color: var(--primary-color);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.header-title .subtitle {
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin: 0;
+    letter-spacing: 0.5px;
+    font-style: italic;
 }
 
 .connection-status {
@@ -384,6 +402,32 @@ section h2 {
 .elevator-car.door-closed .door-right {
     left: 50%;
     transform: translateX(0px);
+}
+
+/* Car call indicators (◎ purple, small) */
+.car-call-indicator {
+    position: absolute;
+    left: 50%; /* Center horizontally in the shaft */
+    width: 16px;
+    height: 16px;
+    font-size: 12px; /* Small size */
+    color: #9b59b6; /* Purple color */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    pointer-events: auto; /* Allow hover */
+    z-index: 5; /* Below elevator car (z-index: 10) but above background */
+    margin-bottom: -8px; /* Offset half the height to center vertically */
+    margin-left: -8px; /* Offset half the width to center horizontally */
+    opacity: 0.9;
+    text-shadow: 0 0 2px rgba(155, 89, 182, 0.5); /* Subtle glow */
+    transition: all 0.2s ease; /* Smooth transition for hover */
+}
+
+.car-call-indicator:hover {
+    opacity: 1;
+    transform: scale(1.2); /* Slightly enlarge on hover */
 }
 
 .elevator-info {

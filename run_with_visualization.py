@@ -180,7 +180,8 @@ def run_simulation(server):
 def main():
     """Main entry point"""
     print("=" * 60)
-    print("🏢 Elevator Simulator - Real-time Visualization")
+    print("🏢 VTS Control Suite")
+    print("   Vertical Transport System Control Suite - Real-time Visualization")
     print("=" * 60)
     
     # Create WebSocket server

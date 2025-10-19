@@ -76,7 +76,8 @@ class Statistics:
                     'passengers': passengers_count,
                     'capacity': max_capacity,
                     'num_floors': num_floors,
-                    'timestamp': timestamp
+                    'timestamp': timestamp,
+                    'car_calls': self.current_elevator_states.get(elevator_name, {}).get('car_calls', [])  # Preserve car_calls
                 }
                 
                 # Send to WebSocket
@@ -134,6 +135,22 @@ class Statistics:
                         'is_new_registration': True  # New registration flag
                     }
                     self.hall_calls_history[elevator_name].append(new_hall_call_data)
+            
+            # Track car_calls status for real-time display
+            car_calls_match = re.search(r'elevator/(.*?)/car_calls', topic)
+            if car_calls_match:
+                elevator_name = car_calls_match.group(1)
+                car_calls_list = message.get('car_calls', [])
+                
+                # Update current elevator state with car_calls
+                if elevator_name in self.current_elevator_states:
+                    self.current_elevator_states[elevator_name]['car_calls'] = car_calls_list
+                    
+                    # Send updated state to WebSocket
+                    self._send_to_websocket({
+                        'type': 'elevator_update',
+                        'data': self.current_elevator_states[elevator_name]
+                    })
             
             # Record new car_call registrations (for visualization)
             new_car_call_match = re.search(r'elevator/(.*?)/new_car_call', topic)

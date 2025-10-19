@@ -192,7 +192,7 @@ class ElevatorVisualizer {
     }
     
     renderElevator(element, data) {
-        const { floor, state, passengers, capacity, num_floors } = data;
+        const { floor, state, passengers, capacity, num_floors, car_calls } = data;
         
         // Update state badge
         const stateBadge = element.querySelector('.elevator-state');
@@ -240,6 +240,32 @@ class ElevatorVisualizer {
             const positionPercent = ((floor - 1) / num_floors) * 100;
             elevatorCar.style.bottom = `${positionPercent}%`;
         }
+        
+        // Render car call indicators (◎ purple, small)
+        this.renderCarCalls(elevatorShaft, car_calls || [], num_floors);
+    }
+    
+    renderCarCalls(shaftElement, carCalls, numFloors) {
+        // Remove existing car call indicators
+        const existing = shaftElement.querySelectorAll('.car-call-indicator');
+        existing.forEach(el => el.remove());
+        
+        // Add car call indicators for each floor
+        if (!numFloors || !carCalls || carCalls.length === 0) return;
+        
+        carCalls.forEach(targetFloor => {
+            const indicator = document.createElement('div');
+            indicator.className = 'car-call-indicator';
+            indicator.textContent = '◎';
+            indicator.title = `Car call to floor ${targetFloor}`;
+            
+            // Position indicator at the CENTER of the target floor
+            const floorHeight = 100 / numFloors; // Height of each floor slot (%)
+            const bottomPercent = ((targetFloor - 1) / numFloors) * 100 + (floorHeight / 2);
+            indicator.style.bottom = `${bottomPercent}%`;
+            
+            shaftElement.appendChild(indicator);
+        });
     }
     
     handleEvent(data) {
