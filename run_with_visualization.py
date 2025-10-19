@@ -12,6 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from visualizer.server import VisualizerServer
+from RealtimeEnvironment import RealtimeEnvironment
 
 def run_websocket_server(server):
     """Run WebSocket server in asyncio event loop"""
@@ -31,8 +32,12 @@ def run_simulation(server):
     
     print("Initializing simulation...")
     
-    # Create simulation environment
-    env = simpy.Environment()
+    # Create simulation environment with real-time synchronization
+    # speed_factor: 1.0 = real-time, 0.5 = half speed, 2.0 = double speed, 0.0 = no delay
+    SPEED_FACTOR = 1.0  # Adjust this value to control simulation speed
+    env = RealtimeEnvironment(speed_factor=SPEED_FACTOR)
+    print(f"Simulation speed: {SPEED_FACTOR}x (1.0 = real-time)")
+    
     broker = MessageBroker(env)
     
     # Initialize Statistics with WebSocket server reference
