@@ -304,6 +304,7 @@ section h2 {
     bottom: 0%;
     transition: bottom 0.5s ease-in-out;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    overflow: visible; /* Allow doors to be visible */
 }
 
 .elevator-car::after {
@@ -316,6 +317,73 @@ section h2 {
     height: 20px;
     background: rgba(255, 255, 255, 0.3);
     border-radius: 4px;
+}
+
+/* Door elements - Single line that splits into two */
+.door {
+    position: absolute;
+    top: 10%;
+    width: 2px;
+    height: 80%;
+    background: #1e3a8a; /* Dark blue for door */
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    z-index: 10; /* Above the car background */
+    transition: all 0.8s ease-in-out; /* Smooth transition for all properties */
+}
+
+/* Door closed state - both lines at center (looks like one line) */
+.door-left {
+    left: 50%;
+    transform: translateX(-1px); /* Slightly left of center */
+}
+
+.door-right {
+    left: 50%;
+    transform: translateX(0px); /* Slightly right of center, overlapping */
+}
+
+/* Door opening state - lines start moving to sides */
+.elevator-car.door-opening .door-left {
+    left: 10%; /* Moving to left edge */
+    transform: translateX(0);
+}
+
+.elevator-car.door-opening .door-right {
+    left: 90%; /* Moving to right edge */
+    transform: translateX(-2px);
+}
+
+/* Door open state - lines stay at sides */
+.elevator-car.door-open .door-left {
+    left: 10%; /* At left edge */
+    transform: translateX(0);
+}
+
+.elevator-car.door-open .door-right {
+    left: 90%; /* At right edge */
+    transform: translateX(-2px);
+}
+
+/* Door closing state - lines moving back to center */
+.elevator-car.door-closing .door-left {
+    left: 50%; /* Moving back to center */
+    transform: translateX(-1px);
+}
+
+.elevator-car.door-closing .door-right {
+    left: 50%; /* Moving back to center */
+    transform: translateX(0px);
+}
+
+/* Door closed state (explicit for clarity) */
+.elevator-car.door-closed .door-left {
+    left: 50%;
+    transform: translateX(-1px);
+}
+
+.elevator-car.door-closed .door-right {
+    left: 50%;
+    transform: translateX(0px);
 }
 
 .elevator-info {

@@ -165,7 +165,10 @@ class ElevatorVisualizer {
                 <div class="elevator-visual">
                     <div class="floor-labels"></div>
                     <div class="elevator-shaft">
-                        <div class="elevator-car"></div>
+                        <div class="elevator-car door-closed">
+                            <div class="door door-left"></div>
+                            <div class="door door-right"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="elevator-info">
@@ -247,6 +250,37 @@ class ElevatorVisualizer {
         if (details) message += ` - ${details}`;
         
         this.addLog('event', message, timestamp);
+        
+        // Handle door events for animation
+        if (elevator_name) {
+            const elevatorElement = document.getElementById(`elevator-${elevator_name}`);
+            if (elevatorElement) {
+                const elevatorCar = elevatorElement.querySelector('.elevator-car');
+                if (elevatorCar) {
+                    switch (event_type) {
+                        case 'DOOR_OPENING_START':
+                            elevatorCar.classList.add('door-opening');
+                            elevatorCar.classList.remove('door-closed', 'door-closing');
+                            break;
+                            
+                        case 'DOOR_OPENING_COMPLETE':
+                            elevatorCar.classList.add('door-open');
+                            elevatorCar.classList.remove('door-opening', 'door-closed');
+                            break;
+                            
+                        case 'DOOR_CLOSING_START':
+                            elevatorCar.classList.add('door-closing');
+                            elevatorCar.classList.remove('door-open', 'door-opening');
+                            break;
+                            
+                        case 'DOOR_CLOSING_COMPLETE':
+                            elevatorCar.classList.add('door-closed');
+                            elevatorCar.classList.remove('door-closing', 'door-open');
+                            break;
+                    }
+                }
+            }
+        }
     }
     
     updateSimulationTime(time) {

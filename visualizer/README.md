@@ -16,24 +16,25 @@ visualizer/
 
 ## Usage
 
-### Method 1: Using Integrated Launcher (Recommended)
+### Quick Start (Recommended) 🚀
+
+Just run this single command:
 
 ```bash
-# Run from project root
 python run_with_visualization.py
 ```
 
-This script automatically:
-- Starts the WebSocket server (ws://localhost:8765)
-- Runs the simulation
-- Sends real-time data
+**This will automatically:**
+- ✅ Start HTTP server (port 8080)
+- ✅ Start WebSocket server (port 8765)
+- ✅ Start the simulation
+- ✅ Open your browser automatically
 
-Then open in your browser:
-```
-http://localhost:8080/static/index.html
-```
+**To stop:** Press `Ctrl+C`
 
-### Method 2: Manual Execution
+---
+
+### Manual Execution (Alternative)
 
 #### Step 1: Start HTTP Server
 

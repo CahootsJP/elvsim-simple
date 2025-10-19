@@ -7,6 +7,10 @@ import asyncio
 import threading
 import sys
 import os
+import http.server
+import socketserver
+import webbrowser
+import time
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,6 +21,23 @@ from RealtimeEnvironment import RealtimeEnvironment
 def run_websocket_server(server):
     """Run WebSocket server in asyncio event loop"""
     asyncio.run(server.start())
+
+def run_http_server(port=8080, directory="visualizer"):
+    """Run HTTP server for serving static files"""
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    
+    class QuietHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+        """HTTP request handler with minimal logging"""
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=directory, **kwargs)
+        
+        def log_message(self, format, *args):
+            """Suppress HTTP request logs"""
+            pass  # Comment this out to see HTTP logs
+    
+    with socketserver.TCPServer(("", port), QuietHTTPRequestHandler) as httpd:
+        print(f"HTTP server started on http://localhost:{port}")
+        httpd.serve_forever()
 
 def run_simulation(server):
     """Run SimPy simulation with WebSocket integration"""
@@ -159,27 +180,39 @@ def run_simulation(server):
 def main():
     """Main entry point"""
     print("=" * 60)
-    print("Elevator Simulator - Real-time Visualization")
+    print("🏢 Elevator Simulator - Real-time Visualization")
     print("=" * 60)
     
     # Create WebSocket server
     server = VisualizerServer(host='localhost', port=8765)
     
+    # Start HTTP server in separate thread
+    http_thread = threading.Thread(target=run_http_server, args=(8080, "visualizer"), daemon=True)
+    http_thread.start()
+    
     # Start WebSocket server in separate thread
     ws_thread = threading.Thread(target=run_websocket_server, args=(server,), daemon=True)
     ws_thread.start()
     
-    # Wait a moment for WebSocket server to start
-    import time
-    time.sleep(1)
+    # Wait for servers to start
+    time.sleep(1.5)
     
-    print("\nWebSocket server started on ws://localhost:8765")
-    print("Starting simulation in main thread...")
-    print("\nTo view visualization:")
-    print("  1. Open visualizer/static/index.html in your browser")
-    print("  2. Or run: python -m http.server 8080 --directory visualizer")
-    print("     Then open: http://localhost:8080/static/index.html")
-    print("\n" + "=" * 60 + "\n")
+    print("✅ WebSocket server started on ws://localhost:8765")
+    print("✅ HTTP server started on http://localhost:8080")
+    
+    # Open browser automatically
+    visualization_url = "http://localhost:8080/static/index.html"
+    print(f"\n🌐 Opening browser: {visualization_url}")
+    try:
+        webbrowser.open(visualization_url)
+        print("✅ Browser opened successfully!")
+    except Exception as e:
+        print(f"⚠️  Could not open browser automatically: {e}")
+        print(f"   Please open manually: {visualization_url}")
+    
+    print("\n" + "=" * 60)
+    print("Starting simulation...")
+    print("=" * 60 + "\n")
     
     try:
         # Run simulation in main thread
@@ -187,14 +220,14 @@ def main():
     except KeyboardInterrupt:
         print("\n\n⚠️  Simulation interrupted by user (Ctrl+C).")
     except Exception as e:
-        print(f"\n\nError during simulation: {e}")
+        print(f"\n\n❌ Error during simulation: {e}")
         import traceback
         traceback.print_exc()
     finally:
         print("\n" + "=" * 60)
-        print("Shutting down WebSocket server...")
+        print("Shutting down servers...")
         print("=" * 60)
-        # WebSocket server thread is daemon, so it will automatically stop
+        # All server threads are daemon, so they will automatically stop
         import sys
         sys.exit(0)
 

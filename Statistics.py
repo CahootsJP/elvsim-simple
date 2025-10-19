@@ -214,6 +214,18 @@ class Statistics:
                         'floor': floor,
                         'door_id': door_id
                     })
+                    
+                    # Send door event to WebSocket for real-time animation
+                    self._send_to_websocket({
+                        'type': 'event',
+                        'data': {
+                            'event_type': event_type,
+                            'elevator_name': elevator_name,
+                            'floor': floor,
+                            'timestamp': timestamp,
+                            'details': door_id
+                        }
+                    })
 
     def plot_trajectory_diagram(self):
         """Draw trajectory diagram after simulation ends"""
