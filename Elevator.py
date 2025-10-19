@@ -56,9 +56,13 @@ class Elevator(Entity):
         status_message = {
             "timestamp": self.env.now,
             "physical_floor": self.current_floor,
+            "current_floor": self.current_floor,  # For WebSocket visualization
             "advanced_position": self.advanced_position,
             "state": self.state,
-            "passengers": len(self.passengers_onboard)
+            "passengers": len(self.passengers_onboard),
+            "passengers_count": len(self.passengers_onboard),  # For WebSocket visualization
+            "max_capacity": self.max_capacity,  # For WebSocket visualization
+            "num_floors": self.num_floors  # For WebSocket visualization
         }
         yield self.broker.put(self.status_topic, status_message)
 

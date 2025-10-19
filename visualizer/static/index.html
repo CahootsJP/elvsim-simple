@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elevator Simulator - Real-time Visualization</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏢 Elevator Simulator</h1>
+            <div class="connection-status">
+                <span id="status-indicator" class="status-disconnected"></span>
+                <span id="status-text">Disconnected</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Control Panel -->
+            <section class="control-panel">
+                <h2>Control Panel</h2>
+                <div class="controls">
+                    <button id="btn-start" class="btn btn-primary">Start Simulation</button>
+                    <button id="btn-pause" class="btn btn-secondary" disabled>Pause</button>
+                    <button id="btn-reset" class="btn btn-secondary" disabled>Reset</button>
+                </div>
+                <div class="simulation-time">
+                    <label>Simulation Time:</label>
+                    <span id="sim-time">0.00s</span>
+                </div>
+            </section>
+
+            <!-- Visualization Area -->
+            <section class="visualization">
+                <h2>Elevator Status</h2>
+                <div id="elevator-container" class="elevator-container">
+                    <!-- Elevators will be dynamically created here -->
+                </div>
+            </section>
+
+            <!-- Event Log -->
+            <section class="event-log">
+                <h2>Event Log</h2>
+                <div class="log-controls">
+                    <button id="btn-clear-log" class="btn btn-small">Clear Log</button>
+                    <label>
+                        <input type="checkbox" id="chk-auto-scroll" checked>
+                        Auto-scroll
+                    </label>
+                </div>
+                <div id="log-container" class="log-container">
+                    <!-- Event logs will appear here -->
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Elevator Simulation System - Real-time Visualization</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+

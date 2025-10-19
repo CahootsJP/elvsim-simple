@@ -1,21 +1,42 @@
 import simpy
 import matplotlib.pyplot as plt
 import re
+import json
+import asyncio
+import threading
 
 class Statistics:
     """
     Receives all communications and
     analyzes and records necessary information as an independent "recorder".
+    Also sends real-time data to WebSocket server for visualization.
     """
-    def __init__(self, env, broadcast_pipe):
+    def __init__(self, env, broadcast_pipe, websocket_server=None):
         self.env = env
         self.broadcast_pipe = broadcast_pipe
+        self.websocket_server = websocket_server  # Optional WebSocket server reference
         self.elevator_trajectories = {}
         self.hall_calls_history = {}  # Hall calls history by elevator
         self.car_calls_history = {}   # Car calls history by elevator
         self.hall_call_off_history = {}  # Hall call OFF events history
         self.car_call_off_history = {}   # Car call OFF events history
         self.door_events_history = {}  # Door events history by elevator
+        
+        # Track current elevator states for real-time updates
+        self.current_elevator_states = {}  # {elevator_name: {floor, state, passengers, etc.}}
+    
+    def _send_to_websocket(self, message):
+        """
+        Send message to WebSocket server (if connected).
+        Thread-safe method to queue messages for WebSocket broadcast.
+        """
+        if self.websocket_server:
+            try:
+                # Queue message using thread-safe queue
+                self.websocket_server.queue_message(message)
+            except Exception as e:
+                # Silently ignore errors to not disrupt simulation
+                pass
 
     def start_listening(self):
         """
@@ -40,6 +61,35 @@ class Statistics:
                 # Record if not exactly the same as the last data point
                 if not self.elevator_trajectories[elevator_name] or self.elevator_trajectories[elevator_name][-1] != (timestamp, advanced_position):
                     self.elevator_trajectories[elevator_name].append((timestamp, advanced_position))
+                
+                # Update current state and send to WebSocket
+                current_floor = message.get('current_floor', advanced_position)
+                state = message.get('state', 'IDLE')
+                passengers_count = message.get('passengers_count', 0)
+                max_capacity = message.get('max_capacity', 10)
+                num_floors = message.get('num_floors', 10)
+                
+                self.current_elevator_states[elevator_name] = {
+                    'elevator_name': elevator_name,
+                    'floor': current_floor,
+                    'state': state,
+                    'passengers': passengers_count,
+                    'capacity': max_capacity,
+                    'num_floors': num_floors,
+                    'timestamp': timestamp
+                }
+                
+                # Send to WebSocket
+                self._send_to_websocket({
+                    'type': 'elevator_update',
+                    'data': self.current_elevator_states[elevator_name]
+                })
+                
+                # Send simulation time update
+                self._send_to_websocket({
+                    'type': 'simulation_time',
+                    'data': {'time': timestamp}
+                })
             
             # Record hall_calls information
             hall_calls_match = re.search(r'elevator/(.*?)/hall_calls', topic)

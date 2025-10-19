@@ -22,8 +22,9 @@ class Door(Entity):
         yield self.env.timeout(0)  # Idle process
 
     def _broadcast_door_event(self, event_type: str, current_floor: int = None):
-        """Broadcast door event to message broker."""
+        """Broadcast door event to message broker (generator for yield)."""
         if not self.broker or not self.elevator_name:
+            yield self.env.timeout(0)  # Make it a generator even when no-op
             return
         
         # Use internal _current_floor if current_floor is not specified
@@ -37,7 +38,7 @@ class Door(Entity):
             "floor": floor
         }
         door_event_topic = f"elevator/{self.elevator_name}/door_events"
-        self.env.process(self._send_message(door_event_topic, door_event_message))
+        yield self.broker.put(door_event_topic, door_event_message)
 
     def _send_message(self, topic: str, message: dict):
         """Process to send message to broker."""
@@ -77,12 +78,12 @@ class Door(Entity):
         # 1. Open the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opening...")
         # Send door opening start event
-        self._broadcast_door_event("DOOR_OPENING_START")
+        yield self.env.process(self._broadcast_door_event("DOOR_OPENING_START"))
         
         yield self.env.timeout(self.open_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
         # Send door opening complete event
-        self._broadcast_door_event("DOOR_OPENING_COMPLETE")
+        yield self.env.process(self._broadcast_door_event("DOOR_OPENING_COMPLETE"))
         
         # 2. Let passengers exit one by one at their own pace
         for p in passengers_to_exit:
@@ -117,12 +118,12 @@ class Door(Entity):
         # 4. Close the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")
         # Send door closing start event
-        self._broadcast_door_event("DOOR_CLOSING_START")
+        yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_START"))
         
         yield self.env.timeout(self.close_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
         # Send door closing complete event
-        self._broadcast_door_event("DOOR_CLOSING_COMPLETE")
+        yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
 
         # 5. Return completion report directly to the elevator operator
         return {
