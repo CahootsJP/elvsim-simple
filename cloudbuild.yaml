@@ -1,7 +1,7 @@
 steps:
-# リポジトリのコンテンツをGCSバケットに同期する
+# Sync repository contents to GCS bucket
 - name: 'gcr.io/cloud-builders/gsutil'
-  # .gitフォルダを除外するオプション (-x) を追加
+  # Add option (-x) to exclude .git folder
   args: ['-m', 'rsync', '-r', '-d', '-x', '\.git/.*', '.', 'gs://elvsim-simple-code']
 substitutions:
   _BUCKET_NAME: 'elvsim-simple-code'

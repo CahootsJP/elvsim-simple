@@ -202,13 +202,29 @@ class ElevatorVisualizer {
         element.querySelector('.passengers-value').textContent = 
             capacity ? `${passengers || 0}/${capacity}` : (passengers || 0);
         
-        // Generate floor labels if not already present
+        // Dynamically set shaft height based on number of floors
+        const elevatorShaft = element.querySelector('.elevator-shaft');
         const floorLabelsContainer = element.querySelector('.floor-labels');
+        const carHeight = 30; // px (must match CSS .elevator-car height)
+        
+        if (num_floors) {
+            // Set shaft height: car height × (num_floors + 1) to ensure car is always visible
+            const shaftHeight = carHeight * (num_floors + 1);
+            elevatorShaft.style.height = `${shaftHeight}px`;
+            floorLabelsContainer.style.height = `${shaftHeight}px`;
+        }
+        
+        // Generate floor labels if not already present
         if (num_floors && floorLabelsContainer.children.length === 0) {
             for (let f = 1; f <= num_floors; f++) {
                 const label = document.createElement('div');
                 label.className = 'floor-label';
                 label.textContent = `${f}F`;
+                
+                // Position each label at the bottom of its floor
+                const bottomPercent = ((f - 1) / num_floors) * 100;
+                label.style.bottom = `${bottomPercent}%`;
+                
                 floorLabelsContainer.appendChild(label);
             }
         }
@@ -216,8 +232,9 @@ class ElevatorVisualizer {
         // Update elevator car position (visual representation)
         const elevatorCar = element.querySelector('.elevator-car');
         if (num_floors && floor) {
-            // Calculate position from bottom (floor 1 = 0%, top floor = 100%)
-            const positionPercent = ((floor - 1) / (num_floors - 1)) * 100;
+            // Calculate position from bottom (floor 1 = 0%, floor 10 = 90%)
+            // Use num_floors (not num_floors - 1) to utilize full 10 slots
+            const positionPercent = ((floor - 1) / num_floors) * 100;
             elevatorCar.style.bottom = `${positionPercent}%`;
         }
     }

@@ -253,29 +253,40 @@ section h2 {
 .elevator-visual {
     flex: 0 0 140px;
     display: flex;
-    gap: 5px;
+    gap: 10px; /* Increased gap between labels and shaft */
     align-items: flex-end;
 }
 
 .floor-labels {
-    display: flex;
-    flex-direction: column-reverse;
-    justify-content: space-between;
-    height: 150px;
+    position: relative; /* For absolute positioning of labels */
+    height: 150px; /* Default height, will be overridden by JavaScript */
     padding: 5px 0;
+    flex: 0 0 30px; /* Fixed width for labels */
 }
 
 .floor-label {
+    position: absolute; /* Positioned at floor boundaries */
+    left: 0;
+    width: 100%;
     font-size: 0.7rem;
     color: var(--text-secondary);
-    font-weight: 500;
+    font-weight: 600; /* Slightly bolder for better visibility */
     line-height: 1;
+    text-align: right; /* Right-align labels to keep them away from shaft */
+    padding-right: 3px; /* Small padding from the edge */
 }
 
 .elevator-shaft {
     width: 60px;
-    height: 150px;
-    background: linear-gradient(to bottom, #e2e8f0 0%, #cbd5e1 100%);
+    height: 150px; /* Default height, will be overridden by JavaScript */
+    /* Zebra stripe background for floor visibility */
+    background: repeating-linear-gradient(
+        to top,
+        #cbd5e1 0%,      /* Darker stripe */
+        #cbd5e1 10%,     /* One floor height (10% of total) */
+        #e2e8f0 10%,     /* Lighter stripe */
+        #e2e8f0 20%      /* One floor height (10% of total) */
+    );
     border: 2px solid var(--border-color);
     border-radius: 8px;
     position: relative;
