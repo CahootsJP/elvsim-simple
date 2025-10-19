@@ -251,7 +251,25 @@ section h2 {
 }
 
 .elevator-visual {
-    flex: 0 0 80px;
+    flex: 0 0 140px;
+    display: flex;
+    gap: 5px;
+    align-items: flex-end;
+}
+
+.floor-labels {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: space-between;
+    height: 150px;
+    padding: 5px 0;
+}
+
+.floor-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    line-height: 1;
 }
 
 .elevator-shaft {
@@ -272,8 +290,8 @@ section h2 {
     border-radius: 4px;
     position: absolute;
     left: 3px;
-    top: 50%;
-    transition: top 0.5s ease-in-out;
+    bottom: 0%;
+    transition: bottom 0.5s ease-in-out;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 

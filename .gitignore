@@ -15,3 +15,14 @@ env/
 *.c
 *.json
 commit_message.md
+
+# Test files
+realtime_test.txt
+*_test.txt
+error.txt
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~

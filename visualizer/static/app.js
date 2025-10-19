@@ -163,6 +163,7 @@ class ElevatorVisualizer {
             </div>
             <div class="elevator-body">
                 <div class="elevator-visual">
+                    <div class="floor-labels"></div>
                     <div class="elevator-shaft">
                         <div class="elevator-car"></div>
                     </div>
@@ -201,11 +202,23 @@ class ElevatorVisualizer {
         element.querySelector('.passengers-value').textContent = 
             capacity ? `${passengers || 0}/${capacity}` : (passengers || 0);
         
+        // Generate floor labels if not already present
+        const floorLabelsContainer = element.querySelector('.floor-labels');
+        if (num_floors && floorLabelsContainer.children.length === 0) {
+            for (let f = 1; f <= num_floors; f++) {
+                const label = document.createElement('div');
+                label.className = 'floor-label';
+                label.textContent = `${f}F`;
+                floorLabelsContainer.appendChild(label);
+            }
+        }
+        
         // Update elevator car position (visual representation)
         const elevatorCar = element.querySelector('.elevator-car');
         if (num_floors && floor) {
-            const positionPercent = ((num_floors - floor) / (num_floors - 1)) * 100;
-            elevatorCar.style.top = `${positionPercent}%`;
+            // Calculate position from bottom (floor 1 = 0%, top floor = 100%)
+            const positionPercent = ((floor - 1) / (num_floors - 1)) * 100;
+            elevatorCar.style.bottom = `${positionPercent}%`;
         }
     }
     
