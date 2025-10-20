@@ -192,7 +192,7 @@ class ElevatorVisualizer {
     }
     
     renderElevator(element, data) {
-        const { floor, state, passengers, capacity, num_floors, car_calls } = data;
+        const { floor, state, passengers, capacity, num_floors, car_calls, hall_calls_up, hall_calls_down } = data;
         
         // Update state badge
         const stateBadge = element.querySelector('.elevator-state');
@@ -243,6 +243,9 @@ class ElevatorVisualizer {
         
         // Render car call indicators (◎ purple, small)
         this.renderCarCalls(elevatorShaft, car_calls || [], num_floors);
+        
+        // Render hall call indicators (△ UP green, ▽ DOWN orange)
+        this.renderHallCalls(elevatorShaft, hall_calls_up || [], hall_calls_down || [], num_floors);
     }
     
     renderCarCalls(shaftElement, carCalls, numFloors) {
@@ -256,7 +259,7 @@ class ElevatorVisualizer {
         carCalls.forEach(targetFloor => {
             const indicator = document.createElement('div');
             indicator.className = 'car-call-indicator';
-            indicator.textContent = '◎';
+            indicator.textContent = '●';
             indicator.title = `Car call to floor ${targetFloor}`;
             
             // Position indicator at the CENTER of the target floor
@@ -264,6 +267,55 @@ class ElevatorVisualizer {
             const bottomPercent = ((targetFloor - 1) / numFloors) * 100 + (floorHeight / 2);
             indicator.style.bottom = `${bottomPercent}%`;
             
+            shaftElement.appendChild(indicator);
+        });
+    }
+    
+    renderHallCalls(shaftElement, hallCallsUp, hallCallsDown, numFloors) {
+        // Remove existing hall call indicators
+        const existing = shaftElement.querySelectorAll('.hall-call-indicator');
+        existing.forEach(el => el.remove());
+        
+        // Add hall call indicators for each floor
+        if (!numFloors) return;
+        
+        const floorHeight = 100 / numFloors; // Height of each floor slot (%)
+        
+        // Render UP hall calls (▲ green filled)
+        hallCallsUp.forEach(targetFloor => {
+            const indicator = document.createElement('div');
+            indicator.className = 'hall-call-indicator hall-call-up';
+            indicator.textContent = '▲';
+            indicator.title = `Hall call UP at floor ${targetFloor}`;
+            
+            // Position indicator at the target floor
+            let bottomPercent = ((targetFloor - 1) / numFloors) * 100 + (floorHeight / 2);
+            
+            // If both UP and DOWN exist at same floor, offset UP upward
+            if (hallCallsDown.includes(targetFloor)) {
+                bottomPercent += floorHeight * 0.15; // Offset up by 15% of floor height
+            }
+            
+            indicator.style.bottom = `${bottomPercent}%`;
+            shaftElement.appendChild(indicator);
+        });
+        
+        // Render DOWN hall calls (▼ orange filled)
+        hallCallsDown.forEach(targetFloor => {
+            const indicator = document.createElement('div');
+            indicator.className = 'hall-call-indicator hall-call-down';
+            indicator.textContent = '▼';
+            indicator.title = `Hall call DOWN at floor ${targetFloor}`;
+            
+            // Position indicator at the target floor
+            let bottomPercent = ((targetFloor - 1) / numFloors) * 100 + (floorHeight / 2);
+            
+            // If both UP and DOWN exist at same floor, offset DOWN downward
+            if (hallCallsUp.includes(targetFloor)) {
+                bottomPercent -= floorHeight * 0.15; // Offset down by 15% of floor height
+            }
+            
+            indicator.style.bottom = `${bottomPercent}%`;
             shaftElement.appendChild(indicator);
         });
     }

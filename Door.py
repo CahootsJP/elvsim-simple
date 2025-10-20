@@ -56,13 +56,14 @@ class Door(Entity):
         """Set current floor number."""
         self._current_floor = floor
 
-    def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues):
+    def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues, has_car_call_here=False):
         """
         Main boarding and alighting process called directly by the elevator operator
         
         Args:
             passengers_to_exit: List of passengers exiting
             boarding_queues: Queues of passengers waiting to board
+            has_car_call_here: Whether current floor has a car call (for OFF message timing)
         
         Returns:
             dict: Report containing boarded and failed_to_board passengers
@@ -84,6 +85,17 @@ class Door(Entity):
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
         # Send door opening complete event
         yield self.env.process(self._broadcast_door_event("DOOR_OPENING_COMPLETE"))
+        
+        # Send car call OFF message at door opening complete (if car call exists here)
+        if has_car_call_here and self.broker and self.elevator_name:
+            car_call_off_message = {
+                "timestamp": self.env.now,
+                "elevator_name": self.elevator_name,
+                "destination": self._current_floor,
+                "action": "OFF"
+            }
+            car_call_off_topic = f"elevator/{self.elevator_name}/car_call_off"
+            yield self.broker.put(car_call_off_topic, car_call_off_message)
         
         # 2. Let passengers exit one by one at their own pace
         for p in passengers_to_exit:

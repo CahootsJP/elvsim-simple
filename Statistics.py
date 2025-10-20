@@ -77,7 +77,9 @@ class Statistics:
                     'capacity': max_capacity,
                     'num_floors': num_floors,
                     'timestamp': timestamp,
-                    'car_calls': self.current_elevator_states.get(elevator_name, {}).get('car_calls', [])  # Preserve car_calls
+                    'car_calls': self.current_elevator_states.get(elevator_name, {}).get('car_calls', []),  # Preserve car_calls
+                    'hall_calls_up': self.current_elevator_states.get(elevator_name, {}).get('hall_calls_up', []),  # Preserve hall_calls_up
+                    'hall_calls_down': self.current_elevator_states.get(elevator_name, {}).get('hall_calls_down', [])  # Preserve hall_calls_down
                 }
                 
                 # Send to WebSocket
@@ -109,6 +111,17 @@ class Statistics:
                     'hall_calls_up': hall_calls_up.copy(),
                     'hall_calls_down': hall_calls_down.copy()
                 })
+                
+                # Update current elevator state with hall_calls for real-time display
+                if elevator_name in self.current_elevator_states:
+                    self.current_elevator_states[elevator_name]['hall_calls_up'] = hall_calls_up
+                    self.current_elevator_states[elevator_name]['hall_calls_down'] = hall_calls_down
+                    
+                    # Send updated state to WebSocket
+                    self._send_to_websocket({
+                        'type': 'elevator_update',
+                        'data': self.current_elevator_states[elevator_name]
+                    })
             
             # Record new hall_call registrations (for visualization)
             new_hall_call_match = re.search(r'hall_button/floor_(.*?)/new_hall_call', topic)
@@ -211,6 +224,19 @@ class Statistics:
                         'destination': destination,
                         'action': 'OFF'
                     })
+                    
+                    # Remove car call from current state and send to WebSocket
+                    if elevator_name in self.current_elevator_states:
+                        car_calls = self.current_elevator_states[elevator_name].get('car_calls', [])
+                        if destination in car_calls:
+                            car_calls.remove(destination)
+                            self.current_elevator_states[elevator_name]['car_calls'] = car_calls
+                            
+                            # Send updated state to WebSocket
+                            self._send_to_websocket({
+                                'type': 'elevator_update',
+                                'data': self.current_elevator_states[elevator_name]
+                            })
             
             # Record door events (for visualization)
             door_events_match = re.search(r'elevator/(.*?)/door_events', topic)

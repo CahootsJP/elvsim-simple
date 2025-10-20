@@ -295,7 +295,7 @@ section h2 {
 }
 
 .elevator-shaft {
-    width: 60px;
+    width: 90px; /* Expanded from 60px to 90px for hall call indicators */
     height: 150px; /* Default height, will be overridden by JavaScript */
     /* Zebra stripe background for floor visibility */
     background: repeating-linear-gradient(
@@ -318,7 +318,8 @@ section h2 {
     border: 2px solid #1d4ed8;
     border-radius: 4px;
     position: absolute;
-    left: 3px;
+    left: 50%; /* Center horizontally */
+    margin-left: -25px; /* Offset half the width (50px / 2) */
     bottom: 0%;
     transition: bottom 0.5s ease-in-out;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -404,10 +405,10 @@ section h2 {
     transform: translateX(0px);
 }
 
-/* Car call indicators (◎ purple, small) */
+/* Car call indicators (● purple filled circle, small) */
 .car-call-indicator {
     position: absolute;
-    left: 50%; /* Center horizontally in the shaft */
+    right: 10%; /* Position on the right side of the shaft (moved further right) */
     width: 16px;
     height: 16px;
     font-size: 12px; /* Small size */
@@ -419,13 +420,49 @@ section h2 {
     pointer-events: auto; /* Allow hover */
     z-index: 5; /* Below elevator car (z-index: 10) but above background */
     margin-bottom: -8px; /* Offset half the height to center vertically */
-    margin-left: -8px; /* Offset half the width to center horizontally */
+    margin-right: -8px; /* Offset half the width to center horizontally */
     opacity: 0.9;
     text-shadow: 0 0 2px rgba(155, 89, 182, 0.5); /* Subtle glow */
     transition: all 0.2s ease; /* Smooth transition for hover */
 }
 
 .car-call-indicator:hover {
+    opacity: 1;
+    transform: scale(1.2); /* Slightly enlarge on hover */
+}
+
+/* Hall call indicators (▲ UP green, ▼ DOWN orange) */
+.hall-call-indicator {
+    position: absolute;
+    left: 10%; /* Position on the left side of the shaft (moved further left) */
+    width: 16px;
+    height: 16px;
+    font-size: 12px; /* Small size */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    pointer-events: auto; /* Allow hover */
+    z-index: 5; /* Below elevator car (z-index: 10) but above background */
+    margin-bottom: -8px; /* Offset half the height to center vertically */
+    margin-left: -8px; /* Offset half the width to center horizontally */
+    opacity: 0.9;
+    transition: all 0.2s ease; /* Smooth transition for hover */
+}
+
+/* UP hall call - Green */
+.hall-call-up {
+    color: #48bb78; /* Green color */
+    text-shadow: 0 0 2px rgba(72, 187, 120, 0.5); /* Subtle glow */
+}
+
+/* DOWN hall call - Orange */
+.hall-call-down {
+    color: #ed8936; /* Orange color */
+    text-shadow: 0 0 2px rgba(237, 137, 54, 0.5); /* Subtle glow */
+}
+
+.hall-call-indicator:hover {
     opacity: 1;
     transform: scale(1.2); /* Slightly enlarge on hover */
 }

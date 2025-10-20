@@ -407,10 +407,13 @@ class Elevator(Entity):
         if self.state == "DOWN" and self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
             boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
 
+        # Check if current floor has a car call (for door to send OFF message at opening complete)
+        has_car_call_here = self.current_floor in self.car_calls
+        
         # Call door boarding and alighting process
         # Door will get capacity information from elevator via getters
         boarding_process = self.env.process(self.door.handle_boarding_and_alighting_process(
-            passengers_to_exit, boarding_queues))
+            passengers_to_exit, boarding_queues, has_car_call_here))
         report = yield boarding_process
         
         for p in passengers_to_exit:
@@ -429,20 +432,12 @@ class Elevator(Entity):
             failed_notification.succeed()
             yield p.boarding_failed_event.put(failed_notification)
 
+        # Clear car call for current floor
+        # (Note: car_call_off message is now sent by Door at opening complete)
         car_calls_changed = False
         if self.current_floor in self.car_calls:
             self.car_calls.discard(self.current_floor)
             car_calls_changed = True
-            
-            # Send car call OFF message for visualization
-            car_call_off_message = {
-                "timestamp": self.env.now,
-                "elevator_name": self.name,
-                "destination": self.current_floor,
-                "action": "OFF"
-            }
-            car_call_off_topic = f"elevator/{self.name}/car_call_off"
-            self.broker.put(car_call_off_topic, car_call_off_message)
         
         hall_calls_changed = False
         serviced_directions = []  # Record directions that should be turned off
