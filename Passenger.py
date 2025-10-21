@@ -60,6 +60,15 @@ class Passenger(Entity):
                 # Boarding permission received
                 completion_event = results[board_get]
                 print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
+                
+                # Publish passenger boarding event
+                self.broker.put('passenger/boarding', {
+                    'passenger_name': self.name,
+                    'floor': self.arrival_floor,
+                    'direction': direction,
+                    'timestamp': self.env.now
+                })
+                
                 yield self.env.timeout(self.move_speed)
 
                 # 5. Board the elevator and press destination button

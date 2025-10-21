@@ -10,6 +10,7 @@ class ElevatorVisualizer {
         this.autoScroll = true;
         this.elevators = new Map(); // Store elevator state
         this.simulationTime = 0;
+        this.waitingPassengers = {}; // Store waiting passengers data
         
         this.initializeUI();
         this.connectWebSocket();
@@ -125,6 +126,10 @@ class ElevatorVisualizer {
                 this.updateSimulationTime(data.time);
                 break;
                 
+            case 'waiting_passengers_update':
+                this.updateWaitingPassengers(data);
+                break;
+                
             case 'pong':
                 // Heartbeat response
                 break;
@@ -162,15 +167,25 @@ class ElevatorVisualizer {
                 <span class="elevator-state"></span>
             </div>
             <div class="elevator-body">
-                <div class="elevator-visual">
-                    <div class="floor-labels"></div>
-                    <div class="elevator-shaft">
-                        <div class="elevator-car door-closed">
-                            <div class="door door-left"></div>
-                            <div class="door door-right"></div>
+                    <div class="elevator-visual">
+                        <div class="elevator-shaft-container">
+                            <div class="floor-labels"></div>
+                            <div class="elevator-shaft">
+                                <div class="elevator-car door-closed">
+                                    <div class="door door-left"></div>
+                                    <div class="door door-right"></div>
+                                </div>
+                            </div>
+                            <div class="waiting-passengers"></div>
+                        </div>
+                        <div class="passenger-box">
+                            <div class="passenger-squares"></div>
+                            <div class="passenger-info">
+                                <div class="passenger-count">0/50</div>
+                                <div class="passenger-percent">0%</div>
+                            </div>
                         </div>
                     </div>
-                </div>
                 <div class="elevator-info">
                     <div class="info-item">
                         <span class="label">Floor:</span>
@@ -208,6 +223,7 @@ class ElevatorVisualizer {
         // Dynamically set shaft height based on number of floors
         const elevatorShaft = element.querySelector('.elevator-shaft');
         const floorLabelsContainer = element.querySelector('.floor-labels');
+        const shaftContainer = element.querySelector('.elevator-shaft-container');
         const carHeight = 30; // px (must match CSS .elevator-car height)
         
         if (num_floors) {
@@ -215,6 +231,15 @@ class ElevatorVisualizer {
             const shaftHeight = carHeight * (num_floors + 1);
             elevatorShaft.style.height = `${shaftHeight}px`;
             floorLabelsContainer.style.height = `${shaftHeight}px`;
+            if (shaftContainer) {
+                shaftContainer.style.height = `${shaftHeight}px`;
+            }
+            
+            // Set waiting passengers area height
+            const waitingArea = element.querySelector('.waiting-passengers');
+            if (waitingArea) {
+                waitingArea.style.height = `${shaftHeight}px`;
+            }
         }
         
         // Generate floor labels if not already present
@@ -246,6 +271,12 @@ class ElevatorVisualizer {
         
         // Render hall call indicators (△ UP green, ▽ DOWN orange)
         this.renderHallCalls(elevatorShaft, hall_calls_up || [], hall_calls_down || [], num_floors);
+        
+        // Render passenger box
+        this.renderPassengerBox(element, passengers, capacity);
+        
+        // Render waiting passengers
+        this.renderWaitingPassengers(element, num_floors);
     }
     
     renderCarCalls(shaftElement, carCalls, numFloors) {
@@ -318,6 +349,142 @@ class ElevatorVisualizer {
             indicator.style.bottom = `${bottomPercent}%`;
             shaftElement.appendChild(indicator);
         });
+    }
+    
+    renderPassengerBox(elevatorElement, passengers, capacity) {
+        const passengerBox = elevatorElement.querySelector('.passenger-box');
+        const squaresContainer = elevatorElement.querySelector('.passenger-squares');
+        const countElement = elevatorElement.querySelector('.passenger-count');
+        const percentElement = elevatorElement.querySelector('.passenger-percent');
+        
+        if (!passengerBox || !squaresContainer || !countElement || !percentElement) {
+            return;
+        }
+        
+        // Calculate occupancy
+        const occupancyRate = capacity > 0 ? passengers / capacity : 0;
+        const percentage = Math.round(occupancyRate * 100);
+        
+        // Update text displays
+        countElement.textContent = `${passengers}/${capacity}`;
+        percentElement.textContent = `${percentage}%`;
+        
+        // Determine color based on occupancy
+        let boxClass = 'passenger-box';
+        if (occupancyRate <= 0.3) {
+            boxClass += ' occupancy-low';
+        } else if (occupancyRate <= 0.7) {
+            boxClass += ' occupancy-medium';
+        } else {
+            boxClass += ' occupancy-high';
+        }
+        passengerBox.className = boxClass;
+        
+        // Clear existing squares
+        squaresContainer.innerHTML = '';
+        
+        // Add passenger squares (■) with spacing
+        if (passengers > 0) {
+            const maxSquaresToShow = 5;
+            const squaresToShow = Math.min(passengers, maxSquaresToShow);
+            
+            // Create squares
+            for (let i = 0; i < squaresToShow; i++) {
+                const square = document.createElement('span');
+                square.className = 'passenger-square';
+                square.textContent = '■';
+                squaresContainer.appendChild(square);
+            }
+            
+            // Add "+X" text if more passengers than squares shown
+            if (passengers > maxSquaresToShow) {
+                const extraCount = passengers - maxSquaresToShow;
+                const extraText = document.createElement('span');
+                extraText.className = 'passenger-extra';
+                extraText.textContent = `+${extraCount}`;
+                squaresContainer.appendChild(extraText);
+            }
+        }
+    }
+    
+    updateWaitingPassengers(waitingData) {
+        this.waitingPassengers = waitingData;
+        
+        // Update all elevator displays
+        this.elevators.forEach((elevatorData, elevatorName) => {
+            const elevatorElement = document.getElementById(`elevator-${elevatorName}`);
+            if (elevatorElement) {
+                const numFloors = elevatorData.num_floors;
+                this.renderWaitingPassengers(elevatorElement, numFloors);
+            }
+        });
+    }
+    
+    renderWaitingPassengers(elevatorElement, numFloors) {
+        const waitingArea = elevatorElement.querySelector('.waiting-passengers');
+        if (!waitingArea || !numFloors) {
+            return;
+        }
+        
+        // Clear existing waiting passenger displays
+        waitingArea.innerHTML = '';
+        
+        // Render waiting passengers for each floor
+        for (let floor = 1; floor <= numFloors; floor++) {
+            const floorKey = floor.toString();
+            const waitingData = this.waitingPassengers[floorKey];
+            
+            if (waitingData && (waitingData.UP > 0 || waitingData.DOWN > 0)) {
+                const floorElement = document.createElement('div');
+                floorElement.className = 'waiting-floor';
+                
+                // Calculate position (same logic as floor labels)
+                const floorHeight = 100 / numFloors;
+                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight / 2);
+                floorElement.style.bottom = `${bottomPercent}%`;
+                
+                // Generate UP passengers display
+                if (waitingData.UP > 0) {
+                    const upElement = document.createElement('span');
+                    upElement.className = 'waiting-up';
+                    upElement.innerHTML = this.generateWaitingDisplay(waitingData.UP, '↑');
+                    floorElement.appendChild(upElement);
+                }
+                
+                // Generate DOWN passengers display
+                if (waitingData.DOWN > 0) {
+                    const downElement = document.createElement('span');
+                    downElement.className = 'waiting-down';
+                    downElement.innerHTML = this.generateWaitingDisplay(waitingData.DOWN, '↓');
+                    floorElement.appendChild(downElement);
+                }
+                
+                waitingArea.appendChild(floorElement);
+            }
+        }
+    }
+    
+    generateWaitingDisplay(count, direction) {
+        const maxIconsToShow = 4;
+        const iconsToShow = Math.min(count, maxIconsToShow);
+        
+        let display = '';
+        
+        // Add passenger icons
+        for (let i = 0; i < iconsToShow; i++) {
+            display += '<span class="waiting-passenger-icon">👤</span>';
+        }
+        
+        // Add extra count if needed
+        if (count > maxIconsToShow) {
+            const extra = count - maxIconsToShow;
+            display += `<span class="waiting-extra">+${extra}</span>`;
+        }
+        
+        // Add direction arrow
+        display += `<span class="waiting-direction-icon">${direction}</span>`;
+        
+        return display;
     }
     
     handleEvent(data) {

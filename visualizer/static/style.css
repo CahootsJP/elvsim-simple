@@ -211,7 +211,7 @@ section h2 {
 
 .elevator-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
     gap: 15px;
 }
 
@@ -271,7 +271,14 @@ section h2 {
 .elevator-visual {
     flex: 0 0 140px;
     display: flex;
-    gap: 10px; /* Increased gap between labels and shaft */
+    flex-direction: column;
+    gap: 10px; /* Gap between shaft and passenger box */
+    align-items: flex-start; /* Align to start to match shaft position */
+}
+
+.elevator-shaft-container {
+    display: flex;
+    gap: 10px; /* Gap between labels, shaft, and waiting area */
     align-items: flex-end;
 }
 
@@ -467,6 +474,153 @@ section h2 {
     transform: scale(1.2); /* Slightly enlarge on hover */
 }
 
+/* Passenger Box Styles */
+.passenger-box {
+    width: 90px; /* Same width as elevator shaft */
+    height: 60px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background-color: var(--card-bg);
+    transition: all 0.3s ease;
+    margin-left: 40px; /* Offset to align with shaft (30px labels + 10px gap) */
+}
+
+/* Occupancy-based colors */
+.passenger-box.occupancy-low {
+    background-color: #f0fdf4; /* Light green */
+    border-color: var(--border-color); /* Keep gray border */
+}
+
+.passenger-box.occupancy-medium {
+    background-color: #fffbeb; /* Light yellow */
+    border-color: var(--border-color); /* Keep gray border */
+}
+
+.passenger-box.occupancy-high {
+    background-color: #fef2f2; /* Light red */
+    border-color: var(--border-color); /* Keep gray border */
+}
+
+.passenger-squares {
+    display: flex;
+    gap: 4px; /* Spacing between squares */
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    min-height: 20px;
+}
+
+.passenger-square {
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.2s ease;
+}
+
+/* Color squares based on occupancy */
+.occupancy-low .passenger-square {
+    color: #22c55e; /* Green */
+}
+
+.occupancy-medium .passenger-square {
+    color: #f59e0b; /* Orange */
+}
+
+.occupancy-high .passenger-square {
+    color: #ef4444; /* Red */
+}
+
+.passenger-extra {
+    font-size: 10px;
+    font-weight: bold;
+    margin-left: 2px;
+}
+
+/* Color extra text based on occupancy */
+.occupancy-low .passenger-extra {
+    color: #22c55e;
+}
+
+.occupancy-medium .passenger-extra {
+    color: #f59e0b;
+}
+
+.occupancy-high .passenger-extra {
+    color: #ef4444;
+}
+
+.passenger-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.passenger-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.passenger-percent {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* Waiting Passengers Styles */
+.waiting-passengers {
+    width: 120px; /* Space for waiting passengers display */
+    height: 150px; /* Default height, will be overridden by JavaScript */
+    position: relative;
+    flex: 0 0 120px; /* Fixed width */
+}
+
+.waiting-floor {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    display: flex;
+    gap: 8px; /* Gap between UP and DOWN displays */
+    align-items: center;
+    font-size: 11px;
+    line-height: 1;
+    margin-bottom: -6px; /* Center vertically on floor line */
+}
+
+.waiting-up {
+    color: #22c55e; /* Green for UP */
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.waiting-down {
+    color: #f59e0b; /* Orange for DOWN */
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.waiting-passenger-icon {
+    font-size: 10px;
+}
+
+.waiting-direction-icon {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.waiting-extra {
+    font-size: 9px;
+    font-weight: bold;
+    margin-left: 1px;
+}
+
 .elevator-info {
     flex: 1;
     display: flex;
@@ -621,6 +775,25 @@ footer {
         flex-direction: column;
         gap: 15px;
         text-align: center;
+    }
+    
+    /* Adjust waiting passengers area for small screens */
+    .waiting-passengers {
+        width: 100px;
+        flex: 0 0 100px;
+    }
+    
+    .waiting-floor {
+        font-size: 10px;
+        gap: 6px;
+    }
+    
+    .waiting-passenger-icon {
+        font-size: 9px;
+    }
+    
+    .waiting-direction-icon {
+        font-size: 11px;
     }
 }
 

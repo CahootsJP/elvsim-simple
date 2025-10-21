@@ -21,6 +21,8 @@ class Statistics:
         self.hall_call_off_history = {}  # Hall call OFF events history
         self.car_call_off_history = {}   # Car call OFF events history
         self.door_events_history = {}  # Door events history by elevator
+        self.passenger_count_history = {}  # Passenger count history by elevator for visualization
+        self.waiting_passengers = {}  # Current waiting passengers by floor and direction
         
         # Track current elevator states for real-time updates
         self.current_elevator_states = {}  # {elevator_name: {floor, state, passengers, etc.}}
@@ -61,6 +63,16 @@ class Statistics:
                 # Record if not exactly the same as the last data point
                 if not self.elevator_trajectories[elevator_name] or self.elevator_trajectories[elevator_name][-1] != (timestamp, advanced_position):
                     self.elevator_trajectories[elevator_name].append((timestamp, advanced_position))
+                
+                # Record passenger count for visualization
+                passengers_count = message.get('passengers_count', 0)
+                max_capacity = message.get('max_capacity', 50)
+                if elevator_name not in self.passenger_count_history:
+                    self.passenger_count_history[elevator_name] = []
+                
+                # Record passenger count changes
+                if not self.passenger_count_history[elevator_name] or self.passenger_count_history[elevator_name][-1] != (timestamp, passengers_count, max_capacity):
+                    self.passenger_count_history[elevator_name].append((timestamp, passengers_count, max_capacity))
                 
                 # Update current state and send to WebSocket
                 current_floor = message.get('current_floor', advanced_position)
@@ -148,6 +160,9 @@ class Statistics:
                         'is_new_registration': True  # New registration flag
                     }
                     self.hall_calls_history[elevator_name].append(new_hall_call_data)
+                    
+                    # Update waiting passengers count
+                    self._update_waiting_passengers(floor, direction, 1)
             
             # Track car_calls status for real-time display
             car_calls_match = re.search(r'elevator/(.*?)/car_calls', topic)
@@ -206,6 +221,9 @@ class Statistics:
                         'action': 'OFF'
                     }
                     self.hall_call_off_history[elevator_name].append(hall_call_off_data)
+                    
+                    # Note: Waiting passengers are now removed individually when each passenger boards
+                    # (see 'passenger/boarding' event handler above)
             
             # Record car call OFF events (for visualization)
             car_call_off_match = re.search(r'elevator/(.*?)/car_call_off', topic)
@@ -237,6 +255,17 @@ class Statistics:
                                 'type': 'elevator_update',
                                 'data': self.current_elevator_states[elevator_name]
                             })
+            
+            # Record passenger boarding events
+            if topic == 'passenger/boarding':
+                floor = message.get('floor')
+                direction = message.get('direction')
+                passenger_name = message.get('passenger_name')
+                
+                if floor is not None and direction is not None:
+                    # Remove one waiting passenger when someone boards
+                    self._update_waiting_passengers(floor, direction, -1)
+                    print(f"[Statistics] {passenger_name} boarded at floor {floor} ({direction}). Waiting passengers decreased.")
             
             # Record door events (for visualization)
             door_events_match = re.search(r'elevator/(.*?)/door_events', topic)
@@ -297,6 +326,9 @@ class Statistics:
             
             # Draw door events
             self._plot_door_events(name)
+            
+            # Draw passenger visualization boxes
+            self._plot_passenger_boxes(name)
 
         plt.title("Elevator Trajectory Diagram (Travel Diagram, Advanced Position)")
         plt.xlabel("Time (s)")
@@ -489,3 +521,149 @@ class Statistics:
                         self._door_closing_complete_legend_added = True
                 
                 plotted_positions.add(position_key)
+
+    def _plot_passenger_boxes(self, elevator_name):
+        """Draw passenger visualization boxes below elevator trajectory"""
+        if elevator_name not in self.passenger_count_history:
+            return
+        
+        # Get elevator trajectory for positioning
+        if elevator_name not in self.elevator_trajectories:
+            return
+        
+        trajectory = self.elevator_trajectories[elevator_name]
+        if not trajectory:
+            return
+        
+        # Track already drawn boxes to avoid duplicates
+        plotted_positions = set()
+        
+        for timestamp, passengers_count, max_capacity in self.passenger_count_history[elevator_name]:
+            # Find corresponding floor from trajectory
+            floor = self._get_floor_at_time(elevator_name, timestamp)
+            if floor is None:
+                continue
+            
+            position_key = (round(timestamp, 1), floor)  # Round time for duplicate detection
+            if position_key in plotted_positions:
+                continue
+            
+            # Calculate occupancy percentage
+            occupancy_rate = passengers_count / max_capacity if max_capacity > 0 else 0
+            
+            # Determine color based on occupancy
+            if occupancy_rate <= 0.3:
+                box_color = 'lightgreen'
+                square_color = 'green'
+            elif occupancy_rate <= 0.7:
+                box_color = 'lightyellow'
+                square_color = 'orange'
+            else:
+                box_color = 'lightcoral'
+                square_color = 'red'
+            
+            # Draw passenger box
+            box_height = 0.8  # Height of passenger box
+            box_offset = -1.2  # Offset below trajectory line
+            box_bottom = floor + box_offset
+            box_width = 2.0  # Width of passenger box
+            
+            # Create rectangle for passenger box
+            from matplotlib.patches import Rectangle
+            box = Rectangle((timestamp - box_width/2, box_bottom), 
+                          box_width, box_height, 
+                          facecolor=box_color, 
+                          edgecolor='black', 
+                          alpha=0.7, 
+                          linewidth=1)
+            plt.gca().add_patch(box)
+            
+            # Draw passenger squares (■) with spacing
+            if passengers_count > 0:
+                max_squares_to_show = 5
+                squares_to_show = min(passengers_count, max_squares_to_show)
+                
+                # Calculate positions for squares
+                square_size = 0.15
+                spacing = 0.05
+                total_width = squares_to_show * square_size + (squares_to_show - 1) * spacing
+                start_x = timestamp - total_width / 2
+                square_y = box_bottom + box_height * 0.7
+                
+                # Draw squares
+                for i in range(squares_to_show):
+                    square_x = start_x + i * (square_size + spacing)
+                    plt.scatter(square_x, square_y, 
+                              s=200, marker='s', c=square_color, 
+                              alpha=0.8, edgecolors='black', linewidth=0.5)
+                
+                # Add "+X" text if more passengers than squares shown
+                if passengers_count > max_squares_to_show:
+                    extra_count = passengers_count - max_squares_to_show
+                    plus_x = start_x + squares_to_show * (square_size + spacing)
+                    plt.text(plus_x, square_y, f'+{extra_count}', 
+                           fontsize=8, ha='left', va='center', 
+                           color=square_color, fontweight='bold')
+            
+            # Add passenger count and percentage text
+            count_text = f'{passengers_count}/{max_capacity}'
+            percent_text = f'{occupancy_rate*100:.0f}%'
+            
+            # Position text in bottom right of box
+            text_x = timestamp + box_width/2 - 0.1
+            text_y_count = box_bottom + box_height * 0.3
+            text_y_percent = box_bottom + box_height * 0.1
+            
+            plt.text(text_x, text_y_count, count_text, 
+                   fontsize=8, ha='right', va='center', 
+                   color='black', fontweight='bold')
+            plt.text(text_x, text_y_percent, percent_text, 
+                   fontsize=7, ha='right', va='center', 
+                   color='black')
+            
+            plotted_positions.add(position_key)
+    
+    def _get_floor_at_time(self, elevator_name, timestamp):
+        """Get elevator floor at specific timestamp"""
+        if elevator_name not in self.elevator_trajectories:
+            return None
+        
+        trajectory = self.elevator_trajectories[elevator_name]
+        if not trajectory:
+            return None
+        
+        # Find the floor at the given timestamp
+        sorted_trajectory = sorted(trajectory, key=lambda x: x[0])
+        
+        # If timestamp is before first point, return first floor
+        if timestamp <= sorted_trajectory[0][0]:
+            return sorted_trajectory[0][1]
+        
+        # If timestamp is after last point, return last floor
+        if timestamp >= sorted_trajectory[-1][0]:
+            return sorted_trajectory[-1][1]
+        
+        # Find the appropriate floor using step function behavior
+        for i in range(len(sorted_trajectory) - 1):
+            if sorted_trajectory[i][0] <= timestamp < sorted_trajectory[i + 1][0]:
+                return sorted_trajectory[i][1]
+        
+        return sorted_trajectory[-1][1]
+    
+    def _update_waiting_passengers(self, floor, direction, change):
+        """Update waiting passengers count for a specific floor and direction"""
+        floor_key = str(floor)
+        
+        if floor_key not in self.waiting_passengers:
+            self.waiting_passengers[floor_key] = {'UP': 0, 'DOWN': 0}
+        
+        # Update count (ensure it doesn't go below 0)
+        current_count = self.waiting_passengers[floor_key].get(direction, 0)
+        new_count = max(0, current_count + change)
+        self.waiting_passengers[floor_key][direction] = new_count
+        
+        # Send updated waiting passengers data to WebSocket
+        self._send_to_websocket({
+            'type': 'waiting_passengers_update',
+            'data': self.waiting_passengers
+        })
