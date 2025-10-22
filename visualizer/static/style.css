@@ -259,6 +259,11 @@ section h2 {
     background: linear-gradient(135deg, #d62728, #b71c1c); /* Red gradient */
 }
 
+/* Elevator Hall specific styles */
+.hall-card .hall-header {
+    background: linear-gradient(135deg, #6b7280, #4b5563) !important; /* Gray gradient */
+}
+
 .elevator-header h3 {
     font-size: 1rem;
     font-weight: 600;
@@ -295,19 +300,24 @@ section h2 {
     display: flex;
     flex-direction: column;
     gap: 6px; /* Gap between shaft and passenger box */
-    align-items: center;
+    align-items: flex-start;
+}
+
+/* Ensure passenger box aligns with shaft */
+.elevator-visual .passenger-box {
+    margin-left: 30px; /* Offset to align with shaft (24px labels + 6px gap) */
 }
 
 .elevator-shaft-container {
     display: flex;
     gap: 6px; /* Gap between labels, shaft, and waiting area */
-    align-items: flex-end;
+    align-items: stretch; /* Ensure all children have the same height */
 }
 
 .floor-labels {
     position: relative; /* For absolute positioning of labels */
     height: 150px; /* Default height, will be overridden by JavaScript */
-    padding: 5px 0;
+    padding: 0; /* No padding to ensure exact alignment */
     flex: 0 0 24px; /* Fixed width for labels */
 }
 
@@ -529,7 +539,7 @@ section h2 {
     justify-content: space-between;
     background-color: var(--card-bg);
     transition: all 0.3s ease;
-    margin-left: 30px; /* Offset to align with shaft (24px labels + 6px gap) */
+    /* No margin - will align with shaft using parent positioning */
 }
 
 /* Occupancy-based colors */
@@ -621,6 +631,24 @@ section h2 {
     flex: 0 0 50px; /* Fixed width */
 }
 
+/* Hall Shaft Styles (for Elevator Hall panel - same as elevator shaft) */
+.hall-shaft {
+    width: 100px; /* Wider than regular elevator shaft for better visibility */
+    height: 150px; /* Default height, will be overridden by JavaScript */
+    /* Zebra stripe background for floor visibility (same as elevator shaft) */
+    background: repeating-linear-gradient(
+        to top,
+        #e8eaed 0%,      /* Lighter darker stripe for hall */
+        #e8eaed 10%,     /* One floor height (10% of total) */
+        #f3f4f6 10%,     /* Lighter stripe */
+        #f3f4f6 20%      /* One floor height (10% of total) */
+    );
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    position: relative;
+    overflow: visible; /* Allow waiting passengers to be visible */
+}
+
 .waiting-floor {
     position: absolute;
     left: 0;
@@ -628,9 +656,16 @@ section h2 {
     display: flex;
     gap: 8px; /* Gap between UP and DOWN displays */
     align-items: center;
+    justify-content: flex-start;
     font-size: 11px;
     line-height: 1;
     margin-bottom: -6px; /* Center vertically on floor line */
+}
+
+/* Waiting floor in hall shaft - centered layout */
+.hall-shaft .waiting-floor {
+    justify-content: center; /* Center in the wider hall shaft */
+    padding: 0 8px;
 }
 
 .waiting-up {

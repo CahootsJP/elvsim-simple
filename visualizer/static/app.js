@@ -49,6 +49,14 @@ class ElevatorVisualizer {
     }
     
     initializePlaceholderElevators() {
+        // Create Elevator Hall panel first (always on the left)
+        let hallElement = document.getElementById('elevator-hall');
+        if (!hallElement) {
+            hallElement = this.createElevatorHallElement();
+            this.elevatorContainer.appendChild(hallElement);
+        }
+        this.renderElevatorHall(hallElement, 10); // 10 floors by default
+        
         // Create placeholder elevators to show from the start
         const placeholderElevators = ['Elevator_1', 'Elevator_2'];
         
@@ -76,6 +84,110 @@ class ElevatorVisualizer {
             this.renderElevator(elevatorElement, placeholderData);
             this.elevators.set(elevatorName, placeholderData);
         });
+    }
+    
+    createElevatorHallElement() {
+        const div = document.createElement('div');
+        div.id = 'elevator-hall';
+        div.className = 'elevator-card hall-card';
+        
+        div.innerHTML = `
+            <div class="elevator-header hall-header">
+                <h3>Elevator Hall</h3>
+            </div>
+            <div class="elevator-body">
+                <div class="elevator-visual">
+                    <div class="elevator-shaft-container">
+                        <div class="floor-labels"></div>
+                        <div class="elevator-shaft hall-shaft">
+                            <!-- Waiting passengers will be positioned here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        return div;
+    }
+    
+    renderElevatorHall(element, numFloors) {
+        const hallShaft = element.querySelector('.hall-shaft');
+        const floorLabelsContainer = element.querySelector('.floor-labels');
+        const shaftContainer = element.querySelector('.elevator-shaft-container');
+        
+        if (!hallShaft || !floorLabelsContainer || !numFloors) {
+            return;
+        }
+        
+        // Set height to match elevator shafts (exact same calculation)
+        const carHeight = 30; // px (must match CSS .elevator-car height)
+        const shaftHeight = carHeight * (numFloors + 1);
+        hallShaft.style.height = `${shaftHeight}px`;
+        floorLabelsContainer.style.height = `${shaftHeight}px`;
+        if (shaftContainer) {
+            shaftContainer.style.height = `${shaftHeight}px`;
+        }
+        
+        // Generate floor labels if not already present (exact same as elevator panels)
+        if (floorLabelsContainer.children.length === 0) {
+            for (let f = 1; f <= numFloors; f++) {
+                const label = document.createElement('div');
+                label.className = 'floor-label';
+                label.textContent = `${f}F`;
+                
+                // Position each label at the bottom of its floor
+                const bottomPercent = ((f - 1) / numFloors) * 100;
+                label.style.bottom = `${bottomPercent}%`;
+                
+                floorLabelsContainer.appendChild(label);
+            }
+        }
+        
+        // Render waiting passengers
+        this.renderHallWaitingPassengers(hallShaft, numFloors);
+    }
+    
+    renderHallWaitingPassengers(waitingArea, numFloors) {
+        if (!waitingArea || !numFloors) {
+            return;
+        }
+        
+        // Clear existing waiting passenger displays
+        waitingArea.innerHTML = '';
+        
+        // Render waiting passengers for each floor
+        for (let floor = 1; floor <= numFloors; floor++) {
+            const floorKey = floor.toString();
+            const waitingData = this.waitingPassengers[floorKey];
+            
+            if (waitingData && (waitingData.UP > 0 || waitingData.DOWN > 0)) {
+                const floorElement = document.createElement('div');
+                floorElement.className = 'waiting-floor';
+                
+                // Calculate position at the CENTER of each floor (same as elevator panels)
+                const floorHeight = 100 / numFloors;
+                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight / 2);
+                floorElement.style.bottom = `${bottomPercent}%`;
+                
+                // Generate UP passengers display
+                if (waitingData.UP > 0) {
+                    const upElement = document.createElement('span');
+                    upElement.className = 'waiting-up';
+                    upElement.innerHTML = this.generateWaitingDisplay(waitingData.UP, '↑');
+                    floorElement.appendChild(upElement);
+                }
+                
+                // Generate DOWN passengers display
+                if (waitingData.DOWN > 0) {
+                    const downElement = document.createElement('span');
+                    downElement.className = 'waiting-down';
+                    downElement.innerHTML = this.generateWaitingDisplay(waitingData.DOWN, '↓');
+                    floorElement.appendChild(downElement);
+                }
+                
+                waitingArea.appendChild(floorElement);
+            }
+        }
     }
     
     connectWebSocket() {
@@ -424,7 +536,19 @@ class ElevatorVisualizer {
     updateWaitingPassengers(waitingData) {
         this.waitingPassengers = waitingData;
         
-        // Update all elevator displays
+        // Update Elevator Hall panel
+        const hallElement = document.getElementById('elevator-hall');
+        if (hallElement) {
+            const hallShaft = hallElement.querySelector('.hall-shaft');
+            if (hallShaft) {
+                // Get number of floors from any elevator (they should all be the same)
+                const firstElevator = this.elevators.values().next().value;
+                const numFloors = firstElevator ? firstElevator.num_floors : 10;
+                this.renderHallWaitingPassengers(hallShaft, numFloors);
+            }
+        }
+        
+        // Clear waiting areas from all elevator displays
         this.elevators.forEach((elevatorData, elevatorName) => {
             const elevatorElement = document.getElementById(`elevator-${elevatorName}`);
             if (elevatorElement) {
@@ -435,56 +559,11 @@ class ElevatorVisualizer {
     }
     
     renderWaitingPassengers(elevatorElement, numFloors) {
+        // Waiting passengers are now shown in the Elevator Hall panel
+        // Clear the waiting area in elevator panels
         const waitingArea = elevatorElement.querySelector('.waiting-passengers');
-        if (!waitingArea || !numFloors) {
-            return;
-        }
-        
-        // Get elevator name from element ID (format: elevator-Elevator_1)
-        const elevatorId = elevatorElement.id;
-        const elevatorName = elevatorId.replace('elevator-', '');
-        
-        // Only show waiting passengers on Elevator_1 to avoid duplication
-        if (elevatorName !== 'Elevator_1') {
+        if (waitingArea) {
             waitingArea.innerHTML = '';
-            return;
-        }
-        
-        // Clear existing waiting passenger displays
-        waitingArea.innerHTML = '';
-        
-        // Render waiting passengers for each floor
-        for (let floor = 1; floor <= numFloors; floor++) {
-            const floorKey = floor.toString();
-            const waitingData = this.waitingPassengers[floorKey];
-            
-            if (waitingData && (waitingData.UP > 0 || waitingData.DOWN > 0)) {
-                const floorElement = document.createElement('div');
-                floorElement.className = 'waiting-floor';
-                
-                // Calculate position (same logic as floor labels)
-                const floorHeight = 100 / numFloors;
-                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight / 2);
-                floorElement.style.bottom = `${bottomPercent}%`;
-                
-                // Generate UP passengers display
-                if (waitingData.UP > 0) {
-                    const upElement = document.createElement('span');
-                    upElement.className = 'waiting-up';
-                    upElement.innerHTML = this.generateWaitingDisplay(waitingData.UP, '↑');
-                    floorElement.appendChild(upElement);
-                }
-                
-                // Generate DOWN passengers display
-                if (waitingData.DOWN > 0) {
-                    const downElement = document.createElement('span');
-                    downElement.className = 'waiting-down';
-                    downElement.innerHTML = this.generateWaitingDisplay(waitingData.DOWN, '↓');
-                    floorElement.appendChild(downElement);
-                }
-                
-                waitingArea.appendChild(floorElement);
-            }
         }
     }
     
