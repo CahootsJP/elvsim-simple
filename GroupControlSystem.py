@@ -48,16 +48,72 @@ class GroupControlSystem(Entity):
             message = yield self.broker.get(hall_call_topic)
             print(f"{self.env.now:.2f} [GCS] Received hall call: {message}")
 
-            # TODO: Look at self.elevator_statuses to select the optimal elevator
-            # For now, simply assign to the first elevator
+            # Select the best elevator for this hall call
             if self.elevators:
-                first_elevator_name = list(self.elevators.keys())[0]
+                selected_elevator = self._select_best_elevator(message)
                 
                 task_message = {
                     "task_type": "ASSIGN_HALL_CALL",
                     "details": message
                 }
                 
-                task_topic = f"elevator/{first_elevator_name}/task"
+                task_topic = f"elevator/{selected_elevator}/task"
                 self.broker.put(task_topic, task_message)
+                print(f"{self.env.now:.2f} [GCS] Assigned hall call to {selected_elevator}")
+                
+                # Broadcast assignment information for visualization
+                assignment_message = {
+                    "timestamp": self.env.now,
+                    "floor": message['floor'],
+                    "direction": message['direction'],
+                    "assigned_elevator": selected_elevator
+                }
+                self.broker.put('gcs/hall_call_assignment', assignment_message)
+    
+    def _select_best_elevator(self, hall_call):
+        """
+        Select the best elevator for a hall call using simple nearest-car algorithm
+        """
+        call_floor = hall_call['floor']
+        call_direction = hall_call['direction']
+        
+        best_elevator = None
+        best_score = float('inf')
+        
+        for elev_name, status in self.elevator_statuses.items():
+            if not status:
+                continue
+            
+            current_floor = status.get('physical_floor', 1)
+            state = status.get('state', 'IDLE')
+            passengers = status.get('passengers', 0)
+            max_capacity = status.get('max_capacity', 10)
+            
+            # Calculate distance-based score
+            distance = abs(call_floor - current_floor)
+            
+            # Penalty if elevator is full
+            if passengers >= max_capacity:
+                distance += 100  # Large penalty
+            
+            # Bonus if elevator is IDLE
+            if state == 'IDLE':
+                distance -= 2  # Small bonus
+            
+            # Bonus if elevator is moving in same direction towards the call
+            if state == 'UP' and call_direction == 'UP' and current_floor < call_floor:
+                distance -= 1  # On the way bonus
+            elif state == 'DOWN' and call_direction == 'DOWN' and current_floor > call_floor:
+                distance -= 1  # On the way bonus
+            
+            # Select elevator with lowest score (closest)
+            if distance < best_score:
+                best_score = distance
+                best_elevator = elev_name
+        
+        # Fallback to first elevator if no status available
+        if best_elevator is None:
+            best_elevator = list(self.elevators.keys())[0]
+        
+        return best_elevator
 

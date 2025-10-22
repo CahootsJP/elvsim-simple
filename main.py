@@ -49,12 +49,15 @@ def run_simulation():
         for floor in range(NUM_FLOORS + 1)
     ]
 
+    # Create Elevator 1
     door1 = Door(env, "Elevator_1_Door")
     elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10)
-    
-    # Use practical table method by default (explicit setting not required)
-    
     gcs.register_elevator(elevator1)
+    
+    # Create Elevator 2
+    door2 = Door(env, "Elevator_2_Door")
+    elevator2 = Elevator(env, "Elevator_2", broker, NUM_FLOORS, floor_queues, door=door2, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10)
+    gcs.register_elevator(elevator2)
 
     # --- Process startup ---
     # For normal testing

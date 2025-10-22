@@ -95,7 +95,7 @@ def run_simulation(server):
     )
     physics_engine.precompute_flight_profiles()
     
-    # Create elevator
+    # Create Elevator 1
     door_1 = Door(env, "Door_1", open_time=1.5, close_time=1.5)
     
     flight_profiles_elevator_1 = {
@@ -119,9 +119,24 @@ def run_simulation(server):
         hall_buttons=hall_buttons,
         max_capacity=50  # Increased capacity to prevent deadlock
     )
-    
-    # Register elevator with Group Control System
     gcs.register_elevator(elevator_1)
+    
+    # Create Elevator 2
+    door_2 = Door(env, "Door_2", open_time=1.5, close_time=1.5)
+    
+    elevator_2 = Elevator(
+        env, 
+        "Elevator_2", 
+        broker, 
+        NUM_FLOORS, 
+        floor_queues, 
+        door_2, 
+        flight_profiles_elevator_1,  # Use same flight profiles
+        physics_engine=physics_engine,
+        hall_buttons=hall_buttons,
+        max_capacity=50  # Increased capacity to prevent deadlock
+    )
+    gcs.register_elevator(elevator_2)
     
     # Note: elevator_1.run() is already started automatically by Entity.__init__
     

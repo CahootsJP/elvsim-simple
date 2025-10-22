@@ -135,6 +135,27 @@ class Statistics:
                         'data': self.current_elevator_states[elevator_name]
                     })
             
+            # Record hall call assignments (for color-coded visualization)
+            if topic == 'gcs/hall_call_assignment':
+                timestamp = message.get('timestamp')
+                floor = message.get('floor')
+                direction = message.get('direction')
+                assigned_elevator = message.get('assigned_elevator')
+                
+                if timestamp is not None and floor is not None and direction is not None and assigned_elevator is not None:
+                    # Store assignment with elevator-specific key
+                    if assigned_elevator not in self.hall_calls_history:
+                        self.hall_calls_history[assigned_elevator] = []
+                    
+                    assignment_data = {
+                        'timestamp': timestamp,
+                        'floor': floor,
+                        'direction': direction,
+                        'assigned_elevator': assigned_elevator,
+                        'is_assignment': True
+                    }
+                    self.hall_calls_history[assigned_elevator].append(assignment_data)
+            
             # Record new hall_call registrations (for visualization)
             new_hall_call_match = re.search(r'hall_button/floor_(.*?)/new_hall_call', topic)
             if new_hall_call_match:
@@ -207,20 +228,21 @@ class Statistics:
                 timestamp = message.get('timestamp')
                 direction = message.get('direction')
                 action = message.get('action')
+                serviced_by = message.get('serviced_by')  # Get elevator name that serviced this call
                 
-                if timestamp is not None and direction is not None and action == 'OFF':
-                    # Store hall call OFF events under 'ALL' key (same as ON events)
-                    elevator_name = 'ALL'
-                    if elevator_name not in self.hall_call_off_history:
-                        self.hall_call_off_history[elevator_name] = []
+                if timestamp is not None and direction is not None and action == 'OFF' and serviced_by is not None:
+                    # Store hall call OFF events under the elevator that serviced it
+                    if serviced_by not in self.hall_call_off_history:
+                        self.hall_call_off_history[serviced_by] = []
                     
                     hall_call_off_data = {
                         'timestamp': timestamp,
                         'floor': floor,
                         'direction': direction,
-                        'action': 'OFF'
+                        'action': 'OFF',
+                        'serviced_by': serviced_by
                     }
-                    self.hall_call_off_history[elevator_name].append(hall_call_off_data)
+                    self.hall_call_off_history[serviced_by].append(hall_call_off_data)
                     
                     # Note: Waiting passengers are now removed individually when each passenger boards
                     # (see 'passenger/boarding' event handler above)
@@ -299,18 +321,43 @@ class Statistics:
                         }
                     })
 
-    def plot_trajectory_diagram(self):
-        """Draw trajectory diagram after simulation ends"""
+    def _get_elevator_color(self, elevator_name):
+        """Get color for a specific elevator"""
+        # Define colors for different elevators
+        elevator_colors = {
+            'Elevator_1': '#1f77b4',  # Sky blue
+            'Elevator_2': '#ff7f0e',  # Orange
+            'Elevator_3': '#2ca02c',  # Green
+            'Elevator_4': '#d62728',  # Red
+            'Elevator_5': '#9467bd',  # Purple
+            'Elevator_6': '#8c564b',  # Brown
+        }
+        return elevator_colors.get(elevator_name, '#1f77b4')  # Default to sky blue
+    
+    def plot_trajectory_diagram(self, show_passenger_boxes=False):
+        """Draw trajectory diagram after simulation ends
+        
+        Args:
+            show_passenger_boxes: If True, show passenger occupancy boxes (can be cluttered with multiple elevators)
+        """
         print("\n--- Plotting: Elevator Trajectory Diagram ---")
         plt.figure(figsize=(14, 8))
 
-        for name, trajectory in self.elevator_trajectories.items():
-            if not trajectory: continue
+        # Define colors for different elevators
+        elevator_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+        elevator_names = sorted(self.elevator_trajectories.keys())
+        
+        for idx, name in enumerate(elevator_names):
+            trajectory = self.elevator_trajectories[name]
+            if not trajectory:
+                continue
             
             sorted_trajectory = sorted(trajectory, key=lambda x: x[0])
             times, floors = zip(*sorted_trajectory)
             
-            plt.step(times, floors, where='post', label=name)
+            # Use distinct color and wider line for each elevator
+            color = elevator_colors[idx % len(elevator_colors)]
+            plt.step(times, floors, where='post', label=name, linewidth=2.5, color=color, alpha=0.8)
             
             # Draw hall_calls arrows
             self._plot_hall_calls_arrows(name)
@@ -327,8 +374,9 @@ class Statistics:
             # Draw door events
             self._plot_door_events(name)
             
-            # Draw passenger visualization boxes
-            self._plot_passenger_boxes(name)
+            # Draw passenger visualization boxes (optional, disabled by default for clarity)
+            if show_passenger_boxes:
+                self._plot_passenger_boxes(name)
 
         plt.title("Elevator Trajectory Diagram (Travel Diagram, Advanced Position)")
         plt.xlabel("Time (s)")
@@ -341,21 +389,38 @@ class Statistics:
             max_floor = int(max(all_floors))
             plt.yticks(range(min_floor, max_floor + 2))
 
-        #plt.legend()
+        plt.legend(loc='upper right', fontsize=10)
+        
+        # Save to file
+        output_filename = 'elevator_trajectory_diagram.png'
+        plt.savefig(output_filename, dpi=150, bbox_inches='tight')
+        print(f"Trajectory diagram saved to: {output_filename}")
+        
         plt.show()
     
     def _plot_hall_calls_arrows(self, elevator_name):
-        """Draw only new hall_call registrations with arrows"""
-        # New registration data is stored under 'ALL' key
-        if 'ALL' not in self.hall_calls_history:
+        """Draw hall_call assignments with arrows (color-coded by assigned elevator)"""
+        # Assignment data is stored under each elevator's key
+        if elevator_name not in self.hall_calls_history:
             return
+        
+        # Get elevator-specific color
+        elevator_color = self._get_elevator_color(elevator_name)
+        
+        # Determine lighter background color based on elevator color
+        if elevator_name == 'Elevator_1':
+            bg_color = 'lightblue'  # Light blue for sky blue
+        elif elevator_name == 'Elevator_2':
+            bg_color = 'navajowhite'  # Light orange
+        else:
+            bg_color = 'lightgray'
         
         # Track already drawn (timestamp, floor, direction) combinations
         plotted_positions = set()
         
-        for hall_call_data in self.hall_calls_history['ALL']:
-            # Process only data with new registration flag
-            if not hall_call_data.get('is_new_registration', False):
+        for hall_call_data in self.hall_calls_history[elevator_name]:
+            # Process only assignment data
+            if not hall_call_data.get('is_assignment', False):
                 continue
                 
             timestamp = hall_call_data['timestamp']
@@ -366,17 +431,17 @@ class Statistics:
             
             if position_key not in plotted_positions:
                 if direction == 'UP':
-                    # Upward arrow (green)
+                    # Upward arrow (elevator-specific color)
                     plt.annotate('↑', (timestamp, floor), 
-                               fontsize=12, color='green', fontweight='bold',
+                               fontsize=12, color=elevator_color, fontweight='bold',
                                ha='center', va='center',
-                               bbox=dict(boxstyle='round,pad=0.2', facecolor='lightgreen', alpha=0.7))
+                               bbox=dict(boxstyle='round,pad=0.2', facecolor=bg_color, alpha=0.7))
                 elif direction == 'DOWN':
-                    # Downward arrow (red)
+                    # Downward arrow (elevator-specific color)
                     plt.annotate('↓', (timestamp, floor), 
-                               fontsize=12, color='red', fontweight='bold',
+                               fontsize=12, color=elevator_color, fontweight='bold',
                                ha='center', va='center',
-                               bbox=dict(boxstyle='round,pad=0.2', facecolor='lightcoral', alpha=0.7))
+                               bbox=dict(boxstyle='round,pad=0.2', facecolor=bg_color, alpha=0.7))
                 
                 plotted_positions.add(position_key)
     
@@ -385,6 +450,9 @@ class Statistics:
         if elevator_name not in self.car_calls_history:
             return
         
+        # Get elevator-specific color
+        elevator_color = self._get_elevator_color(elevator_name)
+        
         # Track already drawn (timestamp, floor) combinations
         plotted_positions = set()
         
@@ -392,31 +460,37 @@ class Statistics:
             timestamp = car_call_data['timestamp']
             car_calls = car_call_data['car_calls']
             
-            # Display car_calls with circles (blue)
+            # Display car_calls with circles (elevator-specific color)
             for floor in car_calls:
                 position_key = (round(timestamp, 2), floor)  # Round time for duplicate detection
                 
                 if position_key not in plotted_positions:
                     plt.scatter(timestamp, floor, 
-                              s=80, c='blue', marker='o', alpha=0.7, 
-                              edgecolors='darkblue', linewidth=1.5,
-                              label='Car Calls' if not hasattr(self, '_car_calls_legend_added') else "")
+                              s=80, c=elevator_color, marker='o', alpha=0.7, 
+                              edgecolors=elevator_color, linewidth=1.5)
                     plotted_positions.add(position_key)
-        
-        # Prevent duplicate legends
-        if not hasattr(self, '_car_calls_legend_added'):
-            self._car_calls_legend_added = True
     
     def _plot_hall_calls_off_events(self, elevator_name):
-        """Draw hall call OFF events with X marks"""
-        # OFF events are stored under 'ALL' key
-        if 'ALL' not in self.hall_call_off_history:
+        """Draw hall call OFF events with X marks (color-coded by servicing elevator)"""
+        # OFF events are now stored under each elevator's key
+        if elevator_name not in self.hall_call_off_history:
             return
+        
+        # Get elevator-specific color
+        elevator_color = self._get_elevator_color(elevator_name)
+        
+        # Determine lighter background color based on elevator color
+        if elevator_name == 'Elevator_1':
+            bg_color = 'lightblue'  # Light blue for sky blue
+        elif elevator_name == 'Elevator_2':
+            bg_color = 'navajowhite'  # Light orange
+        else:
+            bg_color = 'lightgray'
         
         # Track already drawn (timestamp, floor, direction) combinations
         plotted_positions = set()
         
-        for hall_call_off_data in self.hall_call_off_history['ALL']:
+        for hall_call_off_data in self.hall_call_off_history[elevator_name]:
             timestamp = hall_call_off_data['timestamp']
             floor = hall_call_off_data['floor']
             direction = hall_call_off_data['direction']
@@ -424,18 +498,11 @@ class Statistics:
             position_key = (round(timestamp, 2), floor, direction)  # Round time for duplicate detection
             
             if position_key not in plotted_positions:
-                if direction == 'UP':
-                    # Upward OFF mark (dark green X)
-                    plt.annotate('✕', (timestamp, floor), 
-                               fontsize=10, color='darkgreen', fontweight='bold',
-                               ha='center', va='center',
-                               bbox=dict(boxstyle='round,pad=0.1', facecolor='lightgreen', alpha=0.5))
-                elif direction == 'DOWN':
-                    # Downward OFF mark (dark red X)
-                    plt.annotate('✕', (timestamp, floor), 
-                               fontsize=10, color='darkred', fontweight='bold',
-                               ha='center', va='center',
-                               bbox=dict(boxstyle='round,pad=0.1', facecolor='lightcoral', alpha=0.5))
+                # OFF mark with elevator-specific color
+                plt.annotate('✕', (timestamp, floor), 
+                           fontsize=10, color=elevator_color, fontweight='bold',
+                           ha='center', va='center',
+                           bbox=dict(boxstyle='round,pad=0.1', facecolor=bg_color, alpha=0.5))
                 
                 plotted_positions.add(position_key)
     
@@ -443,6 +510,9 @@ class Statistics:
         """Draw car call OFF events with X marks"""
         if elevator_name not in self.car_call_off_history:
             return
+        
+        # Get elevator-specific color (darker version)
+        elevator_color = self._get_elevator_color(elevator_name)
         
         # Track already drawn (timestamp, floor) combinations
         plotted_positions = set()
@@ -454,16 +524,11 @@ class Statistics:
             position_key = (round(timestamp, 2), destination)  # Round time for duplicate detection
             
             if position_key not in plotted_positions:
-                # Car call OFF mark (dark blue X)
+                # Car call OFF mark (elevator-specific color X)
                 plt.scatter(timestamp, destination, 
-                          s=60, c='darkblue', marker='x', alpha=0.8, 
-                          linewidth=2,
-                          label='Car Calls OFF' if not hasattr(self, '_car_calls_off_legend_added') else "")
+                          s=60, c=elevator_color, marker='x', alpha=0.8, 
+                          linewidth=2)
                 plotted_positions.add(position_key)
-        
-        # Prevent duplicate legends
-        if not hasattr(self, '_car_calls_off_legend_added'):
-            self._car_calls_off_legend_added = True
 
     def _plot_door_events(self, elevator_name):
         """Draw door events with different markers for each event type"""

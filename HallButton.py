@@ -58,8 +58,12 @@ class HallButton:
                 print(f"{self.env.now:.2f} [HallButton] Button at floor {self.floor} ({self.direction}) already lit by someone else. {passenger_name} sees the light.")
             return False  # Already registered
 
-    def serve(self):
-        """Process when call is served (turn off light, etc.)"""
+    def serve(self, elevator_name=None):
+        """Process when call is served (turn off light, etc.)
+        
+        Args:
+            elevator_name: Name of the elevator that serviced this call (for visualization)
+        """
         if self.is_pressed:
             self.is_pressed = False
             print(f"{self.env.now:.2f} [HallButton] Call served at floor {self.floor} ({self.direction}). Light OFF.")
@@ -69,7 +73,8 @@ class HallButton:
                 "timestamp": self.env.now,
                 "floor": self.floor,
                 "direction": self.direction,
-                "action": "OFF"
+                "action": "OFF",
+                "serviced_by": elevator_name  # Add elevator name for color-coding
             }
             hall_call_off_topic = f"hall_button/floor_{self.floor}/call_off"
             self.broker.put(hall_call_off_topic, hall_call_off_message)

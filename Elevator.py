@@ -296,15 +296,8 @@ class Elevator(Entity):
             
             # Final braking phase
             if brake_time > 0.05:
-                # Pre-determine next direction at start of braking
-                predicted_direction = self._predict_next_direction_at_arrival(destination_floor)
-                if predicted_direction != self.state and predicted_direction != "IDLE":
-                    print(f"{self.env.now:.2f} [{self.name}] Direction will change to {predicted_direction} during braking approach to floor {destination_floor}")
-                    self._set_state(predicted_direction)
-                elif predicted_direction == "IDLE" and self.state != "IDLE":
-                    print(f"{self.env.now:.2f} [{self.name}] Will become IDLE after arriving at floor {destination_floor}")
-                    # IDLE change is done after arrival (as before)
-                
+                # Do NOT change direction during braking - wait until after arrival
+                # Direction change will be handled by _decide_next_direction() after boarding/alighting
                 yield self.env.timeout(brake_time)
                 
                 # Final interruption check
@@ -334,15 +327,8 @@ class Elevator(Entity):
                     print(f"{self.env.now:.2f} [{self.name}] Movement cancelled due to destination change.")
                     return
                 
-                # Pre-determine direction at timing equivalent to braking start
-                if i == len(profile['timeline']) - 2:  # Second to last event (equivalent to braking start)
-                    predicted_direction = self._predict_next_direction_at_arrival(destination_floor)
-                    if predicted_direction != self.state and predicted_direction != "IDLE":
-                        print(f"{self.env.now:.2f} [{self.name}] Direction will change to {predicted_direction} during approach to floor {destination_floor}")
-                        self._set_state(predicted_direction)
-                    elif predicted_direction == "IDLE" and self.state != "IDLE":
-                        print(f"{self.env.now:.2f} [{self.name}] Will become IDLE after arriving at floor {destination_floor}")
-                        # IDLE change is done after arrival (as before)
+                # Do NOT change direction during movement - wait until after arrival
+                # Direction change will be handled by _decide_next_direction() after boarding/alighting
                     
                 yield self.env.timeout(event['time_delta'])
                 
@@ -455,7 +441,7 @@ class Elevator(Entity):
         if serviced_directions and self.hall_buttons:
             for direction in serviced_directions:
                 button = self.hall_buttons[self.current_floor][direction]
-                button.serve()  # Turn off button
+                button.serve(elevator_name=self.name)  # Turn off button with elevator name
         
         # Send status if car_calls changed
         if car_calls_changed:
@@ -533,6 +519,33 @@ class Elevator(Entity):
 
     def _predict_next_direction_at_arrival(self, arrival_floor):
         """Predict next direction at arrival floor in advance"""
+        # IMPORTANT: Check if we need to stop at arrival floor first
+        # If we need to stop, we should NOT change direction during braking
+        will_stop_at_arrival = False
+        
+        if self.state == "UP":
+            if arrival_floor in self.car_calls:
+                will_stop_at_arrival = True
+            elif arrival_floor in self.hall_calls_up:
+                will_stop_at_arrival = True
+            else:
+                all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+                if not self._has_any_up_calls_above() and all_calls and arrival_floor == max(all_calls):
+                    will_stop_at_arrival = True
+        elif self.state == "DOWN":
+            if arrival_floor in self.car_calls:
+                will_stop_at_arrival = True
+            elif arrival_floor in self.hall_calls_down:
+                will_stop_at_arrival = True
+            else:
+                all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+                if not self._has_any_down_calls_below() and all_calls and arrival_floor == min(all_calls):
+                    will_stop_at_arrival = True
+        
+        # If we won't stop at arrival floor, don't change direction prematurely
+        if not will_stop_at_arrival:
+            return self.state
+        
         # Simulate post-arrival situation (assuming service completion at arrival floor)
         future_car_calls = self.car_calls.copy()
         future_hall_calls_up = self.hall_calls_up.copy()

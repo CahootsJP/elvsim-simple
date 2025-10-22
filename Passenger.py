@@ -58,7 +58,10 @@ class Passenger(Entity):
             # Check which event fired
             if board_get in results:
                 # Boarding permission received
-                completion_event = results[board_get]
+                permission_data = results[board_get]
+                completion_event = permission_data['completion_event']
+                elevator_name = permission_data['elevator_name']
+                
                 print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
                 
                 # Publish passenger boarding event
@@ -73,7 +76,7 @@ class Passenger(Entity):
 
                 # 5. Board the elevator and press destination button
                 print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
-                car_call_topic = "elevator/Elevator_1/car_call"
+                car_call_topic = f"elevator/{elevator_name}/car_call"
                 self.broker.put(car_call_topic, {'destination': self.destination_floor, 'passenger_name': self.name})
 
                 # 6. Report to Door that "boarding is complete"
@@ -89,7 +92,8 @@ class Passenger(Entity):
                 print(f"{self.env.now:.2f} [{self.name}] Button OFF detected. Will retry boarding.")
 
         # 7. Wait for "please exit" permission from Door at destination
-        completion_event = yield self.exit_permission_event.get()
+        permission_data = yield self.exit_permission_event.get()
+        completion_event = permission_data['completion_event']
 
         # 8. Exit the elevator at own pace
         print(f"{self.env.now:.2f} [{self.name}] Exiting elevator.")

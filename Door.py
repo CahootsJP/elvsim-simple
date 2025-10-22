@@ -100,7 +100,12 @@ class Door(Entity):
         # 2. Let passengers exit one by one at their own pace
         for p in passengers_to_exit:
             exit_permission_event = self.env.event()
-            yield p.exit_permission_event.put(exit_permission_event)
+            # Pass elevator name along with permission event (for consistency)
+            permission_data = {
+                'completion_event': exit_permission_event,
+                'elevator_name': self.elevator_name
+            }
+            yield p.exit_permission_event.put(permission_data)
             yield exit_permission_event
 
         # 3. Let passengers board one by one at their own pace (with capacity check)
@@ -123,7 +128,12 @@ class Door(Entity):
                 
                 passenger = yield queue.get()
                 board_permission_event = self.env.event()
-                yield passenger.board_permission_event.put(board_permission_event)
+                # Pass elevator name along with permission event
+                permission_data = {
+                    'completion_event': board_permission_event,
+                    'elevator_name': self.elevator_name
+                }
+                yield passenger.board_permission_event.put(permission_data)
                 yield board_permission_event
                 boarded_passengers.append(passenger)
 
