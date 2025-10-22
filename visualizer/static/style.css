@@ -210,16 +210,22 @@ section h2 {
 }
 
 .elevator-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-    gap: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    align-items: flex-start;
 }
 
 .elevator-card {
     border: 2px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: 8px;
     overflow: hidden;
     transition: all 0.3s;
+    flex: 0 1 auto;
+    min-width: 180px;
+    max-width: 200px;
+    width: 190px;
 }
 
 .elevator-card:hover {
@@ -234,6 +240,23 @@ section h2 {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+/* Elevator-specific header colors */
+#elevator-Elevator_1 .elevator-header {
+    background: linear-gradient(135deg, #1f77b4, #1565c0); /* Sky blue gradient */
+}
+
+#elevator-Elevator_2 .elevator-header {
+    background: linear-gradient(135deg, #ff7f0e, #e65100); /* Orange gradient */
+}
+
+#elevator-Elevator_3 .elevator-header {
+    background: linear-gradient(135deg, #2ca02c, #1b5e20); /* Green gradient */
+}
+
+#elevator-Elevator_4 .elevator-header {
+    background: linear-gradient(135deg, #d62728, #b71c1c); /* Red gradient */
 }
 
 .elevator-header h3 {
@@ -263,22 +286,21 @@ section h2 {
 }
 
 .elevator-body {
-    padding: 15px;
+    padding: 10px;
     display: flex;
-    gap: 15px;
+    justify-content: center;
 }
 
 .elevator-visual {
-    flex: 0 0 140px;
     display: flex;
     flex-direction: column;
-    gap: 10px; /* Gap between shaft and passenger box */
-    align-items: flex-start; /* Align to start to match shaft position */
+    gap: 6px; /* Gap between shaft and passenger box */
+    align-items: center;
 }
 
 .elevator-shaft-container {
     display: flex;
-    gap: 10px; /* Gap between labels, shaft, and waiting area */
+    gap: 6px; /* Gap between labels, shaft, and waiting area */
     align-items: flex-end;
 }
 
@@ -286,7 +308,7 @@ section h2 {
     position: relative; /* For absolute positioning of labels */
     height: 150px; /* Default height, will be overridden by JavaScript */
     padding: 5px 0;
-    flex: 0 0 30px; /* Fixed width for labels */
+    flex: 0 0 24px; /* Fixed width for labels */
 }
 
 .floor-label {
@@ -302,7 +324,7 @@ section h2 {
 }
 
 .elevator-shaft {
-    width: 90px; /* Expanded from 60px to 90px for hall call indicators */
+    width: 60px; /* Compact width for multi-elevator display */
     height: 150px; /* Default height, will be overridden by JavaScript */
     /* Zebra stripe background for floor visibility */
     background: repeating-linear-gradient(
@@ -319,18 +341,39 @@ section h2 {
 }
 
 .elevator-car {
-    width: 50px;
+    width: 60%; /* 60% of shaft width to avoid overlapping with call indicators */
     height: 30px;
     background: linear-gradient(135deg, #3b82f6, #2563eb);
     border: 2px solid #1d4ed8;
     border-radius: 4px;
     position: absolute;
     left: 50%; /* Center horizontally */
-    margin-left: -25px; /* Offset half the width (50px / 2) */
+    transform: translateX(-50%); /* Center using transform instead of margin */
     bottom: 0%;
     transition: bottom 0.5s ease-in-out;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     overflow: visible; /* Allow doors to be visible */
+}
+
+/* Elevator-specific car colors */
+#elevator-Elevator_1 .elevator-car {
+    background: linear-gradient(135deg, #1f77b4, #1565c0);
+    border-color: #0d47a1;
+}
+
+#elevator-Elevator_2 .elevator-car {
+    background: linear-gradient(135deg, #ff7f0e, #e65100);
+    border-color: #bf360c;
+}
+
+#elevator-Elevator_3 .elevator-car {
+    background: linear-gradient(135deg, #2ca02c, #1b5e20);
+    border-color: #0d5e0d;
+}
+
+#elevator-Elevator_4 .elevator-car {
+    background: linear-gradient(135deg, #d62728, #b71c1c);
+    border-color: #8b0000;
 }
 
 .elevator-car::after {
@@ -339,10 +382,10 @@ section h2 {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 20px;
+    width: 50%; /* Proportional to car width */
     height: 20px;
     background: rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
+    border-radius: 3px;
 }
 
 /* Door elements - Single line that splits into two */
@@ -476,17 +519,17 @@ section h2 {
 
 /* Passenger Box Styles */
 .passenger-box {
-    width: 90px; /* Same width as elevator shaft */
-    height: 60px;
+    width: 60px; /* Same width as elevator shaft */
+    height: 50px;
     border: 2px solid var(--border-color);
     border-radius: 8px;
-    padding: 8px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     background-color: var(--card-bg);
     transition: all 0.3s ease;
-    margin-left: 40px; /* Offset to align with shaft (30px labels + 10px gap) */
+    margin-left: 30px; /* Offset to align with shaft (24px labels + 6px gap) */
 }
 
 /* Occupancy-based colors */
@@ -572,10 +615,10 @@ section h2 {
 
 /* Waiting Passengers Styles */
 .waiting-passengers {
-    width: 120px; /* Space for waiting passengers display */
+    width: 50px; /* Compact space for waiting passengers display */
     height: 150px; /* Default height, will be overridden by JavaScript */
     position: relative;
-    flex: 0 0 120px; /* Fixed width */
+    flex: 0 0 50px; /* Fixed width */
 }
 
 .waiting-floor {
@@ -621,32 +664,6 @@ section h2 {
     margin-left: 1px;
 }
 
-.elevator-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.info-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 10px;
-    background-color: var(--bg-color);
-    border-radius: 6px;
-}
-
-.info-item .label {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-.info-item .value {
-    font-size: 0.9rem;
-    color: var(--text-primary);
-    font-weight: 600;
-}
 
 /* Event Log */
 .event-log {
@@ -768,7 +785,13 @@ footer {
 
 @media (max-width: 768px) {
     .elevator-container {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .elevator-card {
+        min-width: 100%;
+        max-width: 100%;
     }
     
     header {

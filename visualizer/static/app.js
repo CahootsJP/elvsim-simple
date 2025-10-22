@@ -43,6 +43,39 @@ class ElevatorVisualizer {
         this.btnStart.addEventListener('click', () => this.sendCommand('start'));
         this.btnPause.addEventListener('click', () => this.sendCommand('pause'));
         this.btnReset.addEventListener('click', () => this.sendCommand('reset'));
+        
+        // Initialize placeholder elevators (Elevator_1 and Elevator_2)
+        this.initializePlaceholderElevators();
+    }
+    
+    initializePlaceholderElevators() {
+        // Create placeholder elevators to show from the start
+        const placeholderElevators = ['Elevator_1', 'Elevator_2'];
+        
+        placeholderElevators.forEach(elevatorName => {
+            const placeholderData = {
+                elevator_name: elevatorName,
+                floor: 1,
+                state: 'IDLE',
+                passengers: 0,
+                capacity: 50,
+                num_floors: 10,
+                car_calls: [],
+                hall_calls_up: [],
+                hall_calls_down: []
+            };
+            
+            // Create elevator card
+            let elevatorElement = document.getElementById(`elevator-${elevatorName}`);
+            if (!elevatorElement) {
+                elevatorElement = this.createElevatorElement(elevatorName);
+                this.elevatorContainer.appendChild(elevatorElement);
+            }
+            
+            // Render initial state
+            this.renderElevator(elevatorElement, placeholderData);
+            this.elevators.set(elevatorName, placeholderData);
+        });
     }
     
     connectWebSocket() {
@@ -186,20 +219,6 @@ class ElevatorVisualizer {
                             </div>
                         </div>
                     </div>
-                <div class="elevator-info">
-                    <div class="info-item">
-                        <span class="label">Floor:</span>
-                        <span class="value floor-value">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">State:</span>
-                        <span class="value state-value">-</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">Passengers:</span>
-                        <span class="value passengers-value">-</span>
-                    </div>
-                </div>
             </div>
         `;
         
@@ -214,11 +233,6 @@ class ElevatorVisualizer {
         stateBadge.textContent = state;
         stateBadge.className = `elevator-state state-${state.toLowerCase()}`;
         
-        // Update info values
-        element.querySelector('.floor-value').textContent = floor || '-';
-        element.querySelector('.state-value').textContent = state || '-';
-        element.querySelector('.passengers-value').textContent = 
-            capacity ? `${passengers || 0}/${capacity}` : (passengers || 0);
         
         // Dynamically set shaft height based on number of floors
         const elevatorShaft = element.querySelector('.elevator-shaft');
@@ -423,6 +437,16 @@ class ElevatorVisualizer {
     renderWaitingPassengers(elevatorElement, numFloors) {
         const waitingArea = elevatorElement.querySelector('.waiting-passengers');
         if (!waitingArea || !numFloors) {
+            return;
+        }
+        
+        // Get elevator name from element ID (format: elevator-Elevator_1)
+        const elevatorId = elevatorElement.id;
+        const elevatorName = elevatorId.replace('elevator-', '');
+        
+        // Only show waiting passengers on Elevator_1 to avoid duplication
+        if (elevatorName !== 'Elevator_1') {
+            waitingArea.innerHTML = '';
             return;
         }
         
