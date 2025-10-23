@@ -13,6 +13,7 @@ class Door(Entity):
         self.elevator_name: str = elevator_name
         self.elevator = elevator  # Reference to parent elevator
         self._current_floor: int = 1  # Default floor
+        self.state = 'IDLE'  # Door state: IDLE, OPENING, OPEN, CLOSING, CLOSED
         print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
 
     def run(self):
@@ -78,11 +79,13 @@ class Door(Entity):
 
         # 1. Open the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opening...")
+        self.state = 'OPENING'
         # Send door opening start event
         yield self.env.process(self._broadcast_door_event("DOOR_OPENING_START"))
         
         yield self.env.timeout(self.open_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
+        self.state = 'OPEN'
         # Send door opening complete event
         yield self.env.process(self._broadcast_door_event("DOOR_OPENING_COMPLETE"))
         
@@ -149,11 +152,13 @@ class Door(Entity):
 
         # 4. Close the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")
+        self.state = 'CLOSING'
         # Send door closing start event
         yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_START"))
         
         yield self.env.timeout(self.close_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
+        self.state = 'CLOSED'
         # Send door closing complete event
         yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
 
