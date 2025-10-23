@@ -182,8 +182,19 @@ class Statistics:
                     }
                     self.hall_calls_history[elevator_name].append(new_hall_call_data)
                     
-                    # Update waiting passengers count
+                    # Don't update waiting passengers here - it's now handled in passenger/waiting
+                    # to avoid double counting
+            
+            # Track when passengers start waiting (join the queue) - more reliable
+            if topic == 'passenger/waiting':
+                floor = message.get('floor')
+                direction = message.get('direction')
+                passenger_name = message.get('passenger_name')
+                
+                if floor is not None and direction is not None:
+                    # Increment waiting passengers when they join the queue
                     self._update_waiting_passengers(floor, direction, 1)
+                    print(f"[Statistics] {passenger_name} started waiting at floor {floor} ({direction}).")
             
             # Track car_calls status for real-time display
             car_calls_match = re.search(r'elevator/(.*?)/car_calls', topic)
@@ -726,6 +737,10 @@ class Statistics:
         current_count = self.waiting_passengers[floor_key].get(direction, 0)
         new_count = max(0, current_count + change)
         self.waiting_passengers[floor_key][direction] = new_count
+        
+        # Debug log
+        print(f"[Statistics] Waiting passengers at floor {floor} {direction}: {current_count} -> {new_count} (change: {change:+d})")
+        print(f"[Statistics] All waiting passengers: {self.waiting_passengers}")
         
         # Send updated waiting passengers data to WebSocket
         self._send_to_websocket({

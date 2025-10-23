@@ -47,6 +47,15 @@ class Passenger(Entity):
             # 2. Join the queue in the correct direction
             current_queue = self.floor_queues[self.arrival_floor][direction]
             print(f"{self.env.now:.2f} [{self.name}] Now waiting in '{direction}' queue at floor {self.arrival_floor}.")
+            
+            # Notify Statistics that a passenger is waiting
+            waiting_message = {
+                "floor": self.arrival_floor,
+                "direction": direction,
+                "passenger_name": self.name
+            }
+            self.broker.put("passenger/waiting", waiting_message)
+            
             yield current_queue.put(self)
 
             # 3. Wait for either "please board" or "boarding failed" notification

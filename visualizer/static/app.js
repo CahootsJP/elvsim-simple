@@ -58,7 +58,7 @@ class ElevatorVisualizer {
         this.renderElevatorHall(hallElement, 10); // 10 floors by default
         
         // Create placeholder elevators to show from the start
-        const placeholderElevators = ['Elevator_1', 'Elevator_2'];
+        const placeholderElevators = ['Elevator_1', 'Elevator_2', 'Elevator_3'];
         
         placeholderElevators.forEach(elevatorName => {
             const placeholderData = {
@@ -568,24 +568,20 @@ class ElevatorVisualizer {
     }
     
     generateWaitingDisplay(count, direction) {
-        const maxIconsToShow = 4;
-        const iconsToShow = Math.min(count, maxIconsToShow);
-        
+        // Simple numeric display: 👤 ×5 ↑
         let display = '';
         
-        // Add passenger icons
-        for (let i = 0; i < iconsToShow; i++) {
-            display += '<span class="waiting-passenger-icon">👤</span>';
-        }
+        // Passenger icon
+        display += '<span class="waiting-passenger-icon">👤</span>';
         
-        // Add extra count if needed
-        if (count > maxIconsToShow) {
-            const extra = count - maxIconsToShow;
-            display += `<span class="waiting-extra">+${extra}</span>`;
-        }
+        // Count with × symbol
+        display += `<span class="waiting-count">×${count}</span>`;
         
-        // Add direction arrow
+        // Direction arrow
         display += `<span class="waiting-direction-icon">${direction}</span>`;
+        
+        // Debug log
+        console.log(`Waiting display: count=${count}, direction=${direction}, display="👤 ×${count} ${direction}"`);
         
         return display;
     }

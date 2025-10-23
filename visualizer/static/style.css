@@ -560,30 +560,31 @@ section h2 {
 
 .passenger-squares {
     display: flex;
-    gap: 4px; /* Spacing between squares */
+    gap: 1px; /* Very narrow spacing between squares */
     align-items: center;
     justify-content: flex-start;
     flex-wrap: wrap;
-    min-height: 20px;
+    min-height: 12px;
 }
 
 .passenger-square {
-    font-size: 14px;
+    font-size: 7px; /* Much smaller size */
     line-height: 1;
     transition: all 0.2s ease;
+    color: #9ca3af; /* Gray color for all squares */
 }
 
-/* Color squares based on occupancy */
+/* Color squares based on occupancy - override to gray */
 .occupancy-low .passenger-square {
-    color: #22c55e; /* Green */
+    color: #9ca3af; /* Gray */
 }
 
 .occupancy-medium .passenger-square {
-    color: #f59e0b; /* Orange */
+    color: #9ca3af; /* Gray */
 }
 
 .occupancy-high .passenger-square {
-    color: #ef4444; /* Red */
+    color: #9ca3af; /* Gray */
 }
 
 .passenger-extra {
@@ -685,12 +686,19 @@ section h2 {
 }
 
 .waiting-passenger-icon {
-    font-size: 10px;
+    font-size: 12px;
+}
+
+.waiting-count {
+    font-size: 11px;
+    font-weight: 600;
+    margin: 0 2px;
 }
 
 .waiting-direction-icon {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: bold;
+    margin-left: 2px;
 }
 
 .waiting-extra {

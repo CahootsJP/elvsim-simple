@@ -384,14 +384,40 @@ class Elevator(Entity):
         passengers_to_exit = sorted([p for p in self.passengers_onboard if p.destination_floor == self.current_floor], key=lambda p: p.entity_id, reverse=True)
 
         boarding_queues = []
-        if self.state in ["IDLE", "UP"] and self.current_floor in self.hall_calls_up:
-            boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
-        if self.state in ["IDLE", "DOWN"] and self.current_floor in self.hall_calls_down:
-            boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
-        if self.state == "UP" and self.current_floor in self.hall_calls_down and not self._has_any_up_calls_above():
-             boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
-        if self.state == "DOWN" and self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
-            boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+        
+        # Determine which direction to serve based on current state
+        if self.state == "UP":
+            # Moving UP: serve UP passengers first
+            if self.current_floor in self.hall_calls_up:
+                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+            # Only serve DOWN passengers if no more UP calls above (direction change)
+            elif self.current_floor in self.hall_calls_down and not self._has_any_up_calls_above():
+                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+        
+        elif self.state == "DOWN":
+            # Moving DOWN: serve DOWN passengers first
+            if self.current_floor in self.hall_calls_down:
+                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+            # Only serve UP passengers if no more DOWN calls below (direction change)
+            elif self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
+                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+        
+        elif self.state == "IDLE":
+            # IDLE state: determine direction based on calls
+            has_calls_above = self._has_any_up_calls_above()
+            has_calls_below = self._has_any_down_calls_below()
+            
+            # Prefer UP if there are calls above
+            if has_calls_above and self.current_floor in self.hall_calls_up:
+                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+            # If only calls below, serve DOWN
+            elif has_calls_below and self.current_floor in self.hall_calls_down:
+                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+            # If no calls above/below, serve whichever is available at current floor
+            elif self.current_floor in self.hall_calls_up:
+                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+            elif self.current_floor in self.hall_calls_down:
+                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
 
         # Check if current floor has a car call (for door to send OFF message at opening complete)
         has_car_call_here = self.current_floor in self.car_calls
@@ -402,12 +428,9 @@ class Elevator(Entity):
             passengers_to_exit, boarding_queues, has_car_call_here))
         report = yield boarding_process
         
-        for p in passengers_to_exit:
-            self.passengers_onboard.remove(p)
-            
+        # Passengers are already removed/added by Door in real-time
+        # No need to process them again here
         boarded_passengers = report.get("boarded", [])
-        for p in boarded_passengers:
-            self.passengers_onboard.append(p)
         
         # Send failure notification to passengers who couldn't board
         failed_to_board_passengers = report.get("failed_to_board", [])

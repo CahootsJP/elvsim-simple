@@ -107,6 +107,11 @@ class Door(Entity):
             }
             yield p.exit_permission_event.put(permission_data)
             yield exit_permission_event
+            
+            # Real-time update: remove passenger from elevator immediately and report status
+            if self.elevator and p in self.elevator.passengers_onboard:
+                self.elevator.passengers_onboard.remove(p)
+                yield self.env.process(self.elevator._report_status())
 
         # 3. Let passengers board one by one at their own pace (with capacity check)
         # Calculate current capacity after passengers exit
@@ -136,6 +141,11 @@ class Door(Entity):
                 yield passenger.board_permission_event.put(permission_data)
                 yield board_permission_event
                 boarded_passengers.append(passenger)
+                
+                # Real-time update: add passenger to elevator immediately and report status
+                if self.elevator:
+                    self.elevator.passengers_onboard.append(passenger)
+                    yield self.env.process(self.elevator._report_status())
 
         # 4. Close the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")

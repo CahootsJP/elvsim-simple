@@ -138,6 +138,23 @@ def run_simulation(server):
     )
     gcs.register_elevator(elevator_2)
     
+    # Create Elevator 3
+    door_3 = Door(env, "Door_3", open_time=1.5, close_time=1.5)
+    
+    elevator_3 = Elevator(
+        env, 
+        "Elevator_3", 
+        broker, 
+        NUM_FLOORS, 
+        floor_queues, 
+        door_3, 
+        flight_profiles_elevator_1,  # Use same flight profiles
+        physics_engine=physics_engine,
+        hall_buttons=hall_buttons,
+        max_capacity=50  # Increased capacity to prevent deadlock
+    )
+    gcs.register_elevator(elevator_3)
+    
     # Note: elevator_1.run() is already started automatically by Entity.__init__
     
     # Create passengers (with delayed start via process)
@@ -157,17 +174,29 @@ def run_simulation(server):
                      "Ivy", "Jack", "Kate", "Leo", "Mary", "Nick", "Olivia", "Paul"]
         
         while True:
-            # Wait random interval between passengers (20-40 seconds)
-            yield env.timeout(random.uniform(20, 40))
+            # Wait random interval between passengers (2-8 seconds) - very high frequency for testing
+            yield env.timeout(random.uniform(2, 8))
             
             passenger_id += 1
             name = f"{base_names[passenger_id % len(base_names)]}_{passenger_id}"
             
-            # Random floors
-            arrival_floor = random.randint(1, NUM_FLOORS)
-            destination_floor = random.randint(1, NUM_FLOORS)
-            while destination_floor == arrival_floor:
+            # Test scenario: Force passengers on floor 5 to go both UP and DOWN
+            # 80% of passengers start at floor 5 for easy testing
+            if random.random() < 0.8:
+                arrival_floor = 5
+                # Half go up, half go down
+                if random.random() < 0.5:
+                    # Go UP from floor 5
+                    destination_floor = random.randint(6, NUM_FLOORS)
+                else:
+                    # Go DOWN from floor 5
+                    destination_floor = random.randint(1, 4)
+            else:
+                # Other passengers: random floors
+                arrival_floor = random.randint(1, NUM_FLOORS)
                 destination_floor = random.randint(1, NUM_FLOORS)
+                while destination_floor == arrival_floor:
+                    destination_floor = random.randint(1, NUM_FLOORS)
             
             # Create passenger immediately (no additional delay)
             # Note: passenger.run() is already started automatically by Entity.__init__
