@@ -42,6 +42,7 @@ def run_http_server(port=8080, directory="visualizer"):
 def run_simulation(server):
     """Run SimPy simulation with WebSocket integration"""
     import simpy
+    import random
     from MessageBroker import MessageBroker
     from Statistics import Statistics
     from Elevator import Elevator
@@ -52,6 +53,10 @@ def run_simulation(server):
     from GroupControlSystem import GroupControlSystem
     
     print("Initializing simulation...")
+    
+    # Fix random seed for reproducibility
+    random.seed(42)
+    print("Random seed fixed to 42 for reproducible results")
     
     # Create simulation environment with real-time synchronization
     # speed_factor: 1.0 = real-time, 0.5 = half speed, 2.0 = double speed, 0.0 = no delay
@@ -67,6 +72,19 @@ def run_simulation(server):
     
     # Simulation parameters
     NUM_FLOORS = 10
+    
+    # Set simulation metadata for JSON Lines log
+    stats.set_simulation_metadata({
+        'num_floors': NUM_FLOORS,
+        'num_elevators': 3,
+        'elevator_capacity': 50,
+        'speed_factor': SPEED_FACTOR,
+        'random_seed': 42,
+        'floor_heights': [0] + [3.5 * i for i in range(NUM_FLOORS)],
+        'max_speed': 3.0,
+        'acceleration': 1.0,
+        'jerk': 1.5
+    })
     
     # Create floor queues
     floor_queues = {
@@ -219,6 +237,11 @@ def run_simulation(server):
         print(f"\n\n❌ Simulation error: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        # Save event log when simulation ends
+        print("\n" + "=" * 60)
+        stats.save_event_log('simulation_log.jsonl')
+        print("=" * 60)
 
 
 def main():

@@ -155,10 +155,14 @@ class ElevatorVisualizer {
         // Clear existing waiting passenger displays
         waitingArea.innerHTML = '';
         
+        console.log('[DEBUG] renderHallWaitingPassengers: waitingPassengers=', JSON.stringify(this.waitingPassengers));
+        
         // Render waiting passengers for each floor
         for (let floor = 1; floor <= numFloors; floor++) {
             const floorKey = floor.toString();
             const waitingData = this.waitingPassengers[floorKey];
+            
+            console.log(`[DEBUG] Floor ${floor}: waitingData=`, JSON.stringify(waitingData));
             
             if (waitingData && (waitingData.UP > 0 || waitingData.DOWN > 0)) {
                 const floorElement = document.createElement('div');
@@ -534,6 +538,7 @@ class ElevatorVisualizer {
     }
     
     updateWaitingPassengers(waitingData) {
+        console.log('[DEBUG] updateWaitingPassengers called with data:', JSON.stringify(waitingData));
         this.waitingPassengers = waitingData;
         
         // Update Elevator Hall panel
@@ -544,6 +549,7 @@ class ElevatorVisualizer {
                 // Get number of floors from any elevator (they should all be the same)
                 const firstElevator = this.elevators.values().next().value;
                 const numFloors = firstElevator ? firstElevator.num_floors : 10;
+                console.log('[DEBUG] Rendering hall waiting passengers, numFloors:', numFloors);
                 this.renderHallWaitingPassengers(hallShaft, numFloors);
             }
         }

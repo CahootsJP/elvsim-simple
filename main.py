@@ -26,6 +26,18 @@ def run_simulation():
     broadcast_pipe = broker.get_broadcast_pipe()
     statistics = Statistics(env, broadcast_pipe)
     env.process(statistics.start_listening())
+    
+    # Set simulation metadata for JSON Lines log
+    statistics.set_simulation_metadata({
+        'num_floors': NUM_FLOORS,
+        'num_elevators': 2,
+        'elevator_capacity': 10,
+        'floor_height': FLOOR_HEIGHT,
+        'max_speed': MAX_SPEED,
+        'acceleration': ACCELERATION,
+        'jerk': JERK,
+        'sim_duration': SIM_DURATION
+    })
 
     # --- Physics engine preparation ---
     floor_heights = [0] + [i * FLOOR_HEIGHT for i in range(1, NUM_FLOORS + 1)]
@@ -69,6 +81,11 @@ def run_simulation():
     print("\n--- Simulation Start ---")
     env.run(until=SIM_DURATION)
     print("--- Simulation End ---")
+    
+    # Save event log
+    statistics.save_event_log('simulation_log.jsonl')
+    
+    # Generate trajectory diagram
     statistics.plot_trajectory_diagram()
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues):

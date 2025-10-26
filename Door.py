@@ -14,6 +14,7 @@ class Door(Entity):
         self.elevator = elevator  # Reference to parent elevator
         self._current_floor: int = 1  # Default floor
         self.state = 'IDLE'  # Door state: IDLE, OPENING, OPEN, CLOSING, CLOSED
+        self.sensor_timeout = 1.0  # Photoelectric sensor timeout (seconds to wait after queue becomes empty)
         print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
 
     def run(self):
@@ -116,39 +117,53 @@ class Door(Entity):
                 self.elevator.passengers_onboard.remove(p)
                 yield self.env.process(self.elevator._report_status())
 
-        # 3. Let passengers board one by one at their own pace (with capacity check)
+        # 3. Let passengers board one by one with photoelectric sensor simulation
         # Calculate current capacity after passengers exit
         actual_current_capacity = current_capacity - len(passengers_to_exit)
         
         for queue in boarding_queues:
-            while len(queue.items) > 0:
-                # Check capacity (including already boarded passengers)
-                if max_capacity is not None:
-                    available_space = max_capacity - (actual_current_capacity + len(boarded_passengers))
-                    if available_space <= 0:
-                        # Capacity reached - record remaining passengers
-                        print(f"{self.env.now:.2f} [{elevator_name}] Capacity reached ({max_capacity} passengers). Cannot board more passengers.")
-                        # Extract all remaining passengers from queue and record them
-                        while len(queue.items) > 0:
-                            failed_passenger = yield queue.get()
-                            failed_to_board_passengers.append(failed_passenger)
+            # Continuously monitor queue while door is open (photoelectric sensor simulation)
+            while True:
+                # Check if anyone is waiting in queue
+                if len(queue.items) > 0:
+                    # Check capacity before boarding
+                    if max_capacity is not None:
+                        available_space = max_capacity - (actual_current_capacity + len(boarded_passengers))
+                        if available_space <= 0:
+                            # Capacity reached - stop boarding from this queue
+                            print(f"{self.env.now:.2f} [{elevator_name}] Capacity reached ({max_capacity} passengers). Cannot board more passengers.")
+                            break
+                    
+                    # Board the passenger
+                    passenger = yield queue.get()
+                    board_permission_event = self.env.event()
+                    # Pass elevator name along with permission event
+                    permission_data = {
+                        'completion_event': board_permission_event,
+                        'elevator_name': self.elevator_name
+                    }
+                    yield passenger.board_permission_event.put(permission_data)
+                    yield board_permission_event
+                    boarded_passengers.append(passenger)
+                    
+                    # Real-time update: add passenger to elevator immediately and report status
+                    if self.elevator:
+                        self.elevator.passengers_onboard.append(passenger)
+                        yield self.env.process(self.elevator._report_status())
+                else:
+                    # Queue is empty - photoelectric sensor detects no one
+                    # Wait for sensor_timeout to see if anyone else arrives
+                    print(f"{self.env.now:.2f} [{elevator_name}] Queue empty, waiting {self.sensor_timeout}s for more passengers (photoelectric sensor)...")
+                    yield self.env.timeout(self.sensor_timeout)
+                    
+                    # Check again after timeout
+                    if len(queue.items) == 0:
+                        # Still empty - close door
+                        print(f"{self.env.now:.2f} [{elevator_name}] No more passengers detected. Closing door.")
                         break
-                
-                passenger = yield queue.get()
-                board_permission_event = self.env.event()
-                # Pass elevator name along with permission event
-                permission_data = {
-                    'completion_event': board_permission_event,
-                    'elevator_name': self.elevator_name
-                }
-                yield passenger.board_permission_event.put(permission_data)
-                yield board_permission_event
-                boarded_passengers.append(passenger)
-                
-                # Real-time update: add passenger to elevator immediately and report status
-                if self.elevator:
-                    self.elevator.passengers_onboard.append(passenger)
-                    yield self.env.process(self.elevator._report_status())
+                    else:
+                        # Someone arrived during timeout - continue boarding
+                        print(f"{self.env.now:.2f} [{elevator_name}] New passenger detected! Continuing boarding...")
 
         # 4. Close the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")

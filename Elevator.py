@@ -450,55 +450,23 @@ class Elevator(Entity):
         
         hall_calls_changed = False
         serviced_directions = []  # Record directions that should be turned off
-        reregister_directions = []  # Record directions that still have waiting passengers
         
+        # Clear hall calls for directions that were serviced
         if any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
-            # Check if queue is now empty
-            up_queue = self.floor_queues[self.current_floor]["UP"]
-            if len(up_queue.items) == 0:
-                # Queue is empty - clear hall call and turn off button
-                self.hall_calls_up.discard(self.current_floor)
-                hall_calls_changed = True
-                serviced_directions.append("UP")
-            else:
-                # Queue still has waiting passengers - re-register hall call
-                print(f"{self.env.now:.2f} [{self.name}] Queue UP at floor {self.current_floor} still has {len(up_queue.items)} waiting passengers. Re-registering hall call.")
-                reregister_directions.append("UP")
-                # Keep hall call in this elevator's list for now
-                # Will be cleared when re-assigned
-                self.hall_calls_up.discard(self.current_floor)
-                hall_calls_changed = True
+            self.hall_calls_up.discard(self.current_floor)
+            hall_calls_changed = True
+            serviced_directions.append("UP")
         
         if any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
-            # Check if queue is now empty
-            down_queue = self.floor_queues[self.current_floor]["DOWN"]
-            if len(down_queue.items) == 0:
-                # Queue is empty - clear hall call and turn off button
-                self.hall_calls_down.discard(self.current_floor)
-                hall_calls_changed = True
-                serviced_directions.append("DOWN")
-            else:
-                # Queue still has waiting passengers - re-register hall call
-                print(f"{self.env.now:.2f} [{self.name}] Queue DOWN at floor {self.current_floor} still has {len(down_queue.items)} waiting passengers. Re-registering hall call.")
-                reregister_directions.append("DOWN")
-                # Keep hall call in this elevator's list for now
-                # Will be cleared when re-assigned
-                self.hall_calls_down.discard(self.current_floor)
-                hall_calls_changed = True
+            self.hall_calls_down.discard(self.current_floor)
+            hall_calls_changed = True
+            serviced_directions.append("DOWN")
         
-        # Turn off hall buttons for fully serviced directions
+        # Turn off hall buttons for serviced directions
         if serviced_directions and self.hall_buttons:
             for direction in serviced_directions:
                 button = self.hall_buttons[self.current_floor][direction]
                 button.serve(elevator_name=self.name)  # Turn off button with elevator name
-        
-        # Re-register hall calls for directions with remaining passengers
-        if reregister_directions:
-            for direction in reregister_directions:
-                # Send hall call back to GCS for re-assignment
-                call_message = {'floor': self.current_floor, 'direction': direction}
-                self.broker.put("gcs/hall_call", call_message)
-                print(f"{self.env.now:.2f} [{self.name}] Re-registered hall call: Floor {self.current_floor} {direction}")
         
         # Send status if car_calls changed
         if car_calls_changed:

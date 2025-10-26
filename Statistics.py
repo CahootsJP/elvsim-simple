@@ -4,12 +4,14 @@ import re
 import json
 import asyncio
 import threading
+from datetime import datetime
 
 class Statistics:
     """
     Receives all communications and
     analyzes and records necessary information as an independent "recorder".
     Also sends real-time data to WebSocket server for visualization.
+    Collects all events in JSON Lines format for offline playback.
     """
     def __init__(self, env, broadcast_pipe, websocket_server=None):
         self.env = env
@@ -26,6 +28,10 @@ class Statistics:
         
         # Track current elevator states for real-time updates
         self.current_elevator_states = {}  # {elevator_name: {floor, state, passengers, etc.}}
+        
+        # JSON Lines event log for offline playback
+        self.event_log = []  # List of events in standardized format
+        self.simulation_metadata = {}  # Metadata about the simulation
     
     def _send_to_websocket(self, message):
         """
@@ -39,6 +45,34 @@ class Statistics:
             except Exception as e:
                 # Silently ignore errors to not disrupt simulation
                 pass
+    
+    def _add_event_log(self, event_type, event_data):
+        """
+        Add an event to the JSON Lines log.
+        
+        Args:
+            event_type (str): Type of event (e.g., 'elevator_status', 'hall_call', etc.)
+            event_data (dict): Event-specific data
+        """
+        event = {
+            "time": self.env.now,
+            "type": event_type,
+            "data": event_data
+        }
+        self.event_log.append(event)
+    
+    def set_simulation_metadata(self, metadata):
+        """
+        Set simulation metadata (called before simulation starts).
+        
+        Args:
+            metadata (dict): Simulation configuration (num_floors, elevators, etc.)
+        """
+        self.simulation_metadata = {
+            "format_version": "1.0",
+            "timestamp": datetime.now().isoformat(),
+            "config": metadata
+        }
 
     def start_listening(self):
         """
@@ -93,6 +127,16 @@ class Statistics:
                     'hall_calls_up': self.current_elevator_states.get(elevator_name, {}).get('hall_calls_up', []),  # Preserve hall_calls_up
                     'hall_calls_down': self.current_elevator_states.get(elevator_name, {}).get('hall_calls_down', [])  # Preserve hall_calls_down
                 }
+                
+                # Log event for JSON Lines
+                self._add_event_log('elevator_status', {
+                    'elevator': elevator_name,
+                    'floor': current_floor,
+                    'advanced_position': advanced_position,
+                    'state': state,
+                    'passengers': passengers_count,
+                    'capacity': max_capacity
+                })
                 
                 # Send to WebSocket
                 self._send_to_websocket({
@@ -155,6 +199,13 @@ class Statistics:
                         'is_assignment': True
                     }
                     self.hall_calls_history[assigned_elevator].append(assignment_data)
+                    
+                    # Log event for JSON Lines
+                    self._add_event_log('hall_call_assignment', {
+                        'floor': floor,
+                        'direction': direction,
+                        'elevator': assigned_elevator
+                    })
             
             # Record new hall_call registrations (for visualization)
             new_hall_call_match = re.search(r'hall_button/floor_(.*?)/new_hall_call', topic)
@@ -182,6 +233,13 @@ class Statistics:
                     }
                     self.hall_calls_history[elevator_name].append(new_hall_call_data)
                     
+                    # Log event for JSON Lines
+                    self._add_event_log('hall_call_registered', {
+                        'floor': floor,
+                        'direction': direction,
+                        'passenger': passenger_name
+                    })
+                    
                     # Don't update waiting passengers here - it's now handled in passenger/waiting
                     # to avoid double counting
             
@@ -195,6 +253,13 @@ class Statistics:
                     # Increment waiting passengers when they join the queue
                     self._update_waiting_passengers(floor, direction, 1)
                     print(f"[Statistics] {passenger_name} started waiting at floor {floor} ({direction}).")
+                    
+                    # Log event for JSON Lines
+                    self._add_event_log('passenger_waiting', {
+                        'passenger': passenger_name,
+                        'floor': floor,
+                        'direction': direction
+                    })
             
             # Track car_calls status for real-time display
             car_calls_match = re.search(r'elevator/(.*?)/car_calls', topic)
@@ -230,6 +295,13 @@ class Statistics:
                         'car_calls': [destination],  # Only the one newly registered floor
                         'passenger_name': passenger_name
                     })
+                    
+                    # Log event for JSON Lines
+                    self._add_event_log('car_call_registered', {
+                        'elevator': elevator_name,
+                        'floor': destination,
+                        'passenger': passenger_name
+                    })
             
             # Record hall call OFF events (for visualization)
             hall_call_off_match = re.search(r'hall_button/floor_(.*?)/call_off', topic)
@@ -255,6 +327,13 @@ class Statistics:
                     }
                     self.hall_call_off_history[serviced_by].append(hall_call_off_data)
                     
+                    # Log event for JSON Lines
+                    self._add_event_log('hall_call_off', {
+                        'floor': floor,
+                        'direction': direction,
+                        'elevator': serviced_by
+                    })
+                    
                     # Note: Waiting passengers are now removed individually when each passenger boards
                     # (see 'passenger/boarding' event handler above)
             
@@ -276,6 +355,12 @@ class Statistics:
                         'action': 'OFF'
                     })
                     
+                    # Log event for JSON Lines
+                    self._add_event_log('car_call_off', {
+                        'elevator': elevator_name,
+                        'floor': destination
+                    })
+                    
                     # Remove car call from current state and send to WebSocket
                     if elevator_name in self.current_elevator_states:
                         car_calls = self.current_elevator_states[elevator_name].get('car_calls', [])
@@ -294,11 +379,20 @@ class Statistics:
                 floor = message.get('floor')
                 direction = message.get('direction')
                 passenger_name = message.get('passenger_name')
+                elevator_name = message.get('elevator_name')
                 
                 if floor is not None and direction is not None:
                     # Remove one waiting passenger when someone boards
                     self._update_waiting_passengers(floor, direction, -1)
                     print(f"[Statistics] {passenger_name} boarded at floor {floor} ({direction}). Waiting passengers decreased.")
+                    
+                    # Log event for JSON Lines
+                    self._add_event_log('passenger_boarding', {
+                        'passenger': passenger_name,
+                        'floor': floor,
+                        'direction': direction,
+                        'elevator': elevator_name
+                    })
             
             # Record door events (for visualization)
             door_events_match = re.search(r'elevator/(.*?)/door_events', topic)
@@ -318,6 +412,13 @@ class Statistics:
                         'event_type': event_type,
                         'floor': floor,
                         'door_id': door_id
+                    })
+                    
+                    # Log event for JSON Lines
+                    self._add_event_log('door_event', {
+                        'elevator': elevator_name,
+                        'event': event_type,
+                        'floor': floor
                     })
                     
                     # Send door event to WebSocket for real-time animation
@@ -747,3 +848,27 @@ class Statistics:
             'type': 'waiting_passengers_update',
             'data': self.waiting_passengers
         })
+    
+    def save_event_log(self, filename='simulation_log.jsonl'):
+        """
+        Save the event log to a JSON Lines file.
+        
+        Args:
+            filename (str): Name of the output file (default: 'simulation_log.jsonl')
+        """
+        print(f"\nSaving event log to {filename}...")
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            # Write metadata as first line
+            if self.simulation_metadata:
+                f.write(json.dumps({
+                    "type": "metadata",
+                    "data": self.simulation_metadata
+                }) + '\n')
+            
+            # Write all events (already sorted by time due to sequential processing)
+            for event in self.event_log:
+                f.write(json.dumps(event, ensure_ascii=False) + '\n')
+        
+        print(f"Event log saved: {len(self.event_log)} events written to {filename}")
+        return filename

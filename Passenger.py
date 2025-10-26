@@ -73,11 +73,15 @@ class Passenger(Entity):
                 
                 print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
                 
+                # Get elevator name from permission data
+                elevator_name = permission_data.get('elevator_name', None)
+                
                 # Publish passenger boarding event
                 self.broker.put('passenger/boarding', {
                     'passenger_name': self.name,
                     'floor': self.arrival_floor,
                     'direction': direction,
+                    'elevator_name': elevator_name,
                     'timestamp': self.env.now
                 })
                 
