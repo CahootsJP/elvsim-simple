@@ -848,10 +848,10 @@ class ElevatorVisualizer {
     startLiveFilePolling() {
         console.log('[App] Starting live file polling...');
         
-        // Create LiveFileEventSource
+        // Create LiveFileEventSource (filename, apiBaseUrl, pollInterval)
         this.fileEventSource = new LiveFileEventSource(
-            this.API_BASE_URL, 
-            'simulation_log.jsonl', 
+            'simulation_log.jsonl',
+            this.API_BASE_URL,
             100 // Poll every 100ms
         );
         
