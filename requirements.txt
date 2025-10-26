@@ -3,3 +3,5 @@ numpy
 matplotlib
 sympy
 websockets
+flask
+flask-cors

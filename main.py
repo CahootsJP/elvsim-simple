@@ -11,7 +11,7 @@ from Statistics import Statistics
 def run_simulation():
     """Set up and run the entire simulation"""
     # --- Simulation constants ---
-    SIM_DURATION = 200
+    SIM_DURATION = 600  # Extended from 200 to 600 seconds (10 minutes)
     NUM_FLOORS = 10
 
     # --- Physical world definition ---
@@ -28,6 +28,10 @@ def run_simulation():
     env.process(statistics.start_listening())
     
     # Set simulation metadata for JSON Lines log
+    import random
+    random.seed(42)
+    print("Random seed fixed to 42 for reproducible results")
+    
     statistics.set_simulation_metadata({
         'num_floors': NUM_FLOORS,
         'num_elevators': 2,
@@ -36,7 +40,8 @@ def run_simulation():
         'max_speed': MAX_SPEED,
         'acceleration': ACCELERATION,
         'jerk': JERK,
-        'sim_duration': SIM_DURATION
+        'sim_duration': SIM_DURATION,
+        'random_seed': 42
     })
 
     # --- Physics engine preparation ---
@@ -89,60 +94,35 @@ def run_simulation():
     statistics.plot_trajectory_diagram()
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues):
-    """Passenger generation process for integrated boarding/alighting test on same floor"""
-    print("--- Passenger Generation for INTEGRATED Boarding & Exit Test ---")
-
-    # === Test Case 1: 3 people board from 3rd floor → 3 people alight at 8th floor ===
-    yield env.timeout(5)
-    Passenger(env, "Alice", broker, hall_buttons, floor_queues, 
-              arrival_floor=3, destination_floor=8, move_speed=1.0)
+    """Continuous passenger generation for extended simulation"""
+    import random
     
-    yield env.timeout(1)  # Arrive at same floor 1 second later
-    Passenger(env, "Bob", broker, hall_buttons, floor_queues,
-              arrival_floor=3, destination_floor=8, move_speed=1.2)
+    print("--- Continuous Passenger Generation (Extended) ---")
     
-    yield env.timeout(2)  # Arrive at same floor 2 seconds later
-    Passenger(env, "Charlie", broker, hall_buttons, floor_queues,
-              arrival_floor=3, destination_floor=8, move_speed=0.8)
-
-    # === Test Case 2: 2 people board from 6th floor → 2 people alight at 9th floor ===
-    yield env.timeout(8)
-    Passenger(env, "Diana", broker, hall_buttons, floor_queues,
-              arrival_floor=6, destination_floor=9, move_speed=1.5)
+    passenger_id = 0
+    base_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", 
+                 "Ivy", "Jack", "Kate", "Leo", "Mary", "Nick", "Olivia", "Paul", "Quinn", 
+                 "Rachel", "Steve", "Tina", "Uma", "Victor", "Wendy", "Xavier", "Yuki", "Zack"]
     
-    yield env.timeout(1.5)  # Arrive at same floor 1.5 seconds later
-    Passenger(env, "Eve", broker, hall_buttons, floor_queues,
-              arrival_floor=6, destination_floor=9, move_speed=1.3)
-
-    # === Test Case 3: Complex case - 4 people board from 5th floor → 4 people alight at 2nd floor ===
-    yield env.timeout(10)
-    Passenger(env, "Frank", broker, hall_buttons, floor_queues,
-              arrival_floor=5, destination_floor=2, move_speed=1.1)
-    
-    yield env.timeout(0.5)
-    Passenger(env, "Grace", broker, hall_buttons, floor_queues,
-              arrival_floor=5, destination_floor=2, move_speed=1.4)
-    
-    yield env.timeout(1)
-    Passenger(env, "Henry", broker, hall_buttons, floor_queues,
-              arrival_floor=5, destination_floor=2, move_speed=1.0)
-    
-    yield env.timeout(1.5)
-    Passenger(env, "Ivy", broker, hall_buttons, floor_queues,
-              arrival_floor=5, destination_floor=2, move_speed=0.9)
-
-    # === Test Case 4: Mixed case - board from different floors → alight at same floor ===
-    yield env.timeout(15)
-    Passenger(env, "Jack", broker, hall_buttons, floor_queues,
-              arrival_floor=1, destination_floor=7, move_speed=1.2)
-    
-    yield env.timeout(2)
-    Passenger(env, "Kate", broker, hall_buttons, floor_queues,
-              arrival_floor=4, destination_floor=7, move_speed=1.0)
-    
-    yield env.timeout(1)
-    Passenger(env, "Leo", broker, hall_buttons, floor_queues,
-              arrival_floor=6, destination_floor=7, move_speed=1.3)
+    while True:
+        # Wait random interval between passengers (1-5 seconds) - high frequency
+        yield env.timeout(random.uniform(1, 5))
+        
+        passenger_id += 1
+        name = f"{base_names[passenger_id % len(base_names)]}_{passenger_id}"
+        
+        # Random floor selection
+        arrival_floor = random.randint(1, 10)
+        destination_floor = random.randint(1, 10)
+        while destination_floor == arrival_floor:
+            destination_floor = random.randint(1, 10)
+        
+        move_speed = random.uniform(0.8, 1.5)
+        
+        # Create passenger
+        Passenger(env, name, broker, hall_buttons, floor_queues, 
+                 arrival_floor=arrival_floor, destination_floor=destination_floor, 
+                 move_speed=move_speed)
 
 def passenger_generator(env, broker, hall_buttons, floor_queues):
     """Passenger generation process for real interrupt testing"""

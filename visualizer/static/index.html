@@ -20,8 +20,53 @@
         </header>
 
         <main>
-            <!-- Control Panel -->
-            <section class="control-panel">
+            <!-- Mode Selector -->
+            <section class="mode-selector-panel">
+                <h2>Mode</h2>
+                <div class="mode-buttons">
+                    <button id="mode-live" class="mode-btn active" data-mode="live">
+                        🔴 Live
+                    </button>
+                    <button id="mode-replay" class="mode-btn" data-mode="replay">
+                        📁 Replay
+                    </button>
+                </div>
+                <div id="file-selector" class="file-selector" style="display: none;">
+                    <select id="log-file-select" class="log-file-select">
+                        <option value="">-- Select Log File --</option>
+                    </select>
+                    <button id="btn-load-file" class="btn btn-primary">Load</button>
+                </div>
+            </section>
+
+            <!-- Playback Controls (Replay mode only) -->
+            <section id="playback-controls" class="playback-controls-panel" style="display: none;">
+                <h2>Playback Controls</h2>
+                <div class="controls-row">
+                    <button id="btn-play-pause" class="btn btn-primary">▶ Play</button>
+                    <button id="btn-restart" class="btn btn-secondary">↻ Restart</button>
+                    <div class="time-display">
+                        <span id="current-time">0:00</span>
+                        <span class="time-separator">/</span>
+                        <span id="total-time">0:00</span>
+                    </div>
+                    <select id="speed-select" class="speed-select">
+                        <option value="0.25">0.25x</option>
+                        <option value="0.5">0.5x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="2">2x</option>
+                        <option value="5">5x</option>
+                        <option value="10">10x</option>
+                    </select>
+                </div>
+                <div class="timeline-row">
+                    <input type="range" id="timeline-slider" class="timeline-slider" 
+                           min="0" max="100" value="0" step="0.1">
+                </div>
+            </section>
+
+            <!-- Control Panel (Live mode only) -->
+            <section id="live-control-panel" class="control-panel">
                 <h2>Control Panel</h2>
                 <div class="controls">
                     <button id="btn-start" class="btn btn-primary">Start Simulation</button>
@@ -63,7 +108,8 @@
         </footer>
     </div>
 
-    <script src="app.js?v=36"></script>
+    <script src="eventSource.js?v=1"></script>
+    <script src="app.js?v=38"></script>
 </body>
 </html>
 

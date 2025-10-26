@@ -12,8 +12,25 @@ class ElevatorVisualizer {
         this.simulationTime = 0;
         this.waitingPassengers = {}; // Store waiting passengers data
         
+        // Mode management
+        this.currentMode = 'live'; // 'live' or 'replay'
+        this.fileEventSource = null;
+        this.isPlaying = false;
+        this.playbackSpeed = 1.0;
+        this.API_BASE_URL = 'http://localhost:5000';
+        
+        // Replay state tracking
+        this.replayState = {
+            hallCalls: {},  // {elevatorName: {up: Set(), down: Set()}}
+            carCalls: {}    // {elevatorName: Set()}
+        };
+        
         this.initializeUI();
-        this.connectWebSocket();
+        this.initializeModeSelector();
+        this.initializePlaybackControls();
+        
+        // Start in live mode
+        this.switchToLiveMode();
     }
     
     initializeUI() {
@@ -279,6 +296,11 @@ class ElevatorVisualizer {
                 this.updateWaitingPassengers(data);
                 break;
                 
+            case 'calls_update':
+                // Update only hall calls and car calls, not elevator position
+                this.updateCallsOnly(data);
+                break;
+                
             case 'pong':
                 // Heartbeat response
                 break;
@@ -286,6 +308,29 @@ class ElevatorVisualizer {
             default:
                 console.log('Unknown message type:', type, data);
         }
+    }
+    
+    updateCallsOnly(data) {
+        const { elevator_name, car_calls, hall_calls_up, hall_calls_down } = data;
+        
+        // Get existing elevator element
+        let elevatorElement = document.getElementById(`elevator-${elevator_name}`);
+        if (!elevatorElement) {
+            // Elevator doesn't exist yet, skip update
+            return;
+        }
+        
+        const shaftElement = elevatorElement.querySelector('.elevator-shaft');
+        if (!shaftElement) return;
+        
+        // Remove old call indicators
+        shaftElement.querySelectorAll('.car-call-indicator, .hall-call-indicator').forEach(el => el.remove());
+        
+        // Render car calls
+        this.renderCarCalls(shaftElement, car_calls || [], data.num_floors || 10);
+        
+        // Render hall calls
+        this.renderHallCalls(shaftElement, hall_calls_up || [], hall_calls_down || [], data.num_floors || 10);
     }
     
     updateElevator(data) {
@@ -695,6 +740,507 @@ class ElevatorVisualizer {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    // ==========================================
+    // Mode Selector & Playback Controls
+    // ==========================================
+    
+    initializeModeSelector() {
+        const modeLiveBtn = document.getElementById('mode-live');
+        const modeReplayBtn = document.getElementById('mode-replay');
+        const fileSelector = document.getElementById('file-selector');
+        const logFileSelect = document.getElementById('log-file-select');
+        const btnLoadFile = document.getElementById('btn-load-file');
+        
+        // Mode button handlers
+        modeLiveBtn.addEventListener('click', () => this.selectMode('live'));
+        modeReplayBtn.addEventListener('click', () => this.selectMode('replay'));
+        
+        // Load button handler
+        btnLoadFile.addEventListener('click', () => {
+            const filename = logFileSelect.value;
+            if (filename) {
+                this.loadReplayFile(filename);
+            }
+        });
+        
+        // Load available log files
+        this.loadAvailableFiles();
+    }
+    
+    initializePlaybackControls() {
+        const btnPlayPause = document.getElementById('btn-play-pause');
+        const btnRestart = document.getElementById('btn-restart');
+        const speedSelect = document.getElementById('speed-select');
+        const timelineSlider = document.getElementById('timeline-slider');
+        
+        if (btnPlayPause) {
+            btnPlayPause.addEventListener('click', () => this.togglePlayPause());
+        }
+        
+        if (btnRestart) {
+            btnRestart.addEventListener('click', () => this.restart());
+        }
+        
+        if (speedSelect) {
+            speedSelect.addEventListener('change', (e) => {
+                this.playbackSpeed = parseFloat(e.target.value);
+                if (this.fileEventSource) {
+                    this.fileEventSource.setPlaybackSpeed(this.playbackSpeed);
+                }
+            });
+        }
+        
+        if (timelineSlider) {
+            timelineSlider.addEventListener('input', (e) => {
+                if (this.fileEventSource) {
+                    const percentage = parseFloat(e.target.value);
+                    const duration = this.fileEventSource.getDuration();
+                    const targetTime = (percentage / 100) * duration;
+                    this.fileEventSource.seekTo(targetTime);
+                }
+            });
+        }
+        
+        // Start time updater
+        setInterval(() => this.updatePlaybackDisplay(), 100);
+    }
+    
+    selectMode(mode) {
+        const modeLiveBtn = document.getElementById('mode-live');
+        const modeReplayBtn = document.getElementById('mode-replay');
+        const fileSelector = document.getElementById('file-selector');
+        
+        // Update button states
+        if (mode === 'live') {
+            modeLiveBtn.classList.add('active');
+            modeReplayBtn.classList.remove('active');
+            fileSelector.style.display = 'none';
+            this.switchToLiveMode();
+        } else {
+            modeLiveBtn.classList.remove('active');
+            modeReplayBtn.classList.add('active');
+            fileSelector.style.display = 'flex';
+        }
+    }
+    
+    switchToLiveMode() {
+        console.log('[App] Switching to Live mode');
+        
+        // Stop replay if active
+        if (this.fileEventSource) {
+            this.fileEventSource.stop();
+            this.fileEventSource = null;
+        }
+        
+        // Show/hide panels
+        document.getElementById('playback-controls').style.display = 'none';
+        document.getElementById('live-control-panel').style.display = 'block';
+        
+        // Clear visualization
+        this.clearVisualization();
+        
+        // Connect WebSocket
+        this.connectWebSocket();
+        
+        this.currentMode = 'live';
+    }
+    
+    async switchToReplayMode(filename) {
+        console.log('[App] Switching to Replay mode:', filename);
+        
+        // Disconnect WebSocket
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        
+        // Show/hide panels
+        document.getElementById('playback-controls').style.display = 'block';
+        document.getElementById('live-control-panel').style.display = 'none';
+        
+        // Clear visualization
+        this.clearVisualization();
+        
+        this.currentMode = 'replay';
+    }
+    
+    async loadAvailableFiles() {
+        try {
+            const response = await fetch(`${this.API_BASE_URL}/api/logs/list`);
+            const files = await response.json();
+            
+            const select = document.getElementById('log-file-select');
+            if (!select) return;
+            
+            // Clear existing options except first
+            select.innerHTML = '<option value="">-- Select Log File --</option>';
+            
+            // Add file options
+            files.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file.name;
+                const size = this.formatSize(file.size);
+                option.textContent = `${file.name} (${size})`;
+                select.appendChild(option);
+            });
+            
+            console.log(`[App] Loaded ${files.length} log files`);
+        } catch (error) {
+            console.error('[App] Error loading files:', error);
+        }
+    }
+    
+    async loadReplayFile(filename) {
+        try {
+            await this.switchToReplayMode(filename);
+            
+            // Create file event source
+            this.fileEventSource = new FileEventSource(this.API_BASE_URL);
+            
+            // Subscribe to events
+            this.fileEventSource.subscribe((event) => this.handleReplayEvent(event));
+            
+            // Load file
+            const info = await this.fileEventSource.loadFile(filename);
+            this.addLog('system', `Loaded ${info.eventCount} events from ${filename}`);
+            
+            // Auto-play
+            this.fileEventSource.start();
+            this.isPlaying = true;
+            this.updatePlayPauseButton();
+            
+        } catch (error) {
+            console.error('[App] Error loading replay file:', error);
+            this.addLog('error', `Failed to load ${filename}: ${error.message}`);
+        }
+    }
+    
+    handleReplayEvent(event) {
+        // Convert FileEventSource events to the format expected by handleMessage
+        if (event.type === 'metadata') {
+            // Handle metadata
+            console.log('[Replay] Metadata:', event.data);
+            return;
+        }
+        
+        if (event.type === 'playback_complete') {
+            this.addLog('system', 'Playback complete');
+            this.isPlaying = false;
+            this.updatePlayPauseButton();
+            return;
+        }
+        
+        // Convert JSONL event format to WebSocket message format
+        const message = this.convertJSONLToMessage(event);
+        if (message) {
+            this.handleMessage(message);
+        }
+    }
+    
+    convertJSONLToMessage(event) {
+        // Convert JSONL event format to WebSocket message format
+        switch (event.type) {
+            case 'elevator_status':
+                return {
+                    type: 'elevator_update',
+                    data: {
+                        elevator_name: event.data.elevator,
+                        floor: event.data.floor,
+                        state: event.data.state,
+                        passengers: event.data.passengers,
+                        capacity: event.data.capacity,
+                        num_floors: 10, // Default
+                        car_calls: this.getCarCallsForElevator(event.data.elevator),
+                        hall_calls_up: this.getHallCallsUp(event.data.elevator),
+                        hall_calls_down: this.getHallCallsDown(event.data.elevator)
+                    }
+                };
+            
+            case 'hall_call_registered':
+                // Store hall call for later display
+                return null; // Will be displayed via elevator_status
+            
+            case 'hall_call_assignment':
+                // Track hall call assignment
+                const elevator = event.data.elevator;
+                const floor = event.data.floor;
+                const direction = event.data.direction;
+                
+                if (!this.replayState) {
+                    this.replayState = {
+                        hallCalls: {},
+                        carCalls: {}
+                    };
+                }
+                
+                if (!this.replayState.hallCalls[elevator]) {
+                    this.replayState.hallCalls[elevator] = {
+                        up: new Set(),
+                        down: new Set()
+                    };
+                }
+                
+                if (direction === 'UP') {
+                    this.replayState.hallCalls[elevator].up.add(floor);
+                } else {
+                    this.replayState.hallCalls[elevator].down.add(floor);
+                }
+                
+                // Immediately trigger calls update (without changing elevator position)
+                return {
+                    type: 'calls_update',
+                    data: {
+                        elevator_name: elevator,
+                        num_floors: 10,
+                        car_calls: this.getCarCallsForElevator(elevator),
+                        hall_calls_up: this.getHallCallsUp(elevator),
+                        hall_calls_down: this.getHallCallsDown(elevator)
+                    }
+                };
+            
+            case 'hall_call_off':
+                // Remove hall call
+                const offElevator = event.data.elevator;
+                const offFloor = event.data.floor;
+                const offDirection = event.data.direction;
+                
+                if (this.replayState && this.replayState.hallCalls[offElevator]) {
+                    if (offDirection === 'UP') {
+                        this.replayState.hallCalls[offElevator].up.delete(offFloor);
+                    } else {
+                        this.replayState.hallCalls[offElevator].down.delete(offFloor);
+                    }
+                }
+                
+                // Immediately trigger calls update to hide hall call
+                return {
+                    type: 'calls_update',
+                    data: {
+                        elevator_name: offElevator,
+                        num_floors: 10,
+                        car_calls: this.getCarCallsForElevator(offElevator),
+                        hall_calls_up: this.getHallCallsUp(offElevator),
+                        hall_calls_down: this.getHallCallsDown(offElevator)
+                    }
+                };
+            
+            case 'car_call_registered':
+                // Track car call
+                const carElevator = event.data.elevator;
+                const carFloor = event.data.floor;
+                
+                if (!this.replayState) {
+                    this.replayState = {
+                        hallCalls: {},
+                        carCalls: {}
+                    };
+                }
+                
+                if (!this.replayState.carCalls[carElevator]) {
+                    this.replayState.carCalls[carElevator] = new Set();
+                }
+                
+                this.replayState.carCalls[carElevator].add(carFloor);
+                
+                // Immediately trigger calls update to show car call
+                return {
+                    type: 'calls_update',
+                    data: {
+                        elevator_name: carElevator,
+                        num_floors: 10,
+                        car_calls: this.getCarCallsForElevator(carElevator),
+                        hall_calls_up: this.getHallCallsUp(carElevator),
+                        hall_calls_down: this.getHallCallsDown(carElevator)
+                    }
+                };
+            
+            case 'car_call_off':
+                // Remove car call
+                const carOffElevator = event.data.elevator;
+                const carOffFloor = event.data.floor;
+                
+                if (this.replayState && this.replayState.carCalls[carOffElevator]) {
+                    this.replayState.carCalls[carOffElevator].delete(carOffFloor);
+                }
+                
+                // Immediately trigger calls update to hide car call
+                return {
+                    type: 'calls_update',
+                    data: {
+                        elevator_name: carOffElevator,
+                        num_floors: 10,
+                        car_calls: this.getCarCallsForElevator(carOffElevator),
+                        hall_calls_up: this.getHallCallsUp(carOffElevator),
+                        hall_calls_down: this.getHallCallsDown(carOffElevator)
+                    }
+                };
+            
+            case 'door_event':
+                // Handle door events
+                return {
+                    type: 'event',
+                    data: {
+                        event_type: event.data.event,
+                        elevator_name: event.data.elevator,
+                        floor: event.data.floor,
+                        timestamp: event.time
+                    }
+                };
+            
+            case 'passenger_waiting':
+                // Simulate waiting passengers update
+                const waitFloor = event.data.floor;
+                const waitDirection = event.data.direction;
+                
+                if (!this.waitingPassengers[waitFloor]) {
+                    this.waitingPassengers[waitFloor] = { UP: 0, DOWN: 0 };
+                }
+                this.waitingPassengers[waitFloor][waitDirection]++;
+                
+                return {
+                    type: 'waiting_passengers_update',
+                    data: this.waitingPassengers
+                };
+            
+            case 'passenger_boarding':
+                // Decrement waiting passengers
+                const boardFloor = event.data.floor;
+                const boardDirection = event.data.direction;
+                
+                if (this.waitingPassengers[boardFloor] && 
+                    this.waitingPassengers[boardFloor][boardDirection] > 0) {
+                    this.waitingPassengers[boardFloor][boardDirection]--;
+                }
+                
+                return {
+                    type: 'waiting_passengers_update',
+                    data: this.waitingPassengers
+                };
+            
+            default:
+                // Ignore other event types
+                return null;
+        }
+    }
+    
+    getCarCallsForElevator(elevator) {
+        if (!this.replayState || !this.replayState.carCalls[elevator]) {
+            return [];
+        }
+        return Array.from(this.replayState.carCalls[elevator]);
+    }
+    
+    getHallCallsUp(elevator) {
+        if (!this.replayState || !this.replayState.hallCalls[elevator]) {
+            return [];
+        }
+        return Array.from(this.replayState.hallCalls[elevator].up);
+    }
+    
+    getHallCallsDown(elevator) {
+        if (!this.replayState || !this.replayState.hallCalls[elevator]) {
+            return [];
+        }
+        return Array.from(this.replayState.hallCalls[elevator].down);
+    }
+    
+    togglePlayPause() {
+        if (!this.fileEventSource) return;
+        
+        if (this.isPlaying) {
+            this.fileEventSource.pause();
+            this.isPlaying = false;
+        } else {
+            this.fileEventSource.resume();
+            this.isPlaying = true;
+        }
+        
+        this.updatePlayPauseButton();
+    }
+    
+    restart() {
+        if (!this.fileEventSource) return;
+        
+        this.fileEventSource.seekTo(0);
+        this.clearVisualization();
+        
+        if (!this.isPlaying) {
+            this.fileEventSource.resume();
+            this.isPlaying = true;
+            this.updatePlayPauseButton();
+        }
+    }
+    
+    updatePlayPauseButton() {
+        const btn = document.getElementById('btn-play-pause');
+        if (btn) {
+            btn.textContent = this.isPlaying ? '⏸ Pause' : '▶ Play';
+        }
+    }
+    
+    updatePlaybackDisplay() {
+        if (this.currentMode !== 'replay' || !this.fileEventSource) return;
+        
+        const currentTime = this.fileEventSource.getCurrentTime();
+        const duration = this.fileEventSource.getDuration();
+        
+        // Update time display
+        const currentTimeEl = document.getElementById('current-time');
+        const totalTimeEl = document.getElementById('total-time');
+        
+        if (currentTimeEl) {
+            currentTimeEl.textContent = this.formatTime(currentTime);
+        }
+        if (totalTimeEl) {
+            totalTimeEl.textContent = this.formatTime(duration);
+        }
+        
+        // Update timeline slider
+        const timelineSlider = document.getElementById('timeline-slider');
+        if (timelineSlider && duration > 0) {
+            const percentage = (currentTime / duration) * 100;
+            timelineSlider.value = percentage;
+        }
+        
+        // Update simulation time display
+        if (this.simTimeElement) {
+            this.simTimeElement.textContent = `${currentTime.toFixed(2)}s`;
+        }
+    }
+    
+    formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    formatSize(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    
+    clearVisualization() {
+        // Clear elevators
+        this.elevators.clear();
+        this.waitingPassengers = {};
+        
+        // Clear replay state
+        this.replayState = {
+            hallCalls: {},
+            carCalls: {}
+        };
+        
+        // Reset elevator container (keep structure)
+        const container = document.getElementById('elevator-container');
+        if (container) {
+            container.innerHTML = '';
+        }
+        
+        // Re-initialize placeholder elevators
+        this.initializePlaceholderElevators();
     }
 }
 
