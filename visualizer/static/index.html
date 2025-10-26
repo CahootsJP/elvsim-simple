@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VTS Control Suite - Real-time Visualization</title>
-    <link rel="stylesheet" href="style.css?v=37">
+    <link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
     <div class="container">
@@ -13,9 +13,15 @@
                 <h1>🏢 VTS Control Suite</h1>
                 <p class="subtitle">Vertical Transport System Control Suite</p>
             </div>
-            <div class="connection-status">
-                <span id="status-indicator" class="status-disconnected"></span>
-                <span id="status-text">Disconnected</span>
+            <div class="header-right">
+                <button id="dark-mode-toggle" class="dark-mode-toggle" title="Toggle Dark Mode">
+                    <span class="icon-light">☀️</span>
+                    <span class="icon-dark" style="display: none;">🌙</span>
+                </button>
+                <div class="connection-status">
+                    <span id="status-indicator" class="status-disconnected"></span>
+                    <span id="status-text">Disconnected</span>
+                </div>
             </div>
         </header>
 
@@ -101,7 +107,7 @@
     </div>
 
     <script src="eventSource.js?v=1"></script>
-    <script src="app.js?v=39"></script>
+    <script src="app.js?v=40"></script>
 </body>
 </html>
 

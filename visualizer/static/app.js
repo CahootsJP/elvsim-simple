@@ -28,6 +28,7 @@ class ElevatorVisualizer {
         this.initializeUI();
         this.initializeModeSelector();
         this.initializePlaybackControls();
+        this.initializeDarkMode();
         
         // Start in live mode
         this.switchToLiveMode();
@@ -340,8 +341,8 @@ class ElevatorVisualizer {
                                 <div class="passenger-count">0/50</div>
                                 <div class="passenger-percent">0%</div>
                             </div>
-                        </div>
                     </div>
+                </div>
             </div>
         `;
         
@@ -576,7 +577,7 @@ class ElevatorVisualizer {
         // Clear the waiting area in elevator panels
         const waitingArea = elevatorElement.querySelector('.waiting-passengers');
         if (waitingArea) {
-            waitingArea.innerHTML = '';
+        waitingArea.innerHTML = '';
         }
     }
     
@@ -585,7 +586,7 @@ class ElevatorVisualizer {
         let display = '';
         
         // Passenger icon
-        display += '<span class="waiting-passenger-icon">👤</span>';
+            display += '<span class="waiting-passenger-icon">👤</span>';
         
         // Count with × symbol
         display += `<span class="waiting-count">×${count}</span>`;
@@ -766,6 +767,37 @@ class ElevatorVisualizer {
         
         // Start time updater
         setInterval(() => this.updatePlaybackDisplay(), 100);
+    }
+    
+    initializeDarkMode() {
+        const darkModeToggle = document.getElementById('dark-mode-toggle');
+        const iconLight = darkModeToggle.querySelector('.icon-light');
+        const iconDark = darkModeToggle.querySelector('.icon-dark');
+        
+        // Load saved preference
+        const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+        if (savedDarkMode) {
+            document.body.classList.add('dark-mode');
+            iconLight.style.display = 'none';
+            iconDark.style.display = 'block';
+        }
+        
+        // Toggle handler
+        darkModeToggle.addEventListener('click', () => {
+            const isDarkMode = document.body.classList.toggle('dark-mode');
+            
+            // Update icon
+            if (isDarkMode) {
+                iconLight.style.display = 'none';
+                iconDark.style.display = 'block';
+            } else {
+                iconLight.style.display = 'block';
+                iconDark.style.display = 'none';
+            }
+            
+            // Save preference
+            localStorage.setItem('darkMode', isDarkMode);
+        });
     }
     
     selectMode(mode) {
