@@ -40,9 +40,6 @@ class ElevatorVisualizer {
         this.simTimeElement = document.getElementById('sim-time');
         
         // Control buttons
-        this.btnStart = document.getElementById('btn-start');
-        this.btnPause = document.getElementById('btn-pause');
-        this.btnReset = document.getElementById('btn-reset');
         this.btnClearLog = document.getElementById('btn-clear-log');
         this.chkAutoScroll = document.getElementById('chk-auto-scroll');
         
@@ -55,11 +52,6 @@ class ElevatorVisualizer {
         this.chkAutoScroll.addEventListener('change', (e) => {
             this.autoScroll = e.target.checked;
         });
-        
-        // Future: Add start/pause/reset functionality
-        this.btnStart.addEventListener('click', () => this.sendCommand('start'));
-        this.btnPause.addEventListener('click', () => this.sendCommand('pause'));
-        this.btnReset.addEventListener('click', () => this.sendCommand('reset'));
         
         // Initialize placeholder elevators (Elevator_1 and Elevator_2)
         this.initializePlaceholderElevators();
@@ -211,69 +203,39 @@ class ElevatorVisualizer {
         }
     }
     
-    connectWebSocket() {
-        const wsUrl = 'ws://localhost:8765';
-        this.addLog('system', `Connecting to ${wsUrl}...`);
+    
+    clearAllState() {
+        console.log('[App] Clearing all state');
         
-        try {
-            this.ws = new WebSocket(wsUrl);
-            
-            this.ws.onopen = () => {
-                this.onConnected();
-            };
-            
-            this.ws.onmessage = (event) => {
-                this.onMessage(event.data);
-            };
-            
-            this.ws.onerror = (error) => {
-                this.onError(error);
-            };
-            
-            this.ws.onclose = () => {
-                this.onDisconnected();
-            };
-            
-        } catch (error) {
-            this.addLog('error', `Connection failed: ${error.message}`);
-            this.updateConnectionStatus(false);
+        // Clear elevator state
+        this.elevators.clear();
+        
+        // Clear replay state
+        this.replayState = {
+            hallCalls: {},
+            carCalls: {}
+        };
+        
+        // Clear waiting passengers
+        this.waitingPassengers = {};
+        
+        // Clear DOM: elevator container
+        this.elevatorContainer.innerHTML = '';
+        
+        // Recreate Elevator Hall panel
+        this.createElevatorHallPanel();
+        
+        console.log('[App] All state cleared');
+    }
+    
+    createElevatorHallPanel() {
+        // Use existing method to maintain consistency
+        let hallElement = document.getElementById('elevator-hall');
+        if (!hallElement) {
+            hallElement = this.createElevatorHallElement();
+            this.elevatorContainer.appendChild(hallElement);
         }
-    }
-    
-    onConnected() {
-        this.isConnected = true;
-        this.updateConnectionStatus(true);
-        this.addLog('system', 'Connected to simulation server');
-        
-        // Send initial handshake
-        this.sendCommand('hello');
-    }
-    
-    onDisconnected() {
-        this.isConnected = false;
-        this.updateConnectionStatus(false);
-        this.addLog('system', 'Disconnected from server');
-        
-        // Attempt reconnection after 3 seconds
-        setTimeout(() => {
-            if (!this.isConnected) {
-                this.addLog('system', 'Attempting to reconnect...');
-                this.connectWebSocket();
-            }
-        }, 3000);
-    }
-    
-    onError(error) {
-        this.addLog('error', `WebSocket error: ${error.message || 'Unknown error'}`);
-    }
-    
-    onMessage(data) {
-        try {
-            const message = JSON.parse(data);
-            this.handleMessage(message);
-        } catch (error) {
-            this.addLog('error', `Failed to parse message: ${error.message}`);
-        }
+        this.renderElevatorHall(hallElement, 10); // 10 floors by default
     }
     
     handleMessage(message) {
@@ -683,14 +645,26 @@ class ElevatorVisualizer {
         this.simTimeElement.textContent = `${time.toFixed(2)}s`;
     }
     
-    updateConnectionStatus(connected) {
-        if (connected) {
-            this.statusIndicator.className = 'status-indicator status-connected';
-            this.statusText.textContent = 'Connected';
-        } else {
-            this.statusIndicator.className = 'status-indicator status-disconnected';
-            this.statusText.textContent = 'Disconnected';
+    updateConnectionStatus(status, text) {
+        // Status can be: 'polling', 'playing', 'paused', 'completed', 'error', 'disconnected'
+        // For backward compatibility, also accept boolean (true/false)
+        if (typeof status === 'boolean') {
+            status = status ? 'polling' : 'disconnected';
+            text = status === 'polling' ? 'Polling' : 'Disconnected';
         }
+        
+        // Update indicator class
+        const classMap = {
+            'polling': 'status-connected',      // 🟢 Green
+            'playing': 'status-connected',      // 🟢 Green
+            'paused': 'status-paused',          // 🟡 Yellow
+            'completed': 'status-completed',    // ⚪ Gray
+            'error': 'status-error',            // 🔴 Red
+            'disconnected': 'status-disconnected' // 🔴 Red
+        };
+        
+        this.statusIndicator.className = `status-indicator ${classMap[status] || 'status-disconnected'}`;
+        this.statusText.textContent = text || status;
     }
     
     addLog(type, message, timestamp = null) {
@@ -722,19 +696,6 @@ class ElevatorVisualizer {
         this.addLog('system', 'Log cleared');
     }
     
-    sendCommand(command, data = {}) {
-        if (!this.isConnected) {
-            this.addLog('warning', 'Not connected to server');
-            return;
-        }
-        
-        const message = {
-            type: command,
-            data: data
-        };
-        
-        this.ws.send(JSON.stringify(message));
-    }
     
     escapeHtml(text) {
         const div = document.createElement('div');
@@ -834,17 +795,52 @@ class ElevatorVisualizer {
             this.fileEventSource = null;
         }
         
+        // Disconnect WebSocket if connected
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        
         // Show/hide panels
         document.getElementById('playback-controls').style.display = 'none';
-        document.getElementById('live-control-panel').style.display = 'block';
         
         // Clear visualization
         this.clearVisualization();
         
-        // Connect WebSocket
-        this.connectWebSocket();
+        // Start live file polling (using LiveFileEventSource)
+        this.startLiveFilePolling();
         
         this.currentMode = 'live';
+    }
+    
+    startLiveFilePolling() {
+        console.log('[App] Starting live file polling...');
+        
+        // Create LiveFileEventSource
+        this.fileEventSource = new LiveFileEventSource(
+            this.API_BASE_URL, 
+            'simulation_log.jsonl', 
+            100 // Poll every 100ms
+        );
+        
+        // Subscribe to events
+        this.fileEventSource.subscribe((event) => {
+            // Check for errors
+            if (event.type === 'error') {
+                this.updateConnectionStatus('error', 'Error');
+                this.addLog('error', `Polling error: ${event.message || 'Unknown error'}`);
+            } else {
+                // Normal event processing
+                this.updateConnectionStatus('polling', 'Polling');
+                this.handleReplayEvent(event);
+            }
+        });
+        
+        // Start polling
+        this.fileEventSource.start();
+        
+        this.addLog('system', 'Live mode: polling simulation_log.jsonl');
+        this.updateConnectionStatus('polling', 'Polling');
     }
     
     async switchToReplayMode(filename) {
@@ -858,7 +854,6 @@ class ElevatorVisualizer {
         
         // Show/hide panels
         document.getElementById('playback-controls').style.display = 'block';
-        document.getElementById('live-control-panel').style.display = 'none';
         
         // Clear visualization
         this.clearVisualization();
@@ -910,10 +905,12 @@ class ElevatorVisualizer {
             this.fileEventSource.start();
             this.isPlaying = true;
             this.updatePlayPauseButton();
+            this.updateConnectionStatus('playing', 'Playing');
             
         } catch (error) {
             console.error('[App] Error loading replay file:', error);
             this.addLog('error', `Failed to load ${filename}: ${error.message}`);
+            this.updateConnectionStatus('error', 'Error');
         }
     }
     
@@ -925,10 +922,18 @@ class ElevatorVisualizer {
             return;
         }
         
+        if (event.type === 'clear_state') {
+            // Clear all visualization state
+            console.log('[Replay] Clearing all state for seek operation');
+            this.clearAllState();
+            return;
+        }
+        
         if (event.type === 'playback_complete') {
             this.addLog('system', 'Playback complete');
             this.isPlaying = false;
             this.updatePlayPauseButton();
+            this.updateConnectionStatus('completed', 'Completed');
             return;
         }
         
@@ -1152,9 +1157,11 @@ class ElevatorVisualizer {
         if (this.isPlaying) {
             this.fileEventSource.pause();
             this.isPlaying = false;
+            this.updateConnectionStatus('paused', 'Paused');
         } else {
             this.fileEventSource.resume();
             this.isPlaying = true;
+            this.updateConnectionStatus('playing', 'Playing');
         }
         
         this.updatePlayPauseButton();
@@ -1223,23 +1230,10 @@ class ElevatorVisualizer {
     }
     
     clearVisualization() {
-        // Clear elevators
-        this.elevators.clear();
-        this.waitingPassengers = {};
+        // Use the unified clearAllState method
+        this.clearAllState();
         
-        // Clear replay state
-        this.replayState = {
-            hallCalls: {},
-            carCalls: {}
-        };
-        
-        // Reset elevator container (keep structure)
-        const container = document.getElementById('elevator-container');
-        if (container) {
-            container.innerHTML = '';
-        }
-        
-        // Re-initialize placeholder elevators
+        // Re-initialize placeholder elevators (for live mode)
         this.initializePlaceholderElevators();
     }
 }

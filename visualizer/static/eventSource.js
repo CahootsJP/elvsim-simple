@@ -112,22 +112,36 @@ class FileEventSource extends EventSource {
     seekTo(time) {
         console.log(`[FileEventSource] Seeking to time: ${time}`);
         
-        // Find the event index closest to the target time
-        let targetIndex = 0;
+        const wasPlaying = this.isPlaying;
+        
+        // Stop current playback
+        this.stop();
+        
+        // STEP 1: Clear all state (notify subscribers to clear all state)
+        this.notify({ type: 'clear_state' });
+        
+        // STEP 2: Replay all events from 0 to target time
+        console.log(`[FileEventSource] Replaying events from 0 to ${time}s...`);
+        let replayedCount = 0;
+        
         for (let i = 0; i < this.events.length; i++) {
             if (this.events[i].time <= time) {
-                targetIndex = i;
+                this.notify(this.events[i]);
+                this.currentIndex = i;
+                replayedCount++;
             } else {
                 break;
             }
         }
         
-        this.currentIndex = targetIndex;
+        console.log(`[FileEventSource] Replayed ${replayedCount} events`);
+        
+        // STEP 3: Set new playback position
+        this.currentIndex++; // Move to next event after target time
         this.pausedTime = time * 1000;
         
-        // If playing, restart from new position
-        if (this.isPlaying) {
-            this.stop();
+        // STEP 4: Resume playback if it was playing
+        if (wasPlaying) {
             this.start();
         }
     }

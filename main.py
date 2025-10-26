@@ -34,7 +34,7 @@ def run_simulation():
     
     statistics.set_simulation_metadata({
         'num_floors': NUM_FLOORS,
-        'num_elevators': 2,
+        'num_elevators': 3,
         'elevator_capacity': 10,
         'floor_height': FLOOR_HEIGHT,
         'max_speed': MAX_SPEED,
@@ -75,6 +75,11 @@ def run_simulation():
     door2 = Door(env, "Elevator_2_Door")
     elevator2 = Elevator(env, "Elevator_2", broker, NUM_FLOORS, floor_queues, door=door2, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10)
     gcs.register_elevator(elevator2)
+    
+    # Create Elevator 3
+    door3 = Door(env, "Elevator_3_Door")
+    elevator3 = Elevator(env, "Elevator_3", broker, NUM_FLOORS, floor_queues, door=door3, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10)
+    gcs.register_elevator(elevator3)
 
     # --- Process startup ---
     # For normal testing

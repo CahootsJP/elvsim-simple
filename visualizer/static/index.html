@@ -65,23 +65,15 @@
                 </div>
             </section>
 
-            <!-- Control Panel (Live mode only) -->
-            <section id="live-control-panel" class="control-panel">
-                <h2>Control Panel</h2>
-                <div class="controls">
-                    <button id="btn-start" class="btn btn-primary">Start Simulation</button>
-                    <button id="btn-pause" class="btn btn-secondary" disabled>Pause</button>
-                    <button id="btn-reset" class="btn btn-secondary" disabled>Reset</button>
-                </div>
-                <div class="simulation-time">
-                    <label>Simulation Time:</label>
-                    <span id="sim-time">0.00s</span>
-                </div>
-            </section>
-
             <!-- Visualization Area -->
             <section class="visualization">
-                <h2>Elevator Status</h2>
+                <div class="visualization-header">
+                    <h2>Elevator Status</h2>
+                    <div class="simulation-time">
+                        <label>Simulation Time:</label>
+                        <span id="sim-time">0.00s</span>
+                    </div>
+                </div>
                 <div id="elevator-container" class="elevator-container">
                     <!-- Elevators will be dynamically created here -->
                 </div>
