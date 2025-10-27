@@ -30,6 +30,16 @@ def serve_static(path):
     return send_from_directory(BASE_DIR / 'visualizer' / 'static', path)
 
 
+@app.route('/<path:filename>')
+def serve_root_static(filename):
+    """Serve static files from root path (CSS, JS, etc.)"""
+    # Only serve known static file types to avoid conflicts with API routes
+    if filename.endswith(('.css', '.js', '.png', '.jpg', '.ico', '.svg')):
+        return send_from_directory(BASE_DIR / 'visualizer' / 'static', filename)
+    # If not a static file, return 404
+    return "Not found", 404
+
+
 @app.route('/api/logs/list')
 def list_logs():
     """List all available JSONL log files"""
