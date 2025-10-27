@@ -1,7 +1,12 @@
-simpy
-numpy
-matplotlib
-sympy
-websockets
-flask
-flask-cors
+# Core dependencies for elvsim
+simpy>=4.0.0
+numpy>=1.20.0
+matplotlib>=3.3.0
+sympy>=1.9
+
+# Web visualization
+flask>=2.0.0
+flask-cors>=3.0.0
+
+# Optional: For real-time monitoring
+# asyncio (built-in for Python 3.7+)

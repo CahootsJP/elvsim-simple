@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elvsim"
+version = "0.1.0"
+description = "A comprehensive elevator simulation system with group control and visualization"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Abbey", email = "abbey@example.com"}
+]
+keywords = ["elevator", "simulation", "simpy", "group-control", "vertical-transport"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "simpy>=4.0.0",
+    "numpy>=1.20.0",
+    "matplotlib>=3.3.0",
+    "sympy>=1.9",
+    "flask>=2.0.0",
+    "flask-cors>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=3.0.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0",
+    "mypy>=0.950",
+    "sphinx>=4.5.0",
+    "sphinx-rtd-theme>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/abbey/elvsim-simple"
+Documentation = "https://elvsim.readthedocs.io"
+Repository = "https://github.com/abbey/elvsim-simple"
+"Bug Tracker" = "https://github.com/abbey/elvsim-simple/issues"
+
+[project.scripts]
+elvsim-viz = "visualizer.server.http_server:main"
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=simulator --cov=controller --cov=analyzer --cov=visualizer --cov-report=html --cov-report=term"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+

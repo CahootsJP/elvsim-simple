@@ -12,8 +12,10 @@ from pathlib import Path
 app = Flask(__name__, static_folder='static')
 CORS(app)  # Enable CORS for all routes
 
-# Base directory for the project
-BASE_DIR = Path(__file__).parent.parent
+# Base directory for the project (elvsim-simple root)
+# http_server.py is at: visualizer/server/http_server.py
+# So parent.parent.parent gets us to elvsim-simple/
+BASE_DIR = Path(__file__).parent.parent.parent
 
 
 @app.route('/')
@@ -127,6 +129,11 @@ def run_server(host='localhost', port=5000, debug=False):
     print(f"  - GET  /api/status")
     
     app.run(host=host, port=port, debug=debug, threaded=True)
+
+
+def main():
+    """Entry point for console script (elvsim-viz command)"""
+    run_server(debug=False)
 
 
 if __name__ == '__main__':

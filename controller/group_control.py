@@ -1,7 +1,7 @@
 import simpy
-from Entity import Entity
-from MessageBroker import MessageBroker
-from Elevator import Elevator
+from simulator.core.entity import Entity
+from simulator.infrastructure.message_broker import MessageBroker
+from simulator.core.elevator import Elevator
 
 class GroupControlSystem(Entity):
     """

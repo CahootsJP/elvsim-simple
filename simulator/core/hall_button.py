@@ -1,5 +1,5 @@
 import simpy
-from MessageBroker import MessageBroker
+from ..infrastructure.message_broker import MessageBroker
 
 class HallButton:
     """

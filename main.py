@@ -1,12 +1,18 @@
 import simpy
-from MessageBroker import MessageBroker
-from GroupControlSystem import GroupControlSystem
-from Elevator import Elevator
-from HallButton import HallButton
-from Passenger import Passenger
-from Door import Door
-from PhysicsEngine import PhysicsEngine
-from Statistics import Statistics
+
+# Simulator components
+from simulator.infrastructure.message_broker import MessageBroker
+from simulator.core.elevator import Elevator
+from simulator.core.hall_button import HallButton
+from simulator.core.passenger import Passenger
+from simulator.core.door import Door
+from simulator.physics.physics_engine import PhysicsEngine
+
+# Controller
+from controller.group_control import GroupControlSystem
+
+# Analyzer
+from analyzer.statistics import Statistics
 
 def run_simulation():
     """Set up and run the entire simulation"""

@@ -1,9 +1,9 @@
 import simpy
 from simpy.events import Interrupt
-from Entity import Entity
-from MessageBroker import MessageBroker
-from Passenger import Passenger
-from Door import Door
+from .entity import Entity
+from ..infrastructure.message_broker import MessageBroker
+from .passenger import Passenger
+from .door import Door
 import math
 
 class Elevator(Entity):

@@ -1,7 +1,7 @@
 import simpy
-from Entity import Entity
-from MessageBroker import MessageBroker
-from HallButton import HallButton
+from .entity import Entity
+from ..infrastructure.message_broker import MessageBroker
+from .hall_button import HallButton
 
 class Passenger(Entity):
     """

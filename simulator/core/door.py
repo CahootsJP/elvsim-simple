@@ -1,5 +1,5 @@
 import simpy
-from Entity import Entity
+from .entity import Entity
 
 class Door(Entity):
     """
