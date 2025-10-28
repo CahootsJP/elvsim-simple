@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Abbey", email = "abbey@example.com"}
+    {name = "CahootsJP", email = "cahoots@example.com"}
 ]
 keywords = ["elevator", "simulation", "simpy", "group-control", "vertical-transport"]
 classifiers = [
@@ -46,10 +46,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/abbey/elvsim-simple"
+Homepage = "https://github.com/CahootsJP/elvsim-simple"
 Documentation = "https://elvsim.readthedocs.io"
-Repository = "https://github.com/abbey/elvsim-simple"
-"Bug Tracker" = "https://github.com/abbey/elvsim-simple/issues"
+Repository = "https://github.com/CahootsJP/elvsim-simple"
+"Bug Tracker" = "https://github.com/CahootsJP/elvsim-simple/issues"
 
 [project.scripts]
 elvsim-viz = "visualizer.server.http_server:main"

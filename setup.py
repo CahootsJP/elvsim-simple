@@ -12,11 +12,11 @@ long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists
 setup(
     name="elvsim",
     version="0.1.0",
-    author="Abbey",
+    author="CahootsJP",
     description="A comprehensive elevator simulation system with group control and visualization",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/abbey/elvsim-simple",
+    url="https://github.com/CahootsJP/elvsim-simple",
     packages=find_packages(exclude=["tests", "tests.*", "docs", "examples"]),
     classifiers=[
         "Development Status :: 3 - Alpha",

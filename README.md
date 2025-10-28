@@ -11,7 +11,7 @@ SimPyベースの離散事象シミュレーションシステム。Web可視化
 
 ```bash
 # 開発版（推奨）
-git clone https://github.com/abbey/elvsim-simple.git
+git clone https://github.com/CahootsJP/elvsim-simple.git
 cd elvsim-simple
 pip install -r requirements.txt
 
