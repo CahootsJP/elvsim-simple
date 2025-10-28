@@ -1,4 +1,7 @@
-"""Group control algorithm implementations"""
+"""Elevator allocation algorithms"""
 
-__all__ = []
+from .nearest_car import NearestCarStrategy
 
+__all__ = [
+    'NearestCarStrategy',
+]

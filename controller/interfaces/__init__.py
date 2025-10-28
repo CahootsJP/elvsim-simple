@@ -1,4 +1,8 @@
 """Interface definitions for group control algorithms"""
 
-__all__ = []
+from .allocation_strategy import IAllocationStrategy
+
+__all__ = [
+    'IAllocationStrategy',
+]
 

@@ -12,8 +12,9 @@ from simulator.physics.physics_engine import PhysicsEngine
 from simulator.implementations.traditional.call_system import TraditionalCallSystem
 from simulator.implementations.traditional.passenger_behavior import AdaptivePassengerBehavior
 
-# Controller
+# Controller and allocation strategy
 from controller.group_control import GroupControlSystem
+from controller.algorithms.nearest_car import NearestCarStrategy
 
 # Analyzer
 from analyzer.statistics import Statistics
@@ -40,6 +41,9 @@ def run_simulation():
     # --- Call system configuration ---
     call_system = TraditionalCallSystem(num_floors=NUM_FLOORS)
     passenger_behavior = AdaptivePassengerBehavior()
+    
+    # --- Allocation strategy configuration ---
+    allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
     
     # Set simulation metadata for JSON Lines log
     import random
@@ -72,7 +76,7 @@ def run_simulation():
     ]
 
     # --- Entity creation ---
-    gcs = GroupControlSystem(env, "GCS", broker)
+    gcs = GroupControlSystem(env, "GCS", broker, allocation_strategy)
     
     hall_buttons = [
         {'UP': HallButton(env, floor, "UP", broker), 
