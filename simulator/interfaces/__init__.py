@@ -1,4 +1,10 @@
 """Interface definitions for simulator components"""
 
-__all__ = []
+from .call_system import ICallSystem
+from .passenger_behavior import IPassengerBehavior
+
+__all__ = [
+    'ICallSystem',
+    'IPassengerBehavior',
+]
 

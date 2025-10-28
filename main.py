@@ -8,6 +8,10 @@ from simulator.core.passenger import Passenger
 from simulator.core.door import Door
 from simulator.physics.physics_engine import PhysicsEngine
 
+# Call system and behavior interfaces
+from simulator.implementations.traditional.call_system import TraditionalCallSystem
+from simulator.implementations.traditional.passenger_behavior import AdaptivePassengerBehavior
+
 # Controller
 from controller.group_control import GroupControlSystem
 
@@ -32,6 +36,10 @@ def run_simulation():
     broadcast_pipe = broker.get_broadcast_pipe()
     statistics = Statistics(env, broadcast_pipe)
     env.process(statistics.start_listening())
+    
+    # --- Call system configuration ---
+    call_system = TraditionalCallSystem(num_floors=NUM_FLOORS)
+    passenger_behavior = AdaptivePassengerBehavior()
     
     # Set simulation metadata for JSON Lines log
     import random
@@ -92,7 +100,8 @@ def run_simulation():
     # env.process(passenger_generator(env, broker, hall_buttons, floor_queues))
     
     # For integrated testing (boarding/alighting on same floor)
-    env.process(passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues))
+    env.process(passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
+                                                    call_system, passenger_behavior))
 
     print("\n--- Simulation Start ---")
     env.run(until=SIM_DURATION)
@@ -104,7 +113,8 @@ def run_simulation():
     # Generate trajectory diagram
     statistics.plot_trajectory_diagram()
 
-def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues):
+def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
+                                       call_system, passenger_behavior):
     """Continuous passenger generation for extended simulation"""
     import random
     
@@ -130,8 +140,9 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues)
         
         move_speed = random.uniform(0.8, 1.5)
         
-        # Create passenger
-        Passenger(env, name, broker, hall_buttons, floor_queues, 
+        # Create passenger (using call_system and behavior)
+        Passenger(env, name, broker, hall_buttons, floor_queues,
+                 call_system=call_system, behavior=passenger_behavior,
                  arrival_floor=arrival_floor, destination_floor=destination_floor, 
                  move_speed=move_speed)
 

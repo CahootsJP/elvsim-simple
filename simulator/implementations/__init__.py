@@ -1,4 +1,13 @@
 """Implementation variants of simulator components"""
 
-__all__ = []
+# Import submodules for easy access
+from . import traditional
+from . import dcs
+from . import hybrid
+
+__all__ = [
+    'traditional',
+    'dcs',
+    'hybrid',
+]
 

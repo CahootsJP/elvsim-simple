@@ -2,17 +2,33 @@ import simpy
 from .entity import Entity
 from ..infrastructure.message_broker import MessageBroker
 from .hall_button import HallButton
+from ..interfaces.call_system import ICallSystem
+from ..interfaces.passenger_behavior import IPassengerBehavior
 
 class Passenger(Entity):
     """
-    [v13.0] Passenger who boards and exits at their own will
+    Passenger who adapts to building's call system (Traditional or DCS)
+    
+    Design:
+    - Uses ICallSystem to determine building's call method per floor
+    - Uses IPassengerBehavior to make decisions
+    - Workflow execution (SimPy processes) is handled here
+    
+    Supports:
+    - Traditional: UP/DOWN buttons, any elevator
+    - DCS: Destination panels, assigned elevator only
+    - Hybrid: Mix of both depending on floor
     """
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, 
-                 hall_buttons, floor_queues, arrival_floor: int, destination_floor: int, move_speed: float):
+                 hall_buttons, floor_queues, 
+                 call_system: ICallSystem, behavior: IPassengerBehavior,
+                 arrival_floor: int, destination_floor: int, move_speed: float):
         super().__init__(env, name)
         self.broker = broker
         self.hall_buttons = hall_buttons
         self.floor_queues = floor_queues
+        self.call_system = call_system  # Building's call system configuration
+        self.behavior = behavior        # Passenger's decision logic
         
         self.arrival_floor = arrival_floor
         self.destination_floor = destination_floor
@@ -35,8 +51,28 @@ class Passenger(Entity):
         return queue.items[0] == self
 
     def run(self):
-        """Passenger's autonomous lifecycle with retry logic"""
+        """
+        Passenger's main process
+        
+        Adapts workflow based on call system type at arrival floor.
+        """
         yield self.env.timeout(1)
+        
+        # Determine call system type at arrival floor
+        call_type = self.call_system.get_floor_call_type(self.arrival_floor)
+        
+        # Branch workflow based on call system
+        if call_type == 'TRADITIONAL':
+            yield from self._traditional_workflow()
+        elif call_type == 'DCS':
+            yield from self._dcs_workflow()
+        else:
+            raise ValueError(f"Unknown call type: {call_type}")
+    
+    def _traditional_workflow(self):
+        """Traditional elevator workflow (current implementation)"""
+        print(f"{self.env.now:.2f} [{self.name}] Using TRADITIONAL at floor {self.arrival_floor}.")
+        
         direction = "UP" if self.destination_floor > self.arrival_floor else "DOWN"
         button = self.hall_buttons[self.arrival_floor][direction]
         
@@ -81,14 +117,14 @@ class Passenger(Entity):
         #           If performance becomes critical, consider hybrid approach with
         #           careful event lifecycle management.
         #
-        CHECK_INTERVAL = 0.1  # Check every 0.1 second (fast response with minimal overhead)
+        CHECK_INTERVAL = self.behavior.get_check_interval()  # Use behavior's check interval
         
         while not boarded_successfully:
             # Wait for next check interval
             yield self.env.timeout(CHECK_INTERVAL)
             
-            # Check 1: If I'm at front and button is OFF, press it
-            if self.is_front_of_queue(current_queue) and not button.is_lit():
+            # Check 1: Use behavior to decide if should press button
+            if self.behavior.should_press_button(self, button, current_queue):
                 print(f"{self.env.now:.2f} [{self.name}] I'm at front and button is OFF. Pressing button!")
                 button.press(passenger_name=self.name)
             
@@ -98,6 +134,12 @@ class Passenger(Entity):
                 permission_data = yield self.board_permission_event.get()
                 completion_event = permission_data['completion_event']
                 elevator_name = permission_data.get('elevator_name', None)
+                
+                # Check 3: Use behavior to decide if should board this elevator
+                if not self.behavior.should_board_elevator(self, permission_data):
+                    print(f"{self.env.now:.2f} [{self.name}] Rejecting elevator {elevator_name} (not assigned to me).")
+                    completion_event.succeed()  # Notify door anyway
+                    continue  # Wait for correct elevator
                 
                 print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
                 
@@ -122,7 +164,7 @@ class Passenger(Entity):
                 
                 boarded_successfully = True
             
-            # Check 3: Has boarding failed?
+            # Check 4: Has boarding failed?
             elif len(self.boarding_failed_event.items) > 0:
                 # Get failure notification and discard it
                 yield self.boarding_failed_event.get()
@@ -140,4 +182,24 @@ class Passenger(Entity):
         completion_event.succeed()
         
         print(f"{self.env.now:.2f} [{self.name}] Journey complete.")
+    
+    def _dcs_workflow(self):
+        """DCS workflow (future implementation)"""
+        print(f"{self.env.now:.2f} [{self.name}] Using DCS at floor {self.arrival_floor}.")
+        
+        # TODO: DCS implementation
+        # 1. Register destination at panel
+        destination = self.behavior.get_destination_for_dcs(self)
+        print(f"{self.env.now:.2f} [{self.name}] Registering destination: {destination} at DCS panel.")
+        
+        # 2. Wait for elevator assignment from DCS Controller
+        # TODO: Listen for assignment message from broker
+        # self.broker.subscribe(f'dcs/assignment/{self.name}', ...)
+        
+        # 3. Board assigned elevator only
+        # TODO: Use behavior.should_board_elevator() to check assignment
+        
+        # For now, just timeout (stub implementation)
+        yield self.env.timeout(1.0)
+        print(f"{self.env.now:.2f} [{self.name}] DCS workflow not fully implemented yet.")
 
