@@ -263,8 +263,10 @@ class LiveFileEventSource extends EventSource {
             console.error('[LiveFileEventSource] Polling error:', error);
         }
 
-        // Schedule next poll
-        this.timer = setTimeout(() => this.poll(), this.pollInterval);
+        // Schedule next poll (only if still running)
+        if (this.isRunning) {
+            this.timer = setTimeout(() => this.poll(), this.pollInterval);
+        }
     }
 }
 

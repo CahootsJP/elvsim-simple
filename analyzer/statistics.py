@@ -33,17 +33,8 @@ class Statistics:
         self.event_log = []  # List of events in standardized format
         self.simulation_metadata = {}  # Metadata about the simulation
         
-        # Passenger object registry (for metrics collection)
-        self.passengers = []  # List of Passenger objects
-    
-    def register_passenger(self, passenger):
-        """
-        Register a passenger object for metrics collection.
-        
-        Args:
-            passenger: Passenger object to register
-        """
-        self.passengers.append(passenger)
+        # Note: Passenger-specific metrics are now handled by SimulationStatistics
+        # This base class only handles sensor-based data collection
     
     def _send_to_websocket(self, message):
         """
@@ -899,73 +890,5 @@ class Statistics:
         print(f"Event log saved: {len(self.event_log)} events written to {filename}")
         return filename
     
-    def print_passenger_metrics_summary(self):
-        """
-        Print passenger metrics summary statistics.
-        
-        Collects metrics directly from passenger objects (new design).
-        """
-        print("\n" + "="*60)
-        print("          PASSENGER METRICS SUMMARY")
-        print("="*60)
-        
-        # Collect metrics from all registered passengers
-        waiting_to_boarding = []
-        waiting_to_door = []
-        riding_times = []
-        total_journey_times = []
-        
-        for passenger in self.passengers:
-            # Waiting Time (1): Hall to Boarding
-            wait_boarding = passenger.get_waiting_time_to_boarding()
-            if wait_boarding is not None:
-                waiting_to_boarding.append(wait_boarding)
-            
-            # Waiting Time (2): Hall to Door Open
-            wait_door = passenger.get_waiting_time_to_door_open()
-            if wait_door is not None:
-                waiting_to_door.append(wait_door)
-            
-            # Riding Time
-            ride = passenger.get_riding_time()
-            if ride is not None:
-                riding_times.append(ride)
-            
-            # Total Journey Time
-            total = passenger.get_total_journey_time()
-            if total is not None:
-                total_journey_times.append(total)
-        
-        # Display Waiting Time (1): Hall to Boarding
-        if waiting_to_boarding:
-            print(f"\nWaiting Time (Hall to Boarding):")
-            print(f"  Count:   {len(waiting_to_boarding):>6} passengers")
-            print(f"  Average: {sum(waiting_to_boarding) / len(waiting_to_boarding):>6.2f} seconds")
-            print(f"  Min:     {min(waiting_to_boarding):>6.2f} seconds")
-            print(f"  Max:     {max(waiting_to_boarding):>6.2f} seconds")
-        
-        # Display Waiting Time (2): Hall to Door Open
-        if waiting_to_door:
-            print(f"\nWaiting Time (Hall to Door Open):")
-            print(f"  Count:   {len(waiting_to_door):>6} passengers")
-            print(f"  Average: {sum(waiting_to_door) / len(waiting_to_door):>6.2f} seconds")
-            print(f"  Min:     {min(waiting_to_door):>6.2f} seconds")
-            print(f"  Max:     {max(waiting_to_door):>6.2f} seconds")
-        
-        # Display Riding Time
-        if riding_times:
-            print(f"\nRiding Time:")
-            print(f"  Count:   {len(riding_times):>6} passengers")
-            print(f"  Average: {sum(riding_times) / len(riding_times):>6.2f} seconds")
-            print(f"  Min:     {min(riding_times):>6.2f} seconds")
-            print(f"  Max:     {max(riding_times):>6.2f} seconds")
-        
-        # Display Total Journey Time
-        if total_journey_times:
-            print(f"\nTotal Journey Time:")
-            print(f"  Count:   {len(total_journey_times):>6} passengers")
-            print(f"  Average: {sum(total_journey_times) / len(total_journey_times):>6.2f} seconds")
-            print(f"  Min:     {min(total_journey_times):>6.2f} seconds")
-            print(f"  Max:     {max(total_journey_times):>6.2f} seconds")
-        
-        print("="*60)
+    # Note: print_passenger_metrics_summary() has been moved to SimulationStatistics
+    # This base class focuses on sensor-based metrics only

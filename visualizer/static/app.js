@@ -302,6 +302,13 @@ class ElevatorVisualizer {
         // Store elevator state
         this.elevators.set(elevator_name, data);
         
+        // Create Elevator Hall panel if this is the first elevator and it doesn't exist yet
+        if (!document.getElementById('elevator-hall')) {
+            const hallElement = this.createElevatorHallElement();
+            this.elevatorContainer.insertBefore(hallElement, this.elevatorContainer.firstChild);
+            this.renderElevatorHall(hallElement, data.num_floors || 10);
+        }
+        
         // Update or create elevator UI
         let elevatorElement = document.getElementById(`elevator-${elevator_name}`);
         if (!elevatorElement) {
@@ -839,8 +846,10 @@ class ElevatorVisualizer {
         // Clear visualization
         this.clearVisualization();
         
-        // Start live file polling (using LiveFileEventSource)
-        this.startLiveFilePolling();
+        // DO NOT auto-start live polling
+        // User should manually start a simulation to generate simulation_log.jsonl
+        this.addLog('system', 'Live mode: Ready. Start a simulation to begin.');
+        this.updateConnectionStatus('disconnected', 'Ready');
         
         this.currentMode = 'live';
     }
@@ -878,6 +887,15 @@ class ElevatorVisualizer {
     async switchToReplayMode(filename) {
         console.log('[App] Switching to Replay mode:', filename);
         
+        // Stop live polling if active
+        if (this.fileEventSource) {
+            console.log('[App] Stopping existing event source...');
+            this.fileEventSource.stop();
+            // Wait a bit to ensure polling stops completely
+            await new Promise(resolve => setTimeout(resolve, 200));
+            this.fileEventSource = null;
+        }
+        
         // Disconnect WebSocket
         if (this.ws) {
             this.ws.close();
@@ -887,7 +905,8 @@ class ElevatorVisualizer {
         // Show/hide panels
         document.getElementById('playback-controls').style.display = 'block';
         
-        // Clear visualization
+        // Clear visualization COMPLETELY
+        console.log('[App] Clearing all state for Replay mode...');
         this.clearVisualization();
         
         this.currentMode = 'replay';
@@ -933,11 +952,10 @@ class ElevatorVisualizer {
             const info = await this.fileEventSource.loadFile(filename);
             this.addLog('system', `Loaded ${info.eventCount} events from ${filename}`);
             
-            // Auto-play
-            this.fileEventSource.start();
-            this.isPlaying = true;
+            // Ready to play (do NOT auto-play)
+            this.isPlaying = false;
             this.updatePlayPauseButton();
-            this.updateConnectionStatus('playing', 'Playing');
+            this.updateConnectionStatus('paused', 'Ready - Press Play');
             
         } catch (error) {
             console.error('[App] Error loading replay file:', error);

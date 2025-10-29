@@ -17,7 +17,7 @@ from controller.group_control import GroupControlSystem
 from controller.algorithms.nearest_car import NearestCarStrategy
 
 # Analyzer
-from analyzer.statistics import Statistics
+from analyzer.simulation_statistics import SimulationStatistics
 
 def run_simulation():
     """Set up and run the entire simulation"""
@@ -35,8 +35,14 @@ def run_simulation():
     env = simpy.Environment()
     broker = MessageBroker(env)
     broadcast_pipe = broker.get_broadcast_pipe()
-    statistics = Statistics(env, broadcast_pipe)
-    env.process(statistics.start_listening())
+    
+    # Create statistics collector
+    # Note: We only use SimulationStatistics for now
+    # RealtimePerformanceMonitor causes event loss due to shared broadcast pipe
+    sim_stats = SimulationStatistics(env, broadcast_pipe)
+    
+    # Start listener
+    env.process(sim_stats.start_listening())
     
     # --- Call system configuration ---
     call_system = TraditionalCallSystem(num_floors=NUM_FLOORS)
@@ -50,7 +56,7 @@ def run_simulation():
     random.seed(42)
     print("Random seed fixed to 42 for reproducible results")
     
-    statistics.set_simulation_metadata({
+    sim_stats.set_simulation_metadata({
         'num_floors': NUM_FLOORS,
         'num_elevators': 3,
         'elevator_capacity': 10,
@@ -105,20 +111,23 @@ def run_simulation():
     
     # For integrated testing (boarding/alighting on same floor)
     env.process(passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
-                                                    call_system, passenger_behavior, statistics))
+                                                    call_system, passenger_behavior, sim_stats))
 
     print("\n--- Simulation Start ---")
     env.run(until=SIM_DURATION)
     print("--- Simulation End ---")
     
-    # Save event log
-    statistics.save_event_log('simulation_log.jsonl')
+    # Save event log (common functionality)
+    sim_stats.save_event_log('simulation_log.jsonl')
     
-    # Display passenger metrics summary
-    statistics.print_passenger_metrics_summary()
+    # Display simulation metrics
+    print("\n" + "="*80)
+    print("📊 SIMULATION METRICS (God's View - Research/Debug)")
+    print("="*80)
+    sim_stats.print_passenger_metrics_summary()
     
     # Generate trajectory diagram
-    statistics.plot_trajectory_diagram()
+    sim_stats.plot_trajectory_diagram()
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
                                        call_system, passenger_behavior, statistics):
