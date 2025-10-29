@@ -23,7 +23,7 @@ class Door(Entity):
         """
         yield self.env.timeout(0)  # Idle process
 
-    def _broadcast_door_event(self, event_type: str, current_floor: int = None):
+    def _broadcast_door_event(self, event_type: str, current_floor: int = None, waiting_passengers: list = None):
         """Broadcast door event to message broker (generator for yield)."""
         if not self.broker or not self.elevator_name:
             yield self.env.timeout(0)  # Make it a generator even when no-op
@@ -39,6 +39,11 @@ class Door(Entity):
             "event_type": event_type,
             "floor": floor
         }
+        
+        # Add waiting passengers list if provided (for metrics)
+        if waiting_passengers is not None:
+            door_event_message['waiting_passengers'] = waiting_passengers
+        
         door_event_topic = f"elevator/{self.elevator_name}/door_events"
         yield self.broker.put(door_event_topic, door_event_message)
 
@@ -81,12 +86,24 @@ class Door(Entity):
         # 1. Open the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opening...")
         self.state = 'OPENING'
-        # Send door opening start event
-        yield self.env.process(self._broadcast_door_event("DOOR_OPENING_START"))
+        
+        # Collect waiting passenger names from all boarding queues (for metrics)
+        # IMPORTANT: Must collect BEFORE door opens to capture the correct "door open" time
+        waiting_passenger_names = []
+        for queue in boarding_queues:
+            waiting_passenger_names.extend([p.name for p in queue.items])
+        
+        # Send door opening start event with waiting passengers list
+        yield self.env.process(self._broadcast_door_event("DOOR_OPENING_START", 
+                                                          waiting_passengers=waiting_passenger_names))
+        
+        # Record door open start time (for passenger metrics)
+        door_open_start_time = self.env.now
         
         yield self.env.timeout(self.open_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
         self.state = 'OPEN'
+        
         # Send door opening complete event
         yield self.env.process(self._broadcast_door_event("DOOR_OPENING_COMPLETE"))
         
@@ -137,10 +154,11 @@ class Door(Entity):
                     # Board the passenger
                     passenger = yield queue.get()
                     board_permission_event = self.env.event()
-                    # Pass elevator name along with permission event
+                    # Pass elevator name and door open time along with permission event
                     permission_data = {
                         'completion_event': board_permission_event,
-                        'elevator_name': self.elevator_name
+                        'elevator_name': self.elevator_name,
+                        'door_open_time': door_open_start_time  # Pass door open time for passenger metrics
                     }
                     yield passenger.board_permission_event.put(permission_data)
                     yield board_permission_event

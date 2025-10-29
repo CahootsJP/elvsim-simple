@@ -42,6 +42,13 @@ class Passenger(Entity):
         # For boarding failure notification
         self.boarding_failed_event = simpy.Store(env, capacity=1)
         
+        # Passenger metrics (self-tracking)
+        self.waiting_start_time = None
+        self.door_open_time = None       # Time when assigned elevator's door opened
+        self.boarding_time = None
+        self.alighting_time = None
+        self.boarded_elevator_name = None
+        
         print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor} (Move time: {self.move_speed:.1f}s).")
 
     def is_front_of_queue(self, queue):
@@ -87,6 +94,9 @@ class Passenger(Entity):
         # 2. Join the queue in the correct direction
         current_queue = self.floor_queues[self.arrival_floor][direction]
         print(f"{self.env.now:.2f} [{self.name}] Now waiting in '{direction}' queue at floor {self.arrival_floor}.")
+        
+        # Record waiting start time (self-tracking)
+        self.waiting_start_time = self.env.now
         
         # Notify Statistics that a passenger is waiting
         waiting_message = {
@@ -134,6 +144,7 @@ class Passenger(Entity):
                 permission_data = yield self.board_permission_event.get()
                 completion_event = permission_data['completion_event']
                 elevator_name = permission_data.get('elevator_name', None)
+                door_open_time = permission_data.get('door_open_time', None)
                 
                 # Check 3: Use behavior to decide if should board this elevator
                 if not self.behavior.should_board_elevator(self, permission_data):
@@ -142,6 +153,10 @@ class Passenger(Entity):
                     continue  # Wait for correct elevator
                 
                 print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
+                
+                # Record door open time (self-tracking)
+                if door_open_time is not None:
+                    self.door_open_time = door_open_time
                 
                 # Publish passenger boarding event
                 self.broker.put('passenger/boarding', {
@@ -153,6 +168,10 @@ class Passenger(Entity):
                 })
                 
                 yield self.env.timeout(self.move_speed)
+
+                # Record boarding time (self-tracking)
+                self.boarding_time = self.env.now
+                self.boarded_elevator_name = elevator_name
 
                 # Board the elevator and press destination button
                 print(f"{self.env.now:.2f} [{self.name}] Pressed car button for floor {self.destination_floor}.")
@@ -178,8 +197,19 @@ class Passenger(Entity):
         print(f"{self.env.now:.2f} [{self.name}] Exiting elevator.")
         yield self.env.timeout(self.move_speed)
         
+        # Record alighting time (self-tracking)
+        self.alighting_time = self.env.now
+        
         # 9. Report to Door that "exiting is complete"
         completion_event.succeed()
+        
+        # 10. Publish passenger alighting event (for metrics)
+        self.broker.put('passenger/alighting', {
+            'timestamp': self.env.now,
+            'passenger_name': self.name,
+            'floor': self.destination_floor,
+            'elevator_name': getattr(self, 'boarded_elevator_name', None)
+        })
         
         print(f"{self.env.now:.2f} [{self.name}] Journey complete.")
     
@@ -202,4 +232,62 @@ class Passenger(Entity):
         # For now, just timeout (stub implementation)
         yield self.env.timeout(1.0)
         print(f"{self.env.now:.2f} [{self.name}] DCS workflow not fully implemented yet.")
+    
+    # ========================================
+    # Passenger Metrics Methods (Self-tracking)
+    # ========================================
+    
+    def get_waiting_time_to_boarding(self):
+        """
+        Get waiting time from hall arrival to boarding completion.
+        
+        Returns:
+            float: Waiting time in seconds, or None if not applicable
+        """
+        if self.waiting_start_time is not None and self.boarding_time is not None:
+            return self.boarding_time - self.waiting_start_time
+        return None
+    
+    def get_waiting_time_to_door_open(self):
+        """
+        Get waiting time from hall arrival to door opening.
+        
+        Special cases:
+        - If door was already open when passenger arrived, returns 0
+        - If passenger boarded immediately (no wait), returns 0
+        
+        Returns:
+            float: Waiting time in seconds, or None if not applicable
+        """
+        if self.waiting_start_time is None or self.door_open_time is None:
+            return None
+        
+        # Calculate wait time
+        wait_time = self.door_open_time - self.waiting_start_time
+        
+        # If door opened before passenger arrived (or at same time), return 0
+        # This means the door was already open when the passenger arrived
+        return max(0, wait_time)
+    
+    def get_riding_time(self):
+        """
+        Get riding time from boarding to alighting.
+        
+        Returns:
+            float: Riding time in seconds, or None if not applicable
+        """
+        if self.boarding_time is not None and self.alighting_time is not None:
+            return self.alighting_time - self.boarding_time
+        return None
+    
+    def get_total_journey_time(self):
+        """
+        Get total journey time from hall arrival to alighting.
+        
+        Returns:
+            float: Total time in seconds, or None if not applicable
+        """
+        if self.waiting_start_time is not None and self.alighting_time is not None:
+            return self.alighting_time - self.waiting_start_time
+        return None
 

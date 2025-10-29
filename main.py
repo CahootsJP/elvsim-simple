@@ -105,7 +105,7 @@ def run_simulation():
     
     # For integrated testing (boarding/alighting on same floor)
     env.process(passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
-                                                    call_system, passenger_behavior))
+                                                    call_system, passenger_behavior, statistics))
 
     print("\n--- Simulation Start ---")
     env.run(until=SIM_DURATION)
@@ -114,11 +114,14 @@ def run_simulation():
     # Save event log
     statistics.save_event_log('simulation_log.jsonl')
     
+    # Display passenger metrics summary
+    statistics.print_passenger_metrics_summary()
+    
     # Generate trajectory diagram
     statistics.plot_trajectory_diagram()
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
-                                       call_system, passenger_behavior):
+                                       call_system, passenger_behavior, statistics):
     """Continuous passenger generation for extended simulation"""
     import random
     
@@ -145,10 +148,13 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
         move_speed = random.uniform(0.8, 1.5)
         
         # Create passenger (using call_system and behavior)
-        Passenger(env, name, broker, hall_buttons, floor_queues,
-                 call_system=call_system, behavior=passenger_behavior,
-                 arrival_floor=arrival_floor, destination_floor=destination_floor, 
-                 move_speed=move_speed)
+        passenger = Passenger(env, name, broker, hall_buttons, floor_queues,
+                             call_system=call_system, behavior=passenger_behavior,
+                             arrival_floor=arrival_floor, destination_floor=destination_floor, 
+                             move_speed=move_speed)
+        
+        # Register passenger with Statistics for metrics collection
+        statistics.register_passenger(passenger)
 
 def passenger_generator(env, broker, hall_buttons, floor_queues):
     """Passenger generation process for real interrupt testing"""
