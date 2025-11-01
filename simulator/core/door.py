@@ -97,17 +97,7 @@ class Door(Entity):
         yield self.env.process(self._broadcast_door_event("DOOR_OPENING_START", 
                                                           waiting_passengers=waiting_passenger_names))
         
-        # Record door open start time (for passenger metrics)
-        door_open_start_time = self.env.now
-        
-        yield self.env.timeout(self.open_time)
-        print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
-        self.set_state('OPEN')
-        
-        # Send door opening complete event
-        yield self.env.process(self._broadcast_door_event("DOOR_OPENING_COMPLETE"))
-        
-        # Send car call OFF message at door opening complete (if car call exists here)
+        # Send car call OFF message at door opening start (if car call exists here)
         if has_car_call_here and self.broker and self.elevator_name:
             car_call_off_message = {
                 "timestamp": self.env.now,
@@ -117,6 +107,16 @@ class Door(Entity):
             }
             car_call_off_topic = f"elevator/{self.elevator_name}/car_call_off"
             yield self.broker.put(car_call_off_topic, car_call_off_message)
+        
+        # Record door open start time (for passenger metrics)
+        door_open_start_time = self.env.now
+        
+        yield self.env.timeout(self.open_time)
+        print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
+        self.set_state('OPEN')
+        
+        # Send door opening complete event
+        yield self.env.process(self._broadcast_door_event("DOOR_OPENING_COMPLETE"))
         
         # 2. Let passengers exit one by one at their own pace
         for p in passengers_to_exit:
