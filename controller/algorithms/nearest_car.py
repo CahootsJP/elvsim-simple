@@ -68,6 +68,7 @@ class NearestCarStrategy(IAllocationStrategy):
             physical_floor = status.get('physical_floor', 1)
             advanced_position = status.get('advanced_position', physical_floor)
             state = status.get('state', 'IDLE')
+            direction = status.get('direction', 'NO_DIRECTION')
             passengers = status.get('passengers', 0)
             max_capacity = status.get('max_capacity', 10)
             
@@ -76,7 +77,7 @@ class NearestCarStrategy(IAllocationStrategy):
             
             # Calculate real distance considering circular movement
             distance = self._calculate_circular_distance(
-                virtual_floor, state, call_floor, call_direction
+                virtual_floor, state, direction, call_floor, call_direction
             )
             
             # Penalty if elevator is full
@@ -89,7 +90,7 @@ class NearestCarStrategy(IAllocationStrategy):
                 best_elevator = elev_name
             
             # Debug output
-            print(f"[GCS] {elev_name}: VirtualFloor={virtual_floor}, State={state}, Distance={distance:.1f}")
+            print(f"[GCS] {elev_name}: VirtualFloor={virtual_floor}, State={state}, Direction={direction}, Distance={distance:.1f}")
         
         # Fallback to first elevator if no valid selection
         if best_elevator is None and elevator_statuses:
@@ -103,7 +104,8 @@ class NearestCarStrategy(IAllocationStrategy):
     def _calculate_circular_distance(
         self, 
         virtual_floor: int, 
-        state: str, 
+        state: str,
+        direction: str,
         call_floor: int, 
         call_direction: str
     ) -> float:
@@ -113,11 +115,12 @@ class NearestCarStrategy(IAllocationStrategy):
         Circular Movement Logic:
         - UP elevator: Continues to top floor, then reverses to DOWN
         - DOWN elevator: Continues to floor 1, then reverses to UP
-        - IDLE elevator: Direct distance
+        - IDLE/NO_DIRECTION: Simple distance
         
         Args:
             virtual_floor: Virtual position of elevator
-            state: Elevator state (UP/DOWN/IDLE)
+            state: Elevator state (IDLE/MOVING/DECELERATING/STOPPING)
+            direction: Elevator direction (UP/DOWN/NO_DIRECTION)
             call_floor: Floor where hall call was made
             call_direction: Direction of hall call (UP/DOWN)
         
@@ -125,33 +128,33 @@ class NearestCarStrategy(IAllocationStrategy):
             Estimated travel distance in floors
         """
         
-        if state == 'IDLE':
-            # IDLE: Simple distance
+        # If elevator has no direction (IDLE or just finished), use simple distance
+        if direction == 'NO_DIRECTION':
             return abs(call_floor - virtual_floor)
         
-        elif state == 'UP':
-            # Moving UP
-            if call_direction == 'UP' and call_floor >= virtual_floor:
-                # Same direction, ahead of elevator -> can pick up on the way
+        elif direction == 'UP':
+            # Elevator is moving UP
+            if call_direction == 'UP' and call_floor > virtual_floor:
+                # Same direction, call is AHEAD of elevator -> can pick up on the way
                 return call_floor - virtual_floor
             else:
-                # Need to complete UP journey, then reverse
-                # Distance = (to top) + (from top to call floor)
-                distance = (self.num_floors - virtual_floor)  # To top floor
-                distance += (self.num_floors - call_floor)     # From top floor down to call floor
-                return distance
+                # Call is BEHIND elevator (or opposite direction)
+                # Must complete circular journey: current -> top -> call_floor
+                distance_to_top = (self.num_floors - virtual_floor)
+                distance_from_top = (self.num_floors - call_floor)
+                return distance_to_top + distance_from_top
         
-        elif state == 'DOWN':
-            # Moving DOWN
-            if call_direction == 'DOWN' and call_floor <= virtual_floor:
-                # Same direction, ahead of elevator -> can pick up on the way
+        elif direction == 'DOWN':
+            # Elevator is moving DOWN
+            if call_direction == 'DOWN' and call_floor < virtual_floor:
+                # Same direction, call is AHEAD of elevator -> can pick up on the way
                 return virtual_floor - call_floor
             else:
-                # Need to complete DOWN journey, then reverse
-                # Distance = (to bottom) + (from bottom to call floor)
-                distance = (virtual_floor - 1)      # To floor 1
-                distance += (call_floor - 1)        # From floor 1 up to call floor
-                return distance
+                # Call is BEHIND elevator (or opposite direction)
+                # Must complete circular journey: current -> bottom -> call_floor
+                distance_to_bottom = (virtual_floor - 1)
+                distance_from_bottom = (call_floor - 1)
+                return distance_to_bottom + distance_from_bottom
         
         # Fallback
         return abs(call_floor - virtual_floor)

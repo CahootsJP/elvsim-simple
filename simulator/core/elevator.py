@@ -589,10 +589,14 @@ class Elevator(Entity):
                 self.current_floor in self.hall_calls_down)
 
     def _has_any_up_calls_above(self):
-        return any(f > self.current_floor for f in self.car_calls | self.hall_calls_up)
+        """Check if there are any calls (car or hall, any direction) above current floor"""
+        all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+        return any(f > self.current_floor for f in all_calls)
 
     def _has_any_down_calls_below(self):
-        return any(f < self.current_floor for f in self.car_calls | self.hall_calls_down)
+        """Check if there are any calls (car or hall, any direction) below current floor"""
+        all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+        return any(f < self.current_floor for f in all_calls)
 
     def _predict_next_direction_at_arrival(self, arrival_floor):
         """Predict next direction at arrival floor in advance"""

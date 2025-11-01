@@ -132,11 +132,13 @@ class Statistics:
                 }
                 
                 # Log event for JSON Lines
+                direction = message.get('direction', 'NO_DIRECTION')
                 self._add_event_log('elevator_status', {
                     'elevator': elevator_name,
                     'floor': current_floor,
                     'advanced_position': advanced_position,
                     'state': state,
+                    'direction': direction,
                     'passengers': passengers_count,
                     'capacity': max_capacity
                 })
