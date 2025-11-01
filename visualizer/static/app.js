@@ -75,6 +75,7 @@ class ElevatorVisualizer {
                 elevator_name: elevatorName,
                 floor: 1,
                 state: 'IDLE',
+                direction: 'NO_DIRECTION',
                 passengers: 0,
                 capacity: 50,
                 num_floors: 10,
@@ -357,11 +358,21 @@ class ElevatorVisualizer {
     }
     
     renderElevator(element, data) {
-        const { floor, state, passengers, capacity, num_floors, car_calls, hall_calls_up, hall_calls_down } = data;
+        const { floor, state, passengers, capacity, num_floors, car_calls, hall_calls_up, hall_calls_down, direction } = data;
         
-        // Update state badge
+        // Get direction icon
+        let directionIcon = '';
+        if (direction === 'UP') {
+            directionIcon = '↑ ';
+        } else if (direction === 'DOWN') {
+            directionIcon = '↓ ';
+        } else if (direction === 'NO_DIRECTION') {
+            directionIcon = '○ ';
+        }
+        
+        // Update state badge with direction icon
         const stateBadge = element.querySelector('.elevator-state');
-        stateBadge.textContent = state;
+        stateBadge.textContent = directionIcon + state;
         stateBadge.className = `elevator-state state-${state.toLowerCase()}`;
         
         
@@ -1004,6 +1015,7 @@ class ElevatorVisualizer {
                         elevator_name: event.data.elevator,
                         floor: event.data.floor,
                         state: event.data.state,
+                        direction: event.data.direction || 'NO_DIRECTION',
                         passengers: event.data.passengers,
                         capacity: event.data.capacity,
                         num_floors: 10, // Default
