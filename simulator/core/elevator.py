@@ -12,6 +12,9 @@ class Elevator(Entity):
     """
 
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10):
+        # Initialize direction before calling super().__init__
+        self.direction = "NO_DIRECTION"
+        
         super().__init__(env, name)
         self.broker = broker
         self.num_floors = num_floors
@@ -30,7 +33,6 @@ class Elevator(Entity):
         # Set current floor to Door object
         if hasattr(self.door, 'set_current_floor'):
             self.door.set_current_floor(self.current_floor)
-        self.state = "initial_state" 
         self.advanced_position = 1
         self.current_destination = None  # Current final destination
         self.last_advanced_position = None  # Previous advanced_position
@@ -47,11 +49,48 @@ class Elevator(Entity):
         self.new_call_event = self.env.event()
         self.status_topic = f"elevator/{self.name}/status"
         
-        self._set_state("IDLE")
+        # Set initial state and direction
+        self.set_state("IDLE")
         
         self.env.process(self._hall_call_listener())
         self.env.process(self._car_call_listener())
 
+    def _on_state_changed(self, old_state: str, new_state: str):
+        """
+        Hook method called when state changes.
+        Overrides Entity's _on_state_changed to add Elevator-specific behavior.
+        """
+        # Call parent's hook (for logging)
+        super()._on_state_changed(old_state, new_state)
+        
+        # Report status after state change (Elevator-specific)
+        self.env.process(self._report_status())
+    
+    def _update_direction(self, new_direction: str):
+        """
+        Update direction (Elevator-specific method).
+        
+        Args:
+            new_direction: New direction ("UP", "DOWN", or "NO_DIRECTION")
+        """
+        if self.direction != new_direction:
+            old_direction = self.direction
+            self.direction = new_direction
+            print(f"{self.env.now:.2f}: [{self.name}] Direction: {old_direction} -> {new_direction}")
+            self.env.process(self._report_status())
+    
+    def set_state_and_direction(self, new_state: str, new_direction: str = None):
+        """
+        Convenience method to update both state and direction.
+        
+        Args:
+            new_state: New state
+            new_direction: New direction (if None, keeps current direction)
+        """
+        if new_direction is not None and self.direction != new_direction:
+            self._update_direction(new_direction)
+        self.set_state(new_state)
+    
     def _report_status(self):
         status_message = {
             "timestamp": self.env.now,
@@ -59,6 +98,7 @@ class Elevator(Entity):
             "current_floor": self.current_floor,  # For WebSocket visualization
             "advanced_position": self.advanced_position,
             "state": self.state,
+            "direction": self.direction,  # Add direction to status report
             "passengers": len(self.passengers_onboard),
             "passengers_count": len(self.passengers_onboard),  # For WebSocket visualization
             "max_capacity": self.max_capacity,  # For WebSocket visualization
@@ -101,12 +141,6 @@ class Elevator(Entity):
         new_car_call_topic = f"elevator/{self.name}/new_car_call"
         yield self.broker.put(new_car_call_topic, new_car_call_message)
 
-    def _set_state(self, new_state):
-        if self.state != new_state:
-            print(f"{self.env.now:.2f}: Entity \"{self.name}\" ({self.__class__.__name__}) State transition: {self.state} -> {new_state}")
-            self.state = new_state
-            self.env.process(self._report_status())
-
     def get_current_capacity(self):
         """Get current number of passengers in elevator."""
         return len(self.passengers_onboard)
@@ -120,11 +154,11 @@ class Elevator(Entity):
         if self.state == "IDLE" or self.current_destination is None:
             return False  # No need to interrupt if stopped
 
-        if self.state == "UP" and new_direction == "UP":
+        if self.direction == "UP" and new_direction == "UP":
             # During upward movement, is there a call above current position but before destination?
             return self.current_floor < new_floor < self.current_destination
         
-        if self.state == "DOWN" and new_direction == "DOWN":
+        if self.direction == "DOWN" and new_direction == "DOWN":
             # During downward movement, is there a call below current position but before destination?
             return self.current_floor > new_floor > self.current_destination
 
@@ -187,11 +221,13 @@ class Elevator(Entity):
 
         while True:
             if self._should_stop_at_current_floor():
+                self.set_state("STOPPING")
                 yield self.env.process(self._handle_boarding_and_alighting())
             
             self._decide_next_direction()
             
-            if self.state == "IDLE":
+            if self.direction == "NO_DIRECTION":
+                self.set_state_and_direction("IDLE", "NO_DIRECTION")
                 self.current_destination = None
                 if not self._has_any_calls():
                     print(f"{self.env.now:.2f} [{self.name}] IDLE. Waiting for new call signal...")
@@ -202,10 +238,11 @@ class Elevator(Entity):
             self.current_destination = self._get_next_stop_floor()
 
             if self.current_destination is None:
-                self._set_state("IDLE")
+                self.set_state_and_direction("IDLE", "NO_DIRECTION")
                 continue
 
             # This try block is the interruptible flight plan
+            self.set_state("MOVING")
             try:
                 # Track current movement process
                 self.current_move_process = self.env.process(self._move_process(self.current_destination))
@@ -284,20 +321,30 @@ class Elevator(Entity):
                 self.last_advanced_position = self.advanced_position
                 
                 # Reverse movement check
-                if self.state == "UP" and current_floor_in_trip < old_floor:
+                if self.direction == "UP" and current_floor_in_trip < old_floor:
                     print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor_in_trip}F")
                     return
-                elif self.state == "DOWN" and current_floor_in_trip > old_floor:
+                elif self.direction == "DOWN" and current_floor_in_trip > old_floor:
                     print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {current_floor_in_trip}F")
                     return
             
             # Use remembered "departure floor" as key here as well
             brake_time = self.physics_engine.brake_table.get((start_floor_of_this_trip, destination_floor), 0.1)
             
-            # Final braking phase
+            # Final braking phase - CRITICAL: This is where direction should be finalized
             if brake_time > 0.05:
-                # Do NOT change direction during braking - wait until after arrival
-                # Direction change will be handled by _decide_next_direction() after boarding/alighting
+                # Enter DECELERATING state
+                self.set_state("DECELERATING")
+                
+                # Re-evaluate direction at deceleration start (THIS FIXES THE BUG!)
+                self._decide_next_direction()
+                
+                # Check if direction changed - if so, abort movement
+                expected_direction = "UP" if destination_floor > start_floor_of_this_trip else "DOWN"
+                if self.direction != expected_direction and self.direction != "NO_DIRECTION":
+                    print(f"{self.env.now:.2f} [{self.name}] Direction changed during deceleration! Expected {expected_direction}, now {self.direction}. Aborting movement.")
+                    return
+                
                 yield self.env.timeout(brake_time)
                 
                 # Final interruption check
@@ -346,10 +393,10 @@ class Elevator(Entity):
                     self.door.set_current_floor(self.current_floor)
                 
                 # Reverse movement check
-                if self.state == "UP" and self.current_floor < old_floor:
+                if self.direction == "UP" and self.current_floor < old_floor:
                     print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
                     return
-                elif self.state == "DOWN" and self.current_floor > old_floor:
+                elif self.direction == "DOWN" and self.current_floor > old_floor:
                     print(f"[{self.name}] ERROR: REVERSE MOVEMENT: {old_floor}F -> {self.current_floor}F (Event {i})")
                     return
                 
@@ -365,13 +412,13 @@ class Elevator(Entity):
             return
 
     def _get_next_stop_floor(self):
-        if self.state == "UP":
+        if self.direction == "UP":
             up_calls = [f for f in (self.car_calls | self.hall_calls_up) if f > self.current_floor]
             if up_calls: return min(up_calls)
             all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
             if all_calls: return max(all_calls)
 
-        elif self.state == "DOWN":
+        elif self.direction == "DOWN":
             down_calls = [f for f in (self.car_calls | self.hall_calls_down) if f < self.current_floor]
             if down_calls: return max(down_calls)
             all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
@@ -385,8 +432,8 @@ class Elevator(Entity):
 
         boarding_queues = []
         
-        # Determine which direction to serve based on current state
-        if self.state == "UP":
+        # Determine which direction to serve based on current direction
+        if self.direction == "UP":
             # Moving UP: serve UP passengers first
             if self.current_floor in self.hall_calls_up:
                 boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
@@ -394,7 +441,7 @@ class Elevator(Entity):
             elif self.current_floor in self.hall_calls_down and not self._has_any_up_calls_above():
                 boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
         
-        elif self.state == "DOWN":
+        elif self.direction == "DOWN":
             # Moving DOWN: serve DOWN passengers first
             if self.current_floor in self.hall_calls_down:
                 boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
@@ -402,8 +449,8 @@ class Elevator(Entity):
             elif self.current_floor in self.hall_calls_up and not self._has_any_down_calls_below():
                 boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
         
-        elif self.state == "IDLE":
-            # IDLE state: determine direction based on calls
+        elif self.direction == "NO_DIRECTION":
+            # NO_DIRECTION state: determine direction based on calls
             has_calls_above = self._has_any_up_calls_above()
             has_calls_below = self._has_any_down_calls_below()
             
@@ -480,53 +527,58 @@ class Elevator(Entity):
         self.env.process(self._report_status())
     
     def _should_stop_at_current_floor(self):
-        if self.state == "UP":
+        if self.direction == "UP":
             if self.current_floor in self.car_calls: return True
             if self.current_floor in self.hall_calls_up: return True
             all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
             if not self._has_any_up_calls_above() and all_calls and self.current_floor == max(all_calls):
                 return True
 
-        elif self.state == "DOWN":
+        elif self.direction == "DOWN":
             if self.current_floor in self.car_calls: return True
             if self.current_floor in self.hall_calls_down: return True
             all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
             if not self._has_any_down_calls_below() and all_calls and all_calls and self.current_floor == min(all_calls):
                 return True
 
-        elif self.state == "IDLE":
+        elif self.direction == "NO_DIRECTION":
             return self._has_any_calls_at_current_floor()
 
         return False
 
     def _decide_next_direction(self):
-        current_direction = self.state
+        """Decide next direction (only updates direction, not state)"""
+        current_direction = self.direction
         all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
 
         if not all_calls:
-            self._set_state("IDLE")
+            self._update_direction("NO_DIRECTION")
             return
 
         if current_direction == "UP":
             if self._has_any_up_calls_above(): return
             farthest_call = max(all_calls) if all_calls else self.current_floor
             if self.current_floor >= farthest_call:
-                self._set_state("DOWN")
+                self._update_direction("DOWN")
 
         elif current_direction == "DOWN":
             if self._has_any_down_calls_below(): return
             farthest_call = min(all_calls) if all_calls else self.current_floor
             if self.current_floor <= farthest_call:
-                self._set_state("UP")
+                self._update_direction("UP")
 
-        elif current_direction == "IDLE":
+        elif current_direction == "NO_DIRECTION":
             if not self._has_any_calls(): return
             closest_call = min(all_calls, key=lambda f: abs(f - self.current_floor))
-            if closest_call > self.current_floor: self._set_state("UP")
-            elif closest_call < self.current_floor: self._set_state("DOWN")
+            if closest_call > self.current_floor: 
+                self._update_direction("UP")
+            elif closest_call < self.current_floor: 
+                self._update_direction("DOWN")
             else:
-                if self.current_floor in self.hall_calls_up: self._set_state("UP")
-                elif self.current_floor in self.hall_calls_down: self._set_state("DOWN")
+                if self.current_floor in self.hall_calls_up: 
+                    self._update_direction("UP")
+                elif self.current_floor in self.hall_calls_down: 
+                    self._update_direction("DOWN")
 
     def _has_any_calls(self):
         return bool(self.car_calls or self.hall_calls_up or self.hall_calls_down)
@@ -548,7 +600,7 @@ class Elevator(Entity):
         # If we need to stop, we should NOT change direction during braking
         will_stop_at_arrival = False
         
-        if self.state == "UP":
+        if self.direction == "UP":
             if arrival_floor in self.car_calls:
                 will_stop_at_arrival = True
             elif arrival_floor in self.hall_calls_up:
@@ -557,7 +609,7 @@ class Elevator(Entity):
                 all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
                 if not self._has_any_up_calls_above() and all_calls and arrival_floor == max(all_calls):
                     will_stop_at_arrival = True
-        elif self.state == "DOWN":
+        elif self.direction == "DOWN":
             if arrival_floor in self.car_calls:
                 will_stop_at_arrival = True
             elif arrival_floor in self.hall_calls_down:
@@ -569,7 +621,7 @@ class Elevator(Entity):
         
         # If we won't stop at arrival floor, don't change direction prematurely
         if not will_stop_at_arrival:
-            return self.state
+            return self.direction
         
         # Simulate post-arrival situation (assuming service completion at arrival floor)
         future_car_calls = self.car_calls.copy()
@@ -579,18 +631,18 @@ class Elevator(Entity):
         # Remove calls at arrival floor (will be serviced)
         future_car_calls.discard(arrival_floor)
         
-        # Remove hall_calls to be serviced based on current state
-        if self.state in ["IDLE", "UP"] and arrival_floor in future_hall_calls_up:
+        # Remove hall_calls to be serviced based on current direction
+        if self.direction in ["NO_DIRECTION", "UP"] and arrival_floor in future_hall_calls_up:
             future_hall_calls_up.discard(arrival_floor)
-        if self.state in ["IDLE", "DOWN"] and arrival_floor in future_hall_calls_down:
+        if self.direction in ["NO_DIRECTION", "DOWN"] and arrival_floor in future_hall_calls_down:
             future_hall_calls_down.discard(arrival_floor)
         # Service DOWN calls even during UP movement when reaching top floor
-        if self.state == "UP" and arrival_floor in future_hall_calls_down:
+        if self.direction == "UP" and arrival_floor in future_hall_calls_down:
             up_calls_above = any(f > arrival_floor for f in future_car_calls | future_hall_calls_up)
             if not up_calls_above:
                 future_hall_calls_down.discard(arrival_floor)
         # Service UP calls even during DOWN movement when reaching bottom floor
-        if self.state == "DOWN" and arrival_floor in future_hall_calls_up:
+        if self.direction == "DOWN" and arrival_floor in future_hall_calls_up:
             down_calls_below = any(f < arrival_floor for f in future_car_calls | future_hall_calls_down)
             if not down_calls_below:
                 future_hall_calls_up.discard(arrival_floor)
@@ -599,7 +651,7 @@ class Elevator(Entity):
         all_remaining_calls = future_car_calls | future_hall_calls_up | future_hall_calls_down
         
         if not all_remaining_calls:
-            return "IDLE"
+            return "NO_DIRECTION"
         
         # Check upward and downward calls
         up_calls = [f for f in all_remaining_calls if f > arrival_floor]
@@ -611,7 +663,7 @@ class Elevator(Entity):
             return "DOWN"
         elif up_calls and down_calls:
             # If calls in both directions, continue current direction
-            return self.state if self.state in ["UP", "DOWN"] else "UP"
+            return self.direction if self.direction in ["UP", "DOWN"] else "UP"
         else:
-            return "IDLE"
+            return "NO_DIRECTION"
 

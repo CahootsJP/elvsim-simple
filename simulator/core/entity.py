@@ -82,7 +82,18 @@ class Entity(ABC):
         if self.state != new_state:
             old_state = self.state
             self.state = new_state
-            self._log_state_change(old_state, new_state)
+            self._on_state_changed(old_state, new_state)
+    
+    def _on_state_changed(self, old_state: str, new_state: str):
+        """
+        Hook method called when state changes (can be overridden in subclasses).
+        Default implementation: log the state change only.
+        
+        Args:
+            old_state: State before the change
+            new_state: State after the change
+        """
+        self._log_state_change(old_state, new_state)
 
     def get_state(self) -> str:
         """

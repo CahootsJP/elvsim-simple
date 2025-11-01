@@ -13,7 +13,7 @@ class Door(Entity):
         self.elevator_name: str = elevator_name
         self.elevator = elevator  # Reference to parent elevator
         self._current_floor: int = 1  # Default floor
-        self.state = 'IDLE'  # Door state: IDLE, OPENING, OPEN, CLOSING, CLOSED
+        self.set_state('IDLE')  # Door state: IDLE, OPENING, OPEN, CLOSING, CLOSED
         self.sensor_timeout = 1.0  # Photoelectric sensor timeout (seconds to wait after queue becomes empty)
         print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
 
@@ -85,7 +85,7 @@ class Door(Entity):
 
         # 1. Open the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opening...")
-        self.state = 'OPENING'
+        self.set_state('OPENING')
         
         # Collect waiting passenger names from all boarding queues (for metrics)
         # IMPORTANT: Must collect BEFORE door opens to capture the correct "door open" time
@@ -102,7 +102,7 @@ class Door(Entity):
         
         yield self.env.timeout(self.open_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opened.")
-        self.state = 'OPEN'
+        self.set_state('OPEN')
         
         # Send door opening complete event
         yield self.env.process(self._broadcast_door_event("DOOR_OPENING_COMPLETE"))
@@ -185,13 +185,13 @@ class Door(Entity):
 
         # 4. Close the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")
-        self.state = 'CLOSING'
+        self.set_state('CLOSING')
         # Send door closing start event
         yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_START"))
         
         yield self.env.timeout(self.close_time)
         print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
-        self.state = 'CLOSED'
+        self.set_state('CLOSED')
         # Send door closing complete event
         yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
 
