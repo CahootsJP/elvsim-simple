@@ -370,9 +370,20 @@ class ElevatorVisualizer {
             directionIcon = '○ ';
         }
         
+        // Shorten state names for display
+        let displayState = state;
+        if (state === 'MOVING') {
+            displayState = 'MOVE';
+        } else if (state === 'STOPPING') {
+            displayState = 'STOP';
+        } else if (state === 'DECELERATING') {
+            displayState = 'DECEL';
+        }
+        // IDLE stays as IDLE
+        
         // Update state badge with direction icon
         const stateBadge = element.querySelector('.elevator-state');
-        stateBadge.textContent = directionIcon + state;
+        stateBadge.textContent = directionIcon + displayState;
         stateBadge.className = `elevator-state state-${state.toLowerCase()}`;
         
         

@@ -557,14 +557,64 @@ class Elevator(Entity):
 
         if current_direction == "UP":
             if self._has_any_calls_above(): return
+            
+            # If the current floor has the last remaining call
+            if all_calls and max(all_calls) == self.current_floor:
+                # First, check if there's a hall call at current floor
+                if self.current_floor in self.hall_calls_down:
+                    self._update_direction("DOWN")
+                    return
+                elif self.current_floor in self.hall_calls_up:
+                    # UP hall call at current floor - keep UP direction
+                    return
+                
+                # No hall call at current floor, check if there are any hall calls below
+                if self.hall_calls_down:
+                    self._update_direction("DOWN")
+                    return
+                elif self.hall_calls_up:
+                    # Hall calls above (shouldn't happen if we're at max, but handle it)
+                    self._update_direction("UP")
+                    return
+                else:
+                    # No hall calls anywhere - set to NO_DIRECTION
+                    self._update_direction("NO_DIRECTION")
+                    return
+            
+            # Otherwise, if we're past the farthest call, reverse to DOWN
             farthest_call = max(all_calls) if all_calls else self.current_floor
-            if self.current_floor >= farthest_call:
+            if self.current_floor > farthest_call:
                 self._update_direction("DOWN")
 
         elif current_direction == "DOWN":
             if self._has_any_calls_below(): return
+            
+            # If the current floor has the last remaining call
+            if all_calls and min(all_calls) == self.current_floor:
+                # First, check if there's a hall call at current floor
+                if self.current_floor in self.hall_calls_up:
+                    self._update_direction("UP")
+                    return
+                elif self.current_floor in self.hall_calls_down:
+                    # DOWN hall call at current floor - keep DOWN direction
+                    return
+                
+                # No hall call at current floor, check if there are any hall calls above
+                if self.hall_calls_up:
+                    self._update_direction("UP")
+                    return
+                elif self.hall_calls_down:
+                    # Hall calls below (shouldn't happen if we're at min, but handle it)
+                    self._update_direction("DOWN")
+                    return
+                else:
+                    # No hall calls anywhere - set to NO_DIRECTION
+                    self._update_direction("NO_DIRECTION")
+                    return
+            
+            # Otherwise, if we're past the farthest call, reverse to UP
             farthest_call = min(all_calls) if all_calls else self.current_floor
-            if self.current_floor <= farthest_call:
+            if self.current_floor < farthest_call:
                 self._update_direction("UP")
 
         elif current_direction == "NO_DIRECTION":
