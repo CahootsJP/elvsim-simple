@@ -1,7 +1,75 @@
 # elvsim - Elevator Simulation System
+
+[![Status](https://img.shields.io/badge/status-active%20development-yellow)](https://github.com/CahootsJP/elvsim-simple)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![SimPy](https://img.shields.io/badge/simpy-4.0%2B-orange)](https://simpy.readthedocs.io/)
+
 **VTS Control Suite (Vertical Transport System Control Suite)** - Comprehensive Elevator Simulation System
 
 SimPy-based discrete event simulation system with web visualization support.
+
+---
+
+## 🚧 Development Status
+
+**Core Features: Functional ✅** | **Next: PyPI Packaging 🔄**
+
+### ✅ Functional
+- Discrete Event Simulator with realistic physics
+- Web Visualization (Live/Replay with dark mode)
+- Multi-elevator Group Control System
+- Event-driven Architecture & Data Analysis (JSONL)
+
+### 🔄 In Progress
+- PyPI Package Publishing (`elvsim`, `elvsim-simulator`, `elvsim-controller`, etc.)
+- Comprehensive Documentation
+- Test Coverage
+
+### 🔮 Planned
+- Advanced AI/ML-based algorithms
+- Real building integration support
+
+<details>
+<summary><b>📋 Detailed Feature List (Click to expand)</b></summary>
+
+### Core Simulator (`simulator/`)
+- [x] Discrete Event Simulator (SimPy-based)
+- [x] Realistic Physics Engine (S-curve velocity profile, jerk consideration)
+- [x] State/Direction Management System
+- [x] Capacity Limits & Boarding/Alighting Processing
+- [x] Door Open/Close Timing Control (photoelectric sensor model)
+- [x] Message Broker for Event-Driven Architecture
+- [x] Selective-Collective Operation Logic
+
+### Group Control System (`controller/`)
+- [x] Multi-elevator Group Control
+- [x] Nearest Car Strategy (Circular Distance-based)
+- [x] Real-time Status Monitoring
+- [x] Dynamic Hall Call Assignment
+- [x] Pluggable Algorithm Design
+
+### Data Analysis (`analyzer/`)
+- [x] JSON Lines Format Logging
+- [x] Event-Level Detailed Recording
+- [x] Trajectory Diagram Generation (Matplotlib)
+- [x] Real Elevator Log Analysis Support
+
+### Web Visualization (`visualizer/`)
+- [x] Live Mode (Real-time Display)
+- [x] Replay Mode (Playback Controls with speed adjustment)
+- [x] Dark Mode UI
+- [x] Multi-elevator Display (scalable)
+- [x] HTTP Long Polling (WebSocket-free)
+- [x] Elevator Hall Panel (waiting passenger display)
+
+### Architecture
+- [x] Modular Package Design (Simulator/Controller/Analyzer/Visualizer)
+- [x] Event-Driven Architecture
+- [x] Information Hiding & Separation of Concerns
+- [x] Look-ahead Bias Avoidance
+
+</details>
 
 ---
 
