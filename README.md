@@ -1,261 +1,261 @@
 # elvsim - Elevator Simulation System
-**VTS Control Suite (Vertical Transport System Control Suite)** - 総合エレベータシミュレーションシステム
+**VTS Control Suite (Vertical Transport System Control Suite)** - Comprehensive Elevator Simulation System
 
-SimPyベースの離散事象シミュレーションシステム。Web可視化対応。
+SimPy-based discrete event simulation system with web visualization support.
 
 ---
 
-## 🚀 クイックスタート
+## 🚀 Quick Start
 
-### インストール
+### Installation
 
 ```bash
-# 開発版（推奨）
+# Development version (recommended)
 git clone https://github.com/CahootsJP/elvsim-simple.git
 cd elvsim-simple
 pip install -r requirements.txt
 
-# または PyPI から（将来）
+# Or from PyPI (future)
 pip install elvsim
 ```
 
-### シミュレーション実行
+### Run Simulation
 
 ```bash
 python main.py
 ```
 
-実行すると：
-- ✅ 3台のエレベータ、10フロアでシミュレーション
-- ✅ 600秒（10分間）実行
-- ✅ `simulation_log.jsonl` にログ保存
-- ✅ 軌跡図（trajectory diagram）を生成
+This will:
+- ✅ Simulate 3 elevators with 10 floors
+- ✅ Run for 600 seconds (10 minutes)
+- ✅ Save logs to `simulation_log.jsonl`
+- ✅ Generate trajectory diagram
 
 ---
 
-### Web可視化（Live/Replay）
+### Web Visualization (Live/Replay)
 
-#### ターミナル1: シミュレーション実行
+#### Terminal 1: Run Simulation
 
 ```bash
 python main.py
 ```
 
-#### ターミナル2: HTTPサーバー起動
+#### Terminal 2: Start HTTP Server
 
 ```bash
 python visualizer/server/http_server.py
 
-# またはコマンドとして（pip install -e . 後）
+# Or as a command (after pip install -e .)
 elvsim-viz
 ```
 
-#### ブラウザ
+#### Browser
 
 ```
 http://localhost:5000
 ```
 
-- **Live**: リアルタイムで観察
-- **Replay**: 実行後に再生（速度調整、シーク可能）
-- **Dark Mode**: トグルボタンでテーマ切替
+- **Live**: Observe in real-time
+- **Replay**: Replay after execution (with speed control and seeking)
+- **Dark Mode**: Toggle theme with button
 
-詳細は [`visualizer/README.md`](visualizer/README.md) を参照。
+For details, see [`visualizer/README.md`](visualizer/README.md).
 
 ---
 
-## 📁 プロジェクト構成
+## 📁 Project Structure
 
 ```
 elvsim-simple/
 │
 ├── simulator/              # PyPI: elvsim-simulator
-│   ├── core/               # コアエンティティ
-│   │   ├── entity.py       # 抽象基底クラス
-│   │   ├── elevator.py     # エレベータ
-│   │   ├── passenger.py    # 乗客
-│   │   ├── door.py         # ドア
-│   │   └── hall_button.py  # ホールボタン
+│   ├── core/               # Core entities
+│   │   ├── entity.py       # Abstract base class
+│   │   ├── elevator.py     # Elevator
+│   │   ├── passenger.py    # Passenger
+│   │   ├── door.py         # Door
+│   │   └── hall_button.py  # Hall button
 │   ├── physics/
-│   │   └── physics_engine.py  # 物理エンジン
+│   │   └── physics_engine.py  # Physics engine
 │   ├── infrastructure/
-│   │   ├── message_broker.py  # メッセージブローカー
-│   │   └── realtime_env.py    # リアルタイム環境
-│   ├── interfaces/         # インターフェース定義
-│   └── implementations/    # 実装バリエーション
+│   │   ├── message_broker.py  # Message broker
+│   │   └── realtime_env.py    # Real-time environment
+│   ├── interfaces/         # Interface definitions
+│   └── implementations/    # Implementation variations
 │
 ├── controller/             # PyPI: elvsim-controller
-│   ├── interfaces/         # 群管理インターフェース
-│   ├── algorithms/         # アルゴリズム実装
+│   ├── interfaces/         # Group control interfaces
+│   ├── algorithms/         # Algorithm implementations
 │   └── group_control.py    # GroupControlSystem
 │
 ├── analyzer/               # PyPI: elvsim-analyzer
-│   ├── statistics.py       # 統計処理・ログ収集
-│   └── reporters/          # レポート生成
+│   ├── statistics.py       # Statistics processing & log collection
+│   └── reporters/          # Report generation
 │
 ├── visualizer/             # PyPI: elvsim-visualizer
 │   ├── server/
-│   │   └── http_server.py  # Flask HTTPサーバー
+│   │   └── http_server.py  # Flask HTTP server
 │   └── static/
 │       ├── index.html      # Web UI
-│       ├── app.js          # ビューアロジック
-│       ├── eventSource.js  # イベントソース抽象化
-│       └── style.css       # スタイル（ダークモード対応）
+│       ├── app.js          # Viewer logic
+│       ├── eventSource.js  # Event source abstraction
+│       └── style.css       # Styles (dark mode support)
 │
-├── examples/               # 使用例
-│   ├── configs/            # 設定ファイル例
-│   └── *.py                # サンプルスクリプト
+├── examples/               # Usage examples
+│   ├── configs/            # Configuration file examples
+│   └── *.py                # Sample scripts
 │
-├── tests/                  # テストコード
+├── tests/                  # Test code
 │   ├── test_simulator/
 │   ├── test_controller/
 │   ├── test_analyzer/
 │   └── test_visualizer/
 │
-├── docs/                   # ドキュメント
+├── docs/                   # Documentation
 │
-├── scripts/                # 開発者向けツール
+├── scripts/                # Developer tools
 │
-├── main.py                 # メインシミュレーション実行
-├── requirements.txt        # 依存パッケージ
-├── requirements-dev.txt    # 開発用依存
-├── setup.py                # パッケージング設定
-├── pyproject.toml          # プロジェクト設定
-├── MANIFEST.in             # パッケージング設定
-├── LICENSE                 # MITライセンス
-└── README.md               # このファイル
+├── main.py                 # Main simulation execution
+├── requirements.txt        # Dependencies
+├── requirements-dev.txt    # Development dependencies
+├── setup.py                # Packaging configuration
+├── pyproject.toml          # Project configuration
+├── MANIFEST.in             # Packaging configuration
+├── LICENSE                 # MIT License
+└── README.md               # This file
 ```
 
 ---
 
-## 🎯 主要機能
+## 🎯 Key Features
 
-### シミュレーション (`simulator/`)
-- ✅ SimPy離散事象シミュレーション
-- ✅ リアルな物理演算（加速度、躍度考慮）
-- ✅ 容量制限、乗降処理
-- ✅ ホールコール・カーコール管理
-- ✅ ドア開閉タイミング制御（光電センサーモデル）
-- ✅ 完全なオブジェクト指向設計
+### Simulation (`simulator/`)
+- ✅ SimPy discrete event simulation
+- ✅ Realistic physics (acceleration, jerk consideration)
+- ✅ Capacity limits, boarding/alighting processing
+- ✅ Hall call & car call management
+- ✅ Door open/close timing control (photoelectric sensor model)
+- ✅ Complete object-oriented design
 
-### 群管理 (`controller/`)
-- ✅ 複数エレベータ群管理（Group Control System）
-- ✅ リアルタイム状態監視
-- ✅ 動的割り当てアルゴリズム
-- ✅ プラグイン可能なアルゴリズム設計
+### Group Control (`controller/`)
+- ✅ Multi-elevator group control (Group Control System)
+- ✅ Real-time status monitoring
+- ✅ Dynamic assignment algorithms
+- ✅ Pluggable algorithm design
 
-### データ収集・解析 (`analyzer/`)
-- ✅ JSON Lines形式ログ（`simulation_log.jsonl`）
-- ✅ 軌跡図自動生成（Matplotlib）
-- ✅ イベント単位の詳細記録
-- ✅ 実機エレベータログ解析可能
+### Data Collection & Analysis (`analyzer/`)
+- ✅ JSON Lines format logs (`simulation_log.jsonl`)
+- ✅ Automatic trajectory diagram generation (Matplotlib)
+- ✅ Detailed event-level recording
+- ✅ Real elevator log analysis capability
 
-### Web可視化 (`visualizer/`)
-- ✅ Live/Replay統一ビューア
-- ✅ マルチエレベータ表示（スケーラブル）
-- ✅ エレベータホールパネル（待機乗客表示）
-- ✅ 号機別カラーコーディング
-- ✅ 再生速度調整・シーク機能
-- ✅ ダークモード対応
-- ✅ HTTP Long Polling（WebSocket不要）
-
----
-
-## 🛠️ 技術スタック
-
-- **シミュレーション**: Python 3.8+, SimPy
-- **データ形式**: JSON Lines (JSONL)
-- **Web可視化**: Flask, HTML5/CSS3/JavaScript
-- **グラフ生成**: Matplotlib
-- **物理計算**: NumPy, SymPy
+### Web Visualization (`visualizer/`)
+- ✅ Unified Live/Replay viewer
+- ✅ Multi-elevator display (scalable)
+- ✅ Elevator hall panel (waiting passenger display)
+- ✅ Color-coded by elevator
+- ✅ Playback speed control & seek functionality
+- ✅ Dark mode support
+- ✅ HTTP Long Polling (no WebSocket required)
 
 ---
 
-## 📦 PyPI パッケージ構成（将来）
+## 🛠️ Technology Stack
+
+- **Simulation**: Python 3.8+, SimPy
+- **Data Format**: JSON Lines (JSONL)
+- **Web Visualization**: Flask, HTML5/CSS3/JavaScript
+- **Graph Generation**: Matplotlib
+- **Physics Calculation**: NumPy, SymPy
+
+---
+
+## 📦 PyPI Package Structure (Future)
 
 ```bash
-# メタパッケージ（全部入り）
+# Meta-package (all-in-one)
 pip install elvsim
 
-# 個別インストール
-pip install elvsim-simulator   # シミュレータ本体
-pip install elvsim-controller   # 群管理システム
-pip install elvsim-analyzer     # 解析ツール
-pip install elvsim-visualizer   # 可視化システム
+# Individual installation
+pip install elvsim-simulator   # Simulator core
+pip install elvsim-controller   # Group control system
+pip install elvsim-analyzer     # Analysis tools
+pip install elvsim-visualizer   # Visualization system
 
-# 有料版（将来）
+# Premium version (future)
 pip install elvsim-controller-pro
 ```
 
-**用途別インストール例:**
+**Installation Examples by Use Case:**
 
-1. **フルシステム（開発・研究）**: `pip install elvsim`
-2. **アナライザーのみ（既設ビル）**: `pip install elvsim-analyzer`
-3. **カスタム構成**: 必要なパッケージを個別選択
-
----
-
-## 📊 シミュレーションパラメータ（`main.py`）
-
-| パラメータ | 値 | 説明 |
-|-----------|---|------|
-| `SIM_DURATION` | 600秒 | シミュレーション時間 |
-| `NUM_FLOORS` | 10 | フロア数 |
-| `NUM_ELEVATORS` | 3 | エレベータ台数 |
-| `FLOOR_HEIGHT` | 3.5m | 階高 |
-| `MAX_SPEED` | 2.5m/s | 最高速度 |
-| `ACCELERATION` | 1.0m/s² | 加速度 |
-| `JERK` | 2.0m/s³ | 躍度 |
-| `CAPACITY` | 10人 | 定員 |
+1. **Full System (Development/Research)**: `pip install elvsim`
+2. **Analyzer Only (Existing Building)**: `pip install elvsim-analyzer`
+3. **Custom Configuration**: Select individual packages as needed
 
 ---
 
-## 🔧 カスタマイズ
+## 📊 Simulation Parameters (`main.py`)
 
-### エレベータ台数を変更
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `SIM_DURATION` | 600s | Simulation time |
+| `NUM_FLOORS` | 10 | Number of floors |
+| `NUM_ELEVATORS` | 3 | Number of elevators |
+| `FLOOR_HEIGHT` | 3.5m | Floor height |
+| `MAX_SPEED` | 2.5m/s | Maximum speed |
+| `ACCELERATION` | 1.0m/s² | Acceleration |
+| `JERK` | 2.0m/s³ | Jerk |
+| `CAPACITY` | 10 people | Capacity |
 
-`main.py` の以下の部分を編集：
+---
+
+## 🔧 Customization
+
+### Change Number of Elevators
+
+Edit the following section in `main.py`:
 
 ```python
 # Create elevators
-for i in range(1, 4):  # 3台 → 任意の台数に変更
+for i in range(1, 4):  # 3 elevators → change to any number
     door = Door(env, f"Elevator_{i}_Door")
     elevator = Elevator(env, f"Elevator_{i}", broker, NUM_FLOORS, ...)
     gcs.register_elevator(elevator)
 ```
 
-### 乗客生成パターンを変更
+### Change Passenger Generation Pattern
 
-`main.py` の `passenger_generator_integrated_test()` 関数を編集：
+Edit the `passenger_generator_integrated_test()` function in `main.py`:
 
 ```python
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues):
-    # ここで乗客生成ロジックをカスタマイズ
-    yield env.timeout(random.uniform(1, 5))  # 生成間隔
-    arrival_floor = random.randint(1, 10)    # 出発階
-    destination_floor = random.randint(1, 10) # 目的階
+    # Customize passenger generation logic here
+    yield env.timeout(random.uniform(1, 5))  # Generation interval
+    arrival_floor = random.randint(1, 10)    # Origin floor
+    destination_floor = random.randint(1, 10) # Destination floor
     ...
 ```
 
 ---
 
-## 🐛 トラブルシューティング
+## 🐛 Troubleshooting
 
-### ポートが使用中
+### Port Already in Use
 
 ```bash
-# 既存プロセスを終了
+# Kill existing processes
 pkill -f "python main.py"
 pkill -f "python visualizer/server/http_server.py"
 ```
 
-### Web可視化が表示されない
+### Web Visualization Not Displaying
 
-1. ブラウザのハードリフレッシュ: `Ctrl + Shift + R`
-2. `simulation_log.jsonl` が生成されているか確認
-3. ブラウザの開発者ツール（F12）でエラーを確認
+1. Hard refresh browser: `Ctrl + Shift + R`
+2. Check if `simulation_log.jsonl` is generated
+3. Check for errors in browser developer tools (F12)
 
-### 依存パッケージエラー
+### Dependency Package Errors
 
 ```bash
 pip install --upgrade -r requirements.txt
@@ -263,81 +263,81 @@ pip install --upgrade -r requirements.txt
 
 ---
 
-## 📚 詳細ドキュメント
+## 📚 Detailed Documentation
 
-- [Web可視化システム詳細](visualizer/README.md)
-- アーキテクチャ詳細: 各Pythonファイルのdocstringを参照
-- API リファレンス: `docs/api_reference.md` (準備中)
-
----
-
-## 🎓 設計思想
-
-### オブジェクト指向設計
-- **情報隠蔽**: 各エンティティは内部状態を隠蔽
-- **責任の分離**: ボタンを押すのは乗客、割り当てはGCS
-- **Look-ahead bias回避**: 未来の情報を使わない
-
-### イベント駆動アーキテクチャ
-- MessageBrokerによる疎結合
-- 全イベントをJSONLで記録
-- Live/Replay統一処理
-
-### パッケージ分離設計
-- **simulator**: 物理シミュレーション（独立動作可能）
-- **controller**: 群管理アルゴリズム（プラグイン可能）
-- **analyzer**: データ解析（実機ログも処理可能）
-- **visualizer**: 可視化（シミュレータ不要で動作）
+- [Web Visualization System Details](visualizer/README.md)
+- Architecture Details: See docstrings in each Python file
+- API Reference: `docs/api_reference.md` (in preparation)
 
 ---
 
-## 🏢 実際のビルでの利用例
+## 🎓 Design Philosophy
 
-### パターン1: 既設ビルの運行解析
+### Object-Oriented Design
+- **Information Hiding**: Each entity hides its internal state
+- **Separation of Concerns**: Passengers press buttons, GCS assigns
+- **Avoid Look-ahead Bias**: Don't use future information
+
+### Event-Driven Architecture
+- Loose coupling via MessageBroker
+- Record all events in JSONL
+- Unified Live/Replay processing
+
+### Package Separation Design
+- **simulator**: Physical simulation (can run independently)
+- **controller**: Group control algorithms (pluggable)
+- **analyzer**: Data analysis (can process real elevator logs)
+- **visualizer**: Visualization (can run without simulator)
+
+---
+
+## 🏢 Real Building Use Cases
+
+### Pattern 1: Existing Building Operation Analysis
 
 ```bash
 pip install elvsim-analyzer elvsim-visualizer
 
-# 実際のエレベータからJSONL形式でログ収集
+# Collect logs from real elevators in JSONL format
 python -m analyzer.statistics --input /var/log/elevator/log.jsonl --report monthly_report.pdf
 
-# 可視化
+# Visualize
 elvsim-viz
 ```
 
-### パターン2: 新規ビルの事前シミュレーション
+### Pattern 2: Pre-Simulation for New Building
 
 ```bash
 pip install elvsim
 
-# ビル仕様に合わせてmain.pyをカスタマイズ
+# Customize main.py according to building specifications
 python main.py
 
-# 結果を解析
+# Analyze results
 python -m analyzer.statistics --input simulation_log.jsonl
 ```
 
 ---
 
-## 📝 ライセンス
+## 📝 License
 
-MIT License - 詳細は [LICENSE](LICENSE) を参照
-
----
-
-## 🚀 次のステップ
-
-1. **シミュレーションパラメータ調整**: `main.py` を編集
-2. **群管理アルゴリズム改良**: `controller/group_control.py` を編集
-3. **Web UI拡張**: `visualizer/static/` を編集
-4. **実機エレベータ接続**: 同じJSONL形式でデータ送信
-5. **カスタムアルゴリズム開発**: `controller/algorithms/` に追加
+MIT License - See [LICENSE](LICENSE) for details
 
 ---
 
-## 🤝 貢献
+## 🚀 Next Steps
 
-プルリクエスト歓迎！詳細は `CONTRIBUTING.md` (準備中) を参照。
+1. **Adjust Simulation Parameters**: Edit `main.py`
+2. **Improve Group Control Algorithms**: Edit `controller/group_control.py`
+3. **Extend Web UI**: Edit `visualizer/static/`
+4. **Connect Real Elevators**: Send data in the same JSONL format
+5. **Develop Custom Algorithms**: Add to `controller/algorithms/`
+
+---
+
+## 🤝 Contributing
+
+Pull requests are welcome! See `CONTRIBUTING.md` (in preparation) for details.
 
 ---
 

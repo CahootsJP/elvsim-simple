@@ -1,148 +1,148 @@
 # 🏢 Elevator Simulation Viewer
 
-統一されたエレベータシミュレーションビューア - ライブ実行、録画再生、実機接続に対応
+Unified elevator simulation viewer - supports live execution, replay, and real elevator connection
 
-## 🎯 特徴
+## 🎯 Features
 
-- ✅ **完全統一**：描画ロジックは1つだけ（デバッグが容易）
-- ✅ **2つのモード**：
-  - 🔴 **Live**: シミュレーション実行中にリアルタイム表示
-  - 📁 **Replay**: 録画ファイルを再生（一時停止・早送り・巻き戻し対応）
-- ✅ **JSON Lines形式**：標準化されたログフォーマット
-- ✅ **将来対応**：実機エレベータとの接続も同じ仕組みで可能
+- ✅ **Fully Unified**: Single rendering logic (easy to debug)
+- ✅ **Two Modes**:
+  - 🔴 **Live**: Real-time display during simulation
+  - 📁 **Replay**: Playback recorded files (with pause, fast-forward, rewind)
+- ✅ **JSON Lines Format**: Standardized log format
+- ✅ **Future-Ready**: Real elevator connection using the same mechanism
 
 ---
 
-## 🚀 使い方
+## 🚀 Usage
 
-### 1. HTTPサーバーを起動
+### 1. Start HTTP Server
 
 ```bash
 cd /home/abbey/elvsim-simple
 python visualizer/http_server.py
 ```
 
-サーバーが起動したら、ブラウザで開く：
+Once the server is running, open in browser:
 ```
 http://localhost:5000/static/index_new.html
 ```
 
 ---
 
-### 2. Liveモード（リアルタイム）
+### 2. Live Mode (Real-time)
 
-1. ブラウザで「🔴 Live」ボタンをクリック
-2. 別ターミナルでシミュレーションを実行：
+1. Click "🔴 Live" button in browser
+2. Run simulation in a separate terminal:
    ```bash
    python main.py
-   # または
+   # or
    python run_with_visualization.py
    ```
-3. ブラウザにリアルタイムで表示される（100ms遅延）
+3. Display updates in real-time in browser (100ms delay)
 
 ---
 
-### 3. Replayモード（録画再生）
+### 3. Replay Mode (Playback)
 
-1. ブラウザで「📁 Replay」ボタンをクリック
-2. ドロップダウンから`simulation_log.jsonl`を選択
-3. 「Load」ボタンをクリック
-4. 再生コントロール：
-   - **⏵ Play / ⏸ Pause**：再生・一時停止
-   - **↻ Restart**：最初から再生
-   - **Timeline slider**：任意の時刻にジャンプ
-   - **速度選択**：0.25x ～ 10x
-   - **キーボードショートカット**：
-     - `Space`：再生/一時停止
-     - `←`：5秒戻る
-     - `→`：5秒進む
-     - `R`：リスタート
+1. Click "📁 Replay" button in browser
+2. Select `simulation_log.jsonl` from dropdown
+3. Click "Load" button
+4. Playback controls:
+   - **⏵ Play / ⏸ Pause**: Play/pause
+   - **↻ Restart**: Start from beginning
+   - **Timeline slider**: Jump to any time
+   - **Speed selection**: 0.25x ~ 10x
+   - **Keyboard shortcuts**:
+     - `Space`: Play/pause
+     - `←`: Rewind 5 seconds
+     - `→`: Forward 5 seconds
+     - `R`: Restart
 
 ---
 
-## 📊 アーキテクチャ
+## 📊 Architecture
 
 ```
 ┌────────────────────────────────────────┐
-│  Data Source (データソース)             │
+│  Data Source                           │
 ├────────────────────────────────────────┤
 │  • SimPy (simulation_log.jsonl)       │
 │  • Real Elevator (sensor_log.jsonl)   │
-│  • Replay File (任意の.jsonl)          │
+│  • Replay File (any .jsonl)           │
 └─────────────┬──────────────────────────┘
               │
               │ Standard Event Format
               │ {"time": X, "type": Y, "data": Z}
               │
 ┌─────────────▼──────────────────────────┐
-│  Unified Viewer (統一ビューア)          │
+│  Unified Viewer                        │
 │  - handleEvent()                       │
-│  - 描画ロジック（1つだけ！）            │
+│  - Rendering Logic (Single!)           │
 └────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔧 API エンドポイント
+## 🔧 API Endpoints
 
-HTTPサーバー（`visualizer/http_server.py`）が提供：
+Provided by HTTP server (`visualizer/http_server.py`):
 
-| エンドポイント | 説明 |
-|---------------|------|
-| `GET /` | メインHTML |
-| `GET /static/<path>` | 静的ファイル（CSS, JS） |
-| `GET /api/status` | サーバーステータス |
-| `GET /api/logs/list` | 利用可能なログファイル一覧 |
-| `GET /api/logs/<filename>` | ログファイル全体取得（Replay用） |
-| `GET /api/logs/stream?file=<name>&from=<line>` | ログファイルの増分取得（Live用） |
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Main HTML |
+| `GET /static/<path>` | Static files (CSS, JS) |
+| `GET /api/status` | Server status |
+| `GET /api/logs/list` | List available log files |
+| `GET /api/logs/<filename>` | Get entire log file (for Replay) |
+| `GET /api/logs/stream?file=<name>&from=<line>` | Get incremental log entries (for Live) |
 
 ---
 
-## 📁 ファイル構成
+## 📁 File Structure
 
 ```
 visualizer/
-├── http_server.py          # HTTPサーバー（Flask）
-├── server.py               # WebSocketサーバー（旧版、参考用）
+├── http_server.py          # HTTP Server (Flask)
+├── server.py               # WebSocket Server (legacy, reference)
 └── static/
-    ├── index_new.html      # メインHTML
-    ├── style_new.css       # スタイル
-    ├── eventSource.js      # イベントソース抽象化
-    ├── viewer.js           # 統一ビューア
-    ├── controls.js         # 再生コントロールUI
-    └── main_new.js         # メインアプリケーション
+    ├── index_new.html      # Main HTML
+    ├── style_new.css       # Styles
+    ├── eventSource.js      # Event source abstraction
+    ├── viewer.js           # Unified viewer
+    ├── controls.js         # Playback control UI
+    └── main_new.js         # Main application
 ```
 
 ---
 
-## 🐛 デバッグ方法
+## 🐛 Debugging
 
-### 問題が発生した場合：
+### If problems occur:
 
-1. **ブラウザのコンソールを開く**（F12キー）
-2. **ログを確認**：
+1. **Open browser console** (F12 key)
+2. **Check logs**:
    ```javascript
    [Viewer] Metadata received: {...}
    [Viewer] Elevator status: {...}
    ```
-3. **ログファイルを確認**：
+3. **Check log file**:
    ```bash
    cat simulation_log.jsonl | jq '.type' | sort | uniq -c
    ```
-4. **特定イベントを検索**：
+4. **Search for specific events**:
    ```bash
-   # 5F UP のイベントを検索
+   # Search for 5F UP events
    cat simulation_log.jsonl | jq 'select(.data.floor == 5 and .data.direction == "UP")'
    ```
 
 ---
 
-## 🎨 実機エレベータとの接続（将来）
+## 🎨 Real Elevator Connection (Future)
 
-実機側で必要な作業：
+Required work on real elevator side:
 
 ```python
-# adapter.py（実機側）
+# adapter.py (real elevator side)
 import requests
 import json
 
@@ -153,14 +153,14 @@ def send_event(event_type, event_data):
         "data": event_data
     }
     
-    # HTTPサーバーに送信（将来実装予定）
+    # Send to HTTP server (future implementation)
     requests.post('http://server:5000/api/events', json=event)
     
-    # または、ファイルに書き込み
+    # Or write to file
     with open('sensor_log.jsonl', 'a') as f:
         f.write(json.dumps(event) + '\n')
 
-# センサーからのデータを標準形式に変換
+# Convert sensor data to standard format
 send_event('elevator_status', {
     'elevator': 'Elevator_A',
     'floor': get_current_floor(),
@@ -171,22 +171,21 @@ send_event('elevator_status', {
 
 ---
 
-## ✅ テスト済み
+## ✅ Tested
 
-- ✅ HTTPサーバー起動
-- ✅ API エンドポイント動作確認
-- ✅ ログファイル読み込み（170イベント）
-- ✅ ストリーミングAPI動作確認
-
----
-
-## 📝 次のステップ
-
-1. ブラウザでビューアを開いて動作確認
-2. 必要に応じてUIを調整
-3. 実機接続のプロトタイプ作成
+- ✅ HTTP server startup
+- ✅ API endpoint verification
+- ✅ Log file loading (170 events)
+- ✅ Streaming API verification
 
 ---
 
-**🎉 完成しました！**
+## 📝 Next Steps
 
+1. Open viewer in browser and verify operation
+2. Adjust UI as needed
+3. Create real elevator connection prototype
+
+---
+
+**🎉 Complete!**
