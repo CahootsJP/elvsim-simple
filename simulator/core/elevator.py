@@ -178,6 +178,10 @@ class Elevator(Entity):
             # Send hall_calls status
             self.env.process(self._broadcast_hall_calls_status())
             
+            # If direction is NO_DIRECTION (idle or about to become idle), update direction
+            if self.direction == "NO_DIRECTION":
+                self._decide_direction_on_hall_call_assigned()
+            
             # Determine if emergency button should be pressed
             if self._should_interrupt(floor, direction):
                 print(f"{self.env.now:.2f} [{self.name}] New valid call on the way! INTERRUPTING.")
@@ -546,6 +550,35 @@ class Elevator(Entity):
 
         return False
 
+    def _decide_direction_on_hall_call_assigned(self):
+        """Decide direction when a new hall call is assigned while NO_DIRECTION.
+        
+        This is specifically for real-time direction updates when receiving hall calls
+        while the elevator is idle, stopping, or decelerating to a stop.
+        Excludes current floor to determine the next travel direction.
+        """
+        all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
+        
+        if not all_calls:
+            return
+        
+        # Exclude current floor (might still be stopping/processing there)
+        calls_excluding_current = all_calls - {self.current_floor}
+        
+        if calls_excluding_current:
+            # There are calls on other floors - determine direction to them
+            closest_call = min(calls_excluding_current, key=lambda f: abs(f - self.current_floor))
+            if closest_call > self.current_floor:
+                self._update_direction("UP")
+            else:
+                self._update_direction("DOWN")
+        else:
+            # Only current floor has calls - check hall call direction at current floor
+            if self.current_floor in self.hall_calls_up:
+                self._update_direction("UP")
+            elif self.current_floor in self.hall_calls_down:
+                self._update_direction("DOWN")
+    
     def _decide_next_direction(self):
         """Decide next direction (only updates direction, not state)"""
         current_direction = self.direction
@@ -568,13 +601,17 @@ class Elevator(Entity):
                     # UP hall call at current floor - keep UP direction
                     return
                 
-                # No hall call at current floor, check if there are any hall calls below
-                if self.hall_calls_down:
-                    self._update_direction("DOWN")
-                    return
-                elif self.hall_calls_up:
-                    # Hall calls above (shouldn't happen if we're at max, but handle it)
-                    self._update_direction("UP")
+                # No hall call at current floor, check where other hall calls are
+                all_hall_calls = self.hall_calls_up | self.hall_calls_down
+                if all_hall_calls:
+                    # Determine direction based on hall call positions
+                    has_calls_above = any(f > self.current_floor for f in all_hall_calls)
+                    has_calls_below = any(f < self.current_floor for f in all_hall_calls)
+                    
+                    if has_calls_below:
+                        self._update_direction("DOWN")
+                    elif has_calls_above:
+                        self._update_direction("UP")
                     return
                 else:
                     # No hall calls anywhere - set to NO_DIRECTION
@@ -599,13 +636,17 @@ class Elevator(Entity):
                     # DOWN hall call at current floor - keep DOWN direction
                     return
                 
-                # No hall call at current floor, check if there are any hall calls above
-                if self.hall_calls_up:
-                    self._update_direction("UP")
-                    return
-                elif self.hall_calls_down:
-                    # Hall calls below (shouldn't happen if we're at min, but handle it)
-                    self._update_direction("DOWN")
+                # No hall call at current floor, check where other hall calls are
+                all_hall_calls = self.hall_calls_up | self.hall_calls_down
+                if all_hall_calls:
+                    # Determine direction based on hall call positions
+                    has_calls_above = any(f > self.current_floor for f in all_hall_calls)
+                    has_calls_below = any(f < self.current_floor for f in all_hall_calls)
+                    
+                    if has_calls_above:
+                        self._update_direction("UP")
+                    elif has_calls_below:
+                        self._update_direction("DOWN")
                     return
                 else:
                     # No hall calls anywhere - set to NO_DIRECTION
