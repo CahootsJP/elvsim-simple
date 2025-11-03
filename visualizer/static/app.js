@@ -597,7 +597,7 @@ class ElevatorVisualizer {
                 indicator.title = `Hall call UP: ${floor}F`;
                 // Position in lower half of floor cell
                 const floorHeight = 100 / numFloors;
-                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.35);
+                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.38);
                 indicator.style.bottom = `${bottomPercent}%`;
                 indicator.style.left = '5px';
                 shaft.appendChild(indicator);
@@ -613,7 +613,7 @@ class ElevatorVisualizer {
                 indicator.title = `Hall call DOWN: ${floor}F`;
                 // Position in lower half of floor cell, near bottom
                 const floorHeight = 100 / numFloors;
-                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.05);
+                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.02);
                 indicator.style.bottom = `${bottomPercent}%`;
                 indicator.style.left = '5px';
                 shaft.appendChild(indicator);
