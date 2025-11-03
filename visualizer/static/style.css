@@ -352,6 +352,122 @@ section h2 {
     font-family: 'Courier New', monospace;
 }
 
+/* ====================================
+   NEW GRID LAYOUT: Shared Floor Labels
+   ==================================== */
+
+.elevator-grid {
+    display: grid;
+    grid-template-columns: 50px 1fr; /* [Floor Labels][Elevator Columns] */
+    gap: 12px;
+    margin-top: 15px;
+    overflow-x: auto; /* Allow horizontal scroll for many elevators */
+    align-items: start; /* Align items to top */
+}
+
+.shared-floor-labels {
+    position: relative; /* For absolute positioning of labels */
+    left: 0;
+    z-index: 10;
+    background: linear-gradient(90deg, var(--card-bg) 0%, var(--card-bg) 85%, transparent 100%);
+    padding: 0;
+    /* Add top margin to align with shaft (after header) */
+    margin-top: 81px; /* Height of elevator-column-header + gap */
+}
+
+.shared-floor-label {
+    position: absolute; /* Absolute positioning to match elevator floors */
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-align: right;
+    padding-right: 8px;
+    line-height: 1;
+    border-right: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 25px; /* Match elevator car height */
+    width: 100%;
+    left: 0;
+    transition: all 0.2s ease;
+}
+
+.shared-floor-label:hover {
+    color: var(--primary-color);
+    font-size: 12px;
+    padding-right: 10px;
+}
+
+.elevator-columns {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.elevator-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 90px;
+    max-width: 120px;
+}
+
+.elevator-column-header {
+    background: linear-gradient(135deg, var(--primary-color), #1d4ed8);
+    color: white;
+    padding: 8px 10px;
+    border-radius: 8px 8px 0 0;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s ease;
+}
+
+.elevator-column-header:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.elevator-column-header .elevator-name {
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.elevator-column-header .elevator-status {
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 3px 8px;
+    border-radius: 10px;
+    display: inline-block;
+    margin-top: 4px;
+    white-space: nowrap;
+}
+
+/* Color variants for elevator columns */
+.elevator-column[data-elevator="Hall"] .elevator-column-header {
+    background: linear-gradient(135deg, #6b7280, #4b5563); /* Gray */
+}
+
+.elevator-column[data-elevator*="1"] .elevator-column-header {
+    background: linear-gradient(135deg, #3b82f6, #2563eb); /* Blue */
+}
+
+.elevator-column[data-elevator*="2"] .elevator-column-header {
+    background: linear-gradient(135deg, #f97316, #ea580c); /* Orange */
+}
+
+.elevator-column[data-elevator*="3"] .elevator-column-header {
+    background: linear-gradient(135deg, #22c55e, #16a34a); /* Green */
+}
+
+.elevator-column[data-elevator*="4"] .elevator-column-header {
+    background: linear-gradient(135deg, #ef4444, #dc2626); /* Red */
+}
+
+/* Old elevator-container (keep for backwards compatibility during transition) */
 .elevator-container {
     display: flex;
     flex-wrap: wrap;
@@ -366,9 +482,9 @@ section h2 {
     overflow: hidden;
     transition: all 0.3s;
     flex: 0 1 auto;
-    min-width: 180px;
-    max-width: 200px;
-    width: 190px;
+    min-width: 120px;   /* 細くする */
+    max-width: 140px;   /* 細くする */
+    width: 130px;       /* 細くする */
 }
 
 .elevator-card:hover {
@@ -379,10 +495,11 @@ section h2 {
 .elevator-header {
     background: linear-gradient(135deg, var(--primary-color), #1d4ed8);
     color: white;
-    padding: 8px 12px;
+    padding: 6px 8px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;  /* 縦並び */
+    align-items: center;     /* 中央揃え */
+    gap: 4px;                /* エレベーター名と状態の間隔 */
 }
 
 /* Elevator-specific header colors */
@@ -408,8 +525,10 @@ section h2 {
 }
 
 .elevator-header h3 {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
+    text-align: center;
+    line-height: 1.2;
 }
 
 .elevator-state {
@@ -463,30 +582,124 @@ section h2 {
     position: relative; /* For absolute positioning of labels */
     height: 150px; /* Default height, will be overridden by JavaScript */
     padding: 0; /* No padding to ensure exact alignment */
-    flex: 0 0 24px; /* Fixed width for labels */
+    flex: 0 0 32px; /* フロアラベル用の幅を広げる (24px → 32px) */
 }
 
 .floor-label {
     position: absolute; /* Positioned at floor boundaries */
     left: 0;
-    width: 100%;
+    width: 32px; /* 明示的に幅を指定 */
     font-size: 10px;
     color: var(--text-secondary);
     font-weight: 600; /* Slightly bolder for better visibility */
     line-height: 1;
-    text-align: right; /* Right-align labels to keep them away from shaft */
-    padding-right: 3px; /* Small padding from the edge */
+    text-align: center; /* 中央揃えで見やすく */
+    padding: 0 2px; /* 左右に余白 */
+    box-sizing: border-box; /* padding を含めた幅 */
 }
 
 .elevator-shaft {
-    width: 60px; /* Compact width for multi-elevator display */
+    width: 100%; /* Fill column width */
     height: 150px; /* Default height, will be overridden by JavaScript */
     /* Zebra stripe background for floor visibility (auto-switches with dark mode) */
     background: var(--elevator-shaft-bg);
     border: 2px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 0 0 8px 8px; /* Rounded bottom corners only */
     position: relative;
     overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+/* Call Indicators (for new grid layout) */
+.call-indicator {
+    position: absolute;
+    font-size: 10px;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.car-call-indicator {
+    color: #c084fc; /* Brighter purple */
+    text-shadow: 0 0 3px rgba(192, 132, 252, 0.6);
+    transform: translateY(-50%); /* Move up by half of element height to center */
+}
+
+.hall-call-up-indicator {
+    color: #22c55e; /* Green */
+    text-shadow: 0 0 3px rgba(34, 197, 94, 0.6);
+}
+
+.hall-call-down-indicator {
+    color: #ef4444; /* Red */
+    text-shadow: 0 0 3px rgba(239, 68, 68, 0.6);
+}
+
+.waiting-passenger-indicator {
+    position: absolute;
+    font-size: 9px;
+    z-index: 5;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 2px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+.waiting-up {
+    color: #a3e635; /* Lime green */
+}
+
+.waiting-down {
+    color: #fbbf24; /* Amber */
+}
+
+/* Capacity Display (for new grid layout) */
+.capacity-display {
+    background: var(--card-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 0 0 8px 8px;
+    padding: 6px 4px;
+    text-align: center;
+    margin-top: -2px; /* Merge with shaft border */
+    min-width: 0; /* Allow shrinking */
+}
+
+.capacity-squares {
+    display: flex;
+    gap: 2px;
+    justify-content: center;
+    margin-bottom: 4px;
+    flex-wrap: wrap; /* Allow wrapping if needed */
+}
+
+.capacity-square {
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 1px;
+    background: var(--card-bg);
+    flex-shrink: 0;
+}
+
+.capacity-square.filled {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-color: #22c55e;
+    box-shadow: 0 0 3px rgba(34, 197, 94, 0.4);
+}
+
+.capacity-text {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.capacity-text span {
+    display: block;
+    line-height: 1.2;
 }
 
 .elevator-car {
@@ -499,6 +712,8 @@ section h2 {
     left: 50%; /* Center horizontally */
     transform: translateX(-50%); /* Center using transform instead of margin */
     bottom: 0%;
+    transition: bottom 0.5s ease-in-out; /* Smooth movement animation */
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4); /* Subtle glow */
     transition: bottom 0.5s ease-in-out;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     overflow: visible; /* Allow doors to be visible */
@@ -785,7 +1000,7 @@ body.dark-mode .passenger-box.occupancy-high {
 
 /* Hall Shaft Styles (for Elevator Hall panel - same as elevator shaft) */
 .hall-shaft {
-    width: 100px; /* Wider than regular elevator shaft for better visibility */
+    width: 70px; /* エレベーターシャフトと同じ幅に統一 */
     height: 150px; /* Default height, will be overridden by JavaScript */
     /* Zebra stripe background for floor visibility (light mode) */
     background: repeating-linear-gradient(

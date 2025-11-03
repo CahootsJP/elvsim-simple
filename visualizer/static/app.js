@@ -71,16 +71,12 @@ class ElevatorVisualizer {
     }
     
     initializePlaceholderElevators() {
-        // Create Elevator Hall panel first (always on the left)
-        let hallElement = document.getElementById('elevator-hall');
-        if (!hallElement) {
-            hallElement = this.createElevatorHallElement();
-            this.elevatorContainer.appendChild(hallElement);
-        }
-        this.renderElevatorHall(hallElement, 10); // 10 floors by default
+        // Initialize the new grid layout
+        this.numFloors = 10; // Default number of floors
+        this.initializeGridLayout(this.numFloors);
         
         // Create placeholder elevators to show from the start
-        const placeholderElevators = ['Elevator_1', 'Elevator_2', 'Elevator_3'];
+        const placeholderElevators = ['Hall', 'Elevator_1', 'Elevator_2', 'Elevator_3'];
         
         placeholderElevators.forEach(elevatorName => {
             const placeholderData = {
@@ -89,24 +85,184 @@ class ElevatorVisualizer {
                 state: 'IDLE',
                 direction: 'NO_DIRECTION',
                 passengers: 0,
-                capacity: 50,
+                capacity: elevatorName === 'Hall' ? 0 : 50,
                 num_floors: 10,
                 car_calls: [],
                 hall_calls_up: [],
                 hall_calls_down: []
             };
             
-            // Create elevator card
-            let elevatorElement = document.getElementById(`elevator-${elevatorName}`);
-            if (!elevatorElement) {
-                elevatorElement = this.createElevatorElement(elevatorName);
-                this.elevatorContainer.appendChild(elevatorElement);
-            }
-            
-            // Render initial state
-            this.renderElevator(elevatorElement, placeholderData);
+            // Create elevator column
+            this.createElevatorColumn(elevatorName, placeholderData);
             this.elevators.set(elevatorName, placeholderData);
         });
+    }
+    
+    initializeGridLayout(numFloors) {
+        const sharedFloorLabels = document.getElementById('shared-floor-labels');
+        if (!sharedFloorLabels) return;
+        
+        // Clear existing labels
+        sharedFloorLabels.innerHTML = '';
+        
+        // Calculate shaft height
+        const carHeight = 25; // px
+        const shaftHeight = carHeight * (numFloors + 1);
+        sharedFloorLabels.style.height = `${shaftHeight}px`;
+        
+        // Create floor labels with absolute positioning to match elevator floors
+        for (let f = 1; f <= numFloors; f++) {
+            const label = document.createElement('div');
+            label.className = 'shared-floor-label';
+            label.textContent = `${f}F`;
+            
+            // Position each label at the bottom of its floor (same as elevator car positioning)
+            const bottomPercent = ((f - 1) / numFloors) * 100;
+            label.style.bottom = `${bottomPercent}%`;
+            
+            sharedFloorLabels.appendChild(label);
+        }
+    }
+    
+    createElevatorColumn(elevatorName, data) {
+        const columnsContainer = document.getElementById('elevator-columns');
+        if (!columnsContainer) return;
+        
+        // Check if column already exists
+        let column = document.getElementById(`column-${elevatorName}`);
+        if (column) return column;
+        
+        // Create new column
+        column = document.createElement('div');
+        column.id = `column-${elevatorName}`;
+        column.className = 'elevator-column';
+        column.setAttribute('data-elevator', elevatorName);
+        
+        // Create header with name and status
+        const displayName = this.formatElevatorName(elevatorName);
+        const header = document.createElement('div');
+        header.className = 'elevator-column-header';
+        header.innerHTML = `
+            <div class="elevator-name">${displayName}</div>
+            <div class="elevator-status" id="status-${elevatorName}">
+                ${this.getDirectionIcon(data.direction)} ${this.shortenState(data.state)}
+            </div>
+        `;
+        
+        // Create shaft
+        const shaft = document.createElement('div');
+        shaft.className = 'elevator-shaft';
+        shaft.id = `shaft-${elevatorName}`;
+        
+        // Calculate shaft height
+        const carHeight = 25; // px
+        const numFloors = data.num_floors || 10;
+        const shaftHeight = carHeight * (numFloors + 1);
+        shaft.style.height = `${shaftHeight}px`;
+        
+        // Create elevator car (if not Hall)
+        if (elevatorName !== 'Hall') {
+            const car = document.createElement('div');
+            car.className = 'elevator-car door-closed';
+            car.id = `car-${elevatorName}`;
+            car.innerHTML = `
+                <div class="door door-left"></div>
+                <div class="door door-right"></div>
+            `;
+            shaft.appendChild(car);
+            
+            // Position car at initial floor
+            const floorPosition = ((data.floor - 1) / numFloors) * 100;
+            car.style.bottom = `${floorPosition}%`;
+        }
+        
+        // Add passenger capacity display (if not Hall)
+        if (elevatorName !== 'Hall') {
+            const capacityDisplay = document.createElement('div');
+            capacityDisplay.className = 'capacity-display';
+            capacityDisplay.id = `capacity-${elevatorName}`;
+            capacityDisplay.innerHTML = `
+                <div class="capacity-squares" id="capacity-squares-${elevatorName}"></div>
+                <div class="capacity-text">
+                    <span id="capacity-count-${elevatorName}">0/50</span>
+                    <span id="capacity-percent-${elevatorName}">0%</span>
+                </div>
+            `;
+            column.appendChild(capacityDisplay);
+            
+            // Initialize capacity visualization
+            this.updateCapacityDisplay(elevatorName, data.passengers || 0, data.capacity || 50);
+        }
+        
+        // Append elements
+        column.appendChild(header);
+        column.appendChild(shaft);
+        if (elevatorName !== 'Hall') {
+            const capacityDisplay = column.querySelector('.capacity-display');
+            if (capacityDisplay) {
+                column.appendChild(capacityDisplay);
+            }
+        }
+        columnsContainer.appendChild(column);
+        
+        return column;
+    }
+    
+    updateCapacityDisplay(elevatorName, passengers, capacity) {
+        const countElement = document.getElementById(`capacity-count-${elevatorName}`);
+        const percentElement = document.getElementById(`capacity-percent-${elevatorName}`);
+        const squaresContainer = document.getElementById(`capacity-squares-${elevatorName}`);
+        
+        if (countElement) {
+            // Compact format: just numbers
+            countElement.textContent = `${passengers}/${capacity}`;
+        }
+        
+        if (percentElement) {
+            const percent = Math.round((passengers / capacity) * 100);
+            percentElement.textContent = `${percent}%`;
+        }
+        
+        if (squaresContainer) {
+            squaresContainer.innerHTML = '';
+            const maxSquares = 10;
+            const filledSquares = Math.round((passengers / capacity) * maxSquares);
+            
+            for (let i = 0; i < maxSquares; i++) {
+                const square = document.createElement('div');
+                square.className = i < filledSquares ? 'capacity-square filled' : 'capacity-square';
+                squaresContainer.appendChild(square);
+            }
+        }
+    }
+    
+    formatElevatorName(name) {
+        // Format elevator names for display
+        if (name === 'Hall') return '🏢 Hall';
+        if (name.startsWith('Elevator_')) {
+            const num = name.split('_')[1];
+            return `Elv ${num}`;
+        }
+        return name;
+    }
+    
+    shortenState(state) {
+        const stateMap = {
+            'IDLE': 'IDLE',
+            'MOVING': 'MOVE',
+            'STOPPING': 'STOP',
+            'DECELERATING': 'DECEL'
+        };
+        return stateMap[state] || state;
+    }
+    
+    getDirectionIcon(direction) {
+        const iconMap = {
+            'UP': '↑',
+            'DOWN': '↓',
+            'NO_DIRECTION': '○'
+        };
+        return iconMap[direction] || '○';
     }
     
     createElevatorHallElement() {
@@ -236,11 +392,17 @@ class ElevatorVisualizer {
         // Clear metrics
         this.resetMetrics();
         
-        // Clear DOM: elevator container
-        this.elevatorContainer.innerHTML = '';
+        // Clear DOM: elevator columns (new grid layout)
+        const elevatorColumns = document.getElementById('elevator-columns');
+        if (elevatorColumns) {
+            elevatorColumns.innerHTML = '';
+        }
         
-        // Recreate Elevator Hall panel
-        this.createElevatorHallPanel();
+        // Clear shared floor labels
+        const sharedFloorLabels = document.getElementById('shared-floor-labels');
+        if (sharedFloorLabels) {
+            sharedFloorLabels.innerHTML = '';
+        }
         
         console.log('[App] All state cleared');
     }
@@ -326,48 +488,137 @@ class ElevatorVisualizer {
     updateCallsOnly(data) {
         const { elevator_name, car_calls, hall_calls_up, hall_calls_down } = data;
         
-        // Get existing elevator element
-        let elevatorElement = document.getElementById(`elevator-${elevator_name}`);
-        if (!elevatorElement) {
-            // Elevator doesn't exist yet, skip update
-            return;
-        }
+        // Update call indicators using new grid layout
+        const callData = {
+            ...data,
+            car_calls: car_calls || [],
+            hall_calls_up: hall_calls_up || [],
+            hall_calls_down: hall_calls_down || []
+        };
         
-        const shaftElement = elevatorElement.querySelector('.elevator-shaft');
-        if (!shaftElement) return;
-        
-        // Remove old call indicators
-        shaftElement.querySelectorAll('.car-call-indicator, .hall-call-indicator').forEach(el => el.remove());
-        
-        // Render car calls
-        this.renderCarCalls(shaftElement, car_calls || [], data.num_floors || 10);
-        
-        // Render hall calls
-        this.renderHallCalls(shaftElement, hall_calls_up || [], hall_calls_down || [], data.num_floors || 10);
+        this.updateCallIndicators(elevator_name, callData);
     }
     
     updateElevator(data) {
-        const { elevator_name, floor, state, passengers, capacity } = data;
+        const { elevator_name, floor, state, direction, passengers, capacity } = data;
         
         // Store elevator state
         this.elevators.set(elevator_name, data);
         
-        // Create Elevator Hall panel if this is the first elevator and it doesn't exist yet
-        if (!document.getElementById('elevator-hall')) {
-            const hallElement = this.createElevatorHallElement();
-            this.elevatorContainer.insertBefore(hallElement, this.elevatorContainer.firstChild);
-            this.renderElevatorHall(hallElement, data.num_floors || 10);
+        // Ensure grid layout is initialized
+        if (!document.getElementById('shared-floor-labels').hasChildNodes()) {
+            this.initializeGridLayout(data.num_floors || 10);
         }
         
-        // Update or create elevator UI
-        let elevatorElement = document.getElementById(`elevator-${elevator_name}`);
-        if (!elevatorElement) {
-            elevatorElement = this.createElevatorElement(elevator_name);
-            this.elevatorContainer.appendChild(elevatorElement);
+        // Ensure Hall column exists (create it first if this is the first elevator)
+        if (!document.getElementById('column-Hall')) {
+            const hallData = {
+                elevator_name: 'Hall',
+                floor: 1,
+                state: 'IDLE',
+                direction: 'NO_DIRECTION',
+                passengers: 0,
+                capacity: 0,
+                num_floors: data.num_floors || 10,
+                car_calls: [],
+                hall_calls_up: [],
+                hall_calls_down: []
+            };
+            this.createElevatorColumn('Hall', hallData);
         }
         
-        // Update elevator display
-        this.renderElevator(elevatorElement, data);
+        // Create or update elevator column
+        let column = document.getElementById(`column-${elevator_name}`);
+        if (!column) {
+            column = this.createElevatorColumn(elevator_name, data);
+        }
+        
+        // Update status in header
+        const statusElement = document.getElementById(`status-${elevator_name}`);
+        if (statusElement) {
+            statusElement.textContent = `${this.getDirectionIcon(direction || 'NO_DIRECTION')} ${this.shortenState(state)}`;
+        }
+        
+        // Update capacity display
+        if (elevator_name !== 'Hall') {
+            this.updateCapacityDisplay(elevator_name, passengers || 0, capacity || 50);
+        }
+        
+        // Update elevator car position
+        const car = document.getElementById(`car-${elevator_name}`);
+        if (car) {
+            const numFloors = data.num_floors || this.numFloors || 10;
+            const floorPosition = ((floor - 1) / numFloors) * 100;
+            car.style.bottom = `${floorPosition}%`;
+            
+            // Update door animation
+            if (state === 'STOPPING') {
+                car.classList.remove('door-closed');
+                car.classList.add('door-open');
+            } else {
+                car.classList.remove('door-open');
+                car.classList.add('door-closed');
+            }
+        }
+        
+        // Update call indicators (car calls, hall calls)
+        this.updateCallIndicators(elevator_name, data);
+    }
+    
+    updateCallIndicators(elevatorName, data) {
+        const shaft = document.getElementById(`shaft-${elevatorName}`);
+        if (!shaft) return;
+        
+        // Remove existing call indicators
+        shaft.querySelectorAll('.call-indicator').forEach(el => el.remove());
+        
+        const numFloors = data.num_floors || this.numFloors || 10;
+        
+        // Add car call indicators
+        if (data.car_calls && data.car_calls.length > 0) {
+            data.car_calls.forEach(floor => {
+                const indicator = document.createElement('div');
+                indicator.className = 'call-indicator car-call-indicator';
+                indicator.textContent = '●';
+                indicator.title = `Car call: ${floor}F`;
+                const bottomPercent = ((floor - 1) / numFloors) * 100;
+                indicator.style.bottom = `${bottomPercent}%`;
+                indicator.style.right = '5px';
+                shaft.appendChild(indicator);
+            });
+        }
+        
+        // Add hall call UP indicators
+        if (data.hall_calls_up && data.hall_calls_up.length > 0) {
+            data.hall_calls_up.forEach(floor => {
+                const indicator = document.createElement('div');
+                indicator.className = 'call-indicator hall-call-up-indicator';
+                indicator.textContent = '▲';
+                indicator.title = `Hall call UP: ${floor}F`;
+                // Position in lower half of floor cell
+                const floorHeight = 100 / numFloors;
+                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.35);
+                indicator.style.bottom = `${bottomPercent}%`;
+                indicator.style.left = '5px';
+                shaft.appendChild(indicator);
+            });
+        }
+        
+        // Add hall call DOWN indicators
+        if (data.hall_calls_down && data.hall_calls_down.length > 0) {
+            data.hall_calls_down.forEach(floor => {
+                const indicator = document.createElement('div');
+                indicator.className = 'call-indicator hall-call-down-indicator';
+                indicator.textContent = '▼';
+                indicator.title = `Hall call DOWN: ${floor}F`;
+                // Position in lower half of floor cell, near bottom
+                const floorHeight = 100 / numFloors;
+                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.05);
+                indicator.style.bottom = `${bottomPercent}%`;
+                indicator.style.left = '5px';
+                shaft.appendChild(indicator);
+            });
+        }
     }
     
     createElevatorElement(elevatorName) {
@@ -627,20 +878,42 @@ class ElevatorVisualizer {
         console.log('[DEBUG] updateWaitingPassengers called with data:', JSON.stringify(waitingData));
         this.waitingPassengers = waitingData;
         
-        // Update Elevator Hall panel
-        const hallElement = document.getElementById('elevator-hall');
-        if (hallElement) {
-            const hallShaft = hallElement.querySelector('.hall-shaft');
-            if (hallShaft) {
-                // Get number of floors from any elevator (they should all be the same)
-                const firstElevator = this.elevators.values().next().value;
-                const numFloors = firstElevator ? firstElevator.num_floors : 10;
-                console.log('[DEBUG] Rendering hall waiting passengers, numFloors:', numFloors);
-                this.renderHallWaitingPassengers(hallShaft, numFloors);
+        // Update Hall shaft with waiting passengers
+        const hallShaft = document.getElementById('shaft-Hall');
+        if (hallShaft) {
+            // Remove existing waiting passenger indicators
+            hallShaft.querySelectorAll('.waiting-passenger-indicator').forEach(el => el.remove());
+            
+            const numFloors = this.numFloors || 10;
+            
+            // Add waiting passenger indicators
+            for (const [floor, directions] of Object.entries(waitingData)) {
+                const floorNum = parseInt(floor);
+                const bottomPercent = ((floorNum - 1) / numFloors) * 100;
+                
+                if (directions.UP > 0) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'waiting-passenger-indicator waiting-up';
+                    indicator.textContent = `${directions.UP}👤▲`;
+                    indicator.title = `${directions.UP} passengers waiting for UP`;
+                    indicator.style.bottom = `${bottomPercent}%`;
+                    indicator.style.left = '10px';
+                    hallShaft.appendChild(indicator);
+                }
+                
+                if (directions.DOWN > 0) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'waiting-passenger-indicator waiting-down';
+                    indicator.textContent = `${directions.DOWN}👤▼`;
+                    indicator.title = `${directions.DOWN} passengers waiting for DOWN`;
+                    indicator.style.bottom = `${bottomPercent}%`;
+                    indicator.style.right = '10px';
+                    hallShaft.appendChild(indicator);
+                }
             }
         }
         
-        // Clear waiting areas from all elevator displays
+        // Clear waiting areas from all elevator displays (kept for compatibility)
         this.elevators.forEach((elevatorData, elevatorName) => {
             const elevatorElement = document.getElementById(`elevator-${elevatorName}`);
             if (elevatorElement) {
