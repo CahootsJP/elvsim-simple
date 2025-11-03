@@ -28,7 +28,13 @@
     
     /* Additional colors */
     --header-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --elevator-shaft-bg: #f1f5f9;
+    --elevator-shaft-bg: repeating-linear-gradient(
+        to top,
+        #cbd5e1 0%,      /* Darker stripe */
+        #cbd5e1 10%,     /* One floor height (10% of total) */
+        #e2e8f0 10%,     /* Lighter stripe */
+        #e2e8f0 20%      /* One floor height (10% of total) */
+    );
     --elevator-car-bg: #e2e8f0;
     --log-bg: #f8fafc;
     --log-border: #e5e7eb;
@@ -37,7 +43,7 @@
 /* Dark Mode */
 body.dark-mode {
     --primary-color: #3b82f6;
-    --secondary-color: #94a3b8;
+    --secondary-color: #475569;
     --success-color: #22c55e;
     --warning-color: #fbbf24;
     --danger-color: #f87171;
@@ -52,10 +58,30 @@ body.dark-mode {
     
     /* Additional dark mode colors */
     --header-bg: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%);
-    --elevator-shaft-bg: #0f172a;
-    --elevator-car-bg: #334155;
+    --elevator-shaft-bg: repeating-linear-gradient(
+        to top,
+        #374151 0%,      /* Medium gray (明るめ) */
+        #374151 10%,
+        #4b5563 10%,     /* Lighter gray */
+        #4b5563 20%
+    );
+    --elevator-car-bg: linear-gradient(135deg, #334155, #475569);
     --log-bg: #1e293b;
     --log-border: #334155;
+    
+    /* Passenger box colors (dark mode) */
+    --passenger-box-bg: rgba(45, 55, 72, 0.8);
+    --passenger-box-text: #e2e8f0;
+    --occupancy-low-bg: rgba(16, 185, 129, 0.15);
+    --occupancy-medium-bg: rgba(245, 158, 11, 0.15);
+    --occupancy-high-bg: rgba(239, 68, 68, 0.15);
+    
+    /* Control panel colors (dark mode) */
+    --control-panel-bg: rgba(30, 41, 59, 0.95);
+    --control-border: rgba(148, 163, 184, 0.2);
+    --control-btn-bg: rgba(51, 65, 85, 0.8);
+    --control-btn-hover: rgba(75, 85, 99, 0.9);
+    --slider-thumb-bg: #e2e8f0;
 }
 
 body {
@@ -458,14 +484,8 @@ section h2 {
 .elevator-shaft {
     width: 60px; /* Compact width for multi-elevator display */
     height: 150px; /* Default height, will be overridden by JavaScript */
-    /* Zebra stripe background for floor visibility */
-    background: repeating-linear-gradient(
-        to top,
-        #cbd5e1 0%,      /* Darker stripe */
-        #cbd5e1 10%,     /* One floor height (10% of total) */
-        #e2e8f0 10%,     /* Lighter stripe */
-        #e2e8f0 20%      /* One floor height (10% of total) */
-    );
+    /* Zebra stripe background for floor visibility (auto-switches with dark mode) */
+    background: var(--elevator-shaft-bg);
     border: 2px solid var(--border-color);
     border-radius: 8px;
     position: relative;
@@ -594,7 +614,7 @@ section h2 {
     width: 16px;
     height: 16px;
     font-size: 12px; /* Small size */
-    color: #9b59b6; /* Purple color */
+    color: #c084fc; /* Brighter purple (Purple-400) */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -604,7 +624,7 @@ section h2 {
     margin-bottom: -8px; /* Offset half the height to center vertically */
     margin-right: -8px; /* Offset half the width to center horizontally */
     opacity: 0.9;
-    text-shadow: 0 0 2px rgba(155, 89, 182, 0.5); /* Subtle glow */
+    text-shadow: 0 0 3px rgba(192, 132, 252, 0.6); /* Brighter glow */
     transition: all 0.2s ease; /* Smooth transition for hover */
 }
 
@@ -670,14 +690,26 @@ section h2 {
     border-color: var(--border-color); /* Keep gray border */
 }
 
+body.dark-mode .passenger-box.occupancy-low {
+    background-color: var(--occupancy-low-bg);
+}
+
 .passenger-box.occupancy-medium {
     background-color: #fffbeb; /* Light yellow */
     border-color: var(--border-color); /* Keep gray border */
 }
 
+body.dark-mode .passenger-box.occupancy-medium {
+    background-color: var(--occupancy-medium-bg);
+}
+
 .passenger-box.occupancy-high {
     background-color: #fef2f2; /* Light red */
     border-color: var(--border-color); /* Keep gray border */
+}
+
+body.dark-mode .passenger-box.occupancy-high {
+    background-color: var(--occupancy-high-bg);
 }
 
 .passenger-squares {
@@ -758,7 +790,7 @@ section h2 {
 .hall-shaft {
     width: 100px; /* Wider than regular elevator shaft for better visibility */
     height: 150px; /* Default height, will be overridden by JavaScript */
-    /* Zebra stripe background for floor visibility (same as elevator shaft) */
+    /* Zebra stripe background for floor visibility (light mode) */
     background: repeating-linear-gradient(
         to top,
         #e8eaed 0%,      /* Lighter darker stripe for hall */
@@ -770,6 +802,17 @@ section h2 {
     border-radius: 8px;
     position: relative;
     overflow: visible; /* Allow waiting passengers to be visible */
+}
+
+/* Dark mode: Slate-500 blue-gray for elevator hall */
+body.dark-mode .hall-shaft {
+    background: repeating-linear-gradient(
+        to top,
+        #5a6a7e 0%,      /* Darker blue-gray stripe */
+        #5a6a7e 10%,
+        #64748b 10%,     /* Lighter blue-gray stripe (Slate-500) */
+        #64748b 20%
+    );
 }
 
 .waiting-floor {
@@ -1000,12 +1043,19 @@ footer {
    ========================================== */
 
 .mode-selector-panel {
-    background: white;
+    background: var(--card-bg);
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-md);
     margin-bottom: 20px;
     grid-column: 1;
+    border: 1px solid var(--border-color);
+}
+
+body.dark-mode .mode-selector-panel {
+    background: var(--control-panel-bg);
+    border-color: var(--control-border);
+    backdrop-filter: blur(10px);
     grid-row: 1;
 }
 
@@ -1025,11 +1075,22 @@ footer {
     flex: 1;
     padding: 12px 20px;
     font-size: 1.1em;
-    border: 2px solid #ddd;
-    background: white;
+    border: 2px solid var(--border-color);
+    background: var(--card-bg);
+    color: var(--text-primary);
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.3s ease;
+}
+
+body.dark-mode .mode-btn {
+    background: var(--control-btn-bg);
+    border-color: var(--control-border);
+}
+
+body.dark-mode .mode-btn:hover {
+    background: var(--control-btn-hover);
+}
 }
 
 .mode-btn:hover {
@@ -1055,14 +1116,29 @@ footer {
     font-size: 1em;
     border: 2px solid #ddd;
     border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+}
+
+body.dark-mode .log-file-select {
+    background: var(--control-btn-bg);
+    border-color: var(--control-border);
+    color: var(--text-primary);
 }
 
 /* Playback Controls */
 .playback-controls-panel {
-    background: white;
+    background: var(--card-bg);
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-color);
+}
+
+body.dark-mode .playback-controls-panel {
+    background: var(--control-panel-bg);
+    border-color: var(--control-border);
+    backdrop-filter: blur(10px);
     margin-bottom: 20px;
     grid-column: 1;
     grid-row: 2;
@@ -1102,6 +1178,14 @@ footer {
     border-radius: 6px;
     cursor: pointer;
     margin-left: auto;
+    background: var(--card-bg);
+    color: var(--text-primary);
+}
+
+body.dark-mode .speed-select {
+    background: var(--control-btn-bg);
+    border-color: var(--control-border);
+    color: var(--text-primary);
 }
 
 .timeline-row {
@@ -1128,17 +1212,25 @@ footer {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: white;
-    border: 3px solid #667eea;
+    background: var(--card-bg);
+    border: 3px solid var(--primary-color);
     cursor: pointer;
+}
+
+body.dark-mode .timeline-slider::-webkit-slider-thumb {
+    background: var(--slider-thumb-bg);
 }
 
 .timeline-slider::-moz-range-thumb {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: white;
-    border: 3px solid #667eea;
+    background: var(--card-bg);
+    border: 3px solid var(--primary-color);
     cursor: pointer;
+}
+
+body.dark-mode .timeline-slider::-moz-range-thumb {
+    background: var(--slider-thumb-bg);
 }
 
