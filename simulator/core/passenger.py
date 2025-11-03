@@ -164,7 +164,9 @@ class Passenger(Entity):
                     'floor': self.arrival_floor,
                     'direction': direction,
                     'elevator_name': elevator_name,
-                    'timestamp': self.env.now
+                    'timestamp': self.env.now,
+                    'wait_time': self.get_waiting_time_to_door_open(),
+                    'wait_time_to_boarding': self.get_waiting_time_to_boarding()
                 })
                 
                 yield self.env.timeout(self.move_speed)
@@ -208,7 +210,10 @@ class Passenger(Entity):
             'timestamp': self.env.now,
             'passenger_name': self.name,
             'floor': self.destination_floor,
-            'elevator_name': getattr(self, 'boarded_elevator_name', None)
+            'elevator_name': getattr(self, 'boarded_elevator_name', None),
+            'riding_time': self.get_riding_time(),
+            'total_journey_time': self.get_total_journey_time(),
+            'wait_time': self.get_waiting_time_to_door_open()
         })
         
         print(f"{self.env.now:.2f} [{self.name}] Journey complete.")

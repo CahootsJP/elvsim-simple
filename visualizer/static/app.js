@@ -30,6 +30,7 @@ class ElevatorVisualizer {
             totalPassengers: 0,
             totalWaitTime: 0,
             maxWaitTime: 0,
+            boardingCount: 0,      // Count of passengers who boarded (for avg wait time)
             totalTrips: 0,
             totalOccupancy: 0,
             occupancyCount: 0
@@ -258,9 +259,8 @@ class ElevatorVisualizer {
         const { type, data } = message;
         
         // Update metrics for all relevant messages
-        if (data) {
-            this.updateMetrics(data);
-        }
+        // Pass the entire message (not just data) so updateMetrics can access message.type
+        this.updateMetrics(message);
         
         switch (type) {
             case 'elevator_update':
@@ -277,6 +277,36 @@ class ElevatorVisualizer {
                 
             case 'waiting_passengers_update':
                 this.updateWaitingPassengers(data);
+                break;
+                
+            case 'passenger_waiting':
+                // Handle passenger waiting event for visualization
+                // Update waiting passengers count
+                const waitFloor = data.floor;
+                const waitDirection = data.direction;
+                
+                if (!this.waitingPassengers[waitFloor]) {
+                    this.waitingPassengers[waitFloor] = { UP: 0, DOWN: 0 };
+                }
+                this.waitingPassengers[waitFloor][waitDirection]++;
+                
+                // Trigger visualization update
+                this.updateWaitingPassengers(this.waitingPassengers);
+                break;
+                
+            case 'passenger_boarding':
+                // Handle passenger boarding event for visualization
+                // Decrement waiting passengers count
+                const boardFloor = data.floor;
+                const boardDirection = data.direction;
+                
+                if (this.waitingPassengers[boardFloor] && 
+                    this.waitingPassengers[boardFloor][boardDirection] > 0) {
+                    this.waitingPassengers[boardFloor][boardDirection]--;
+                }
+                
+                // Trigger visualization update
+                this.updateWaitingPassengers(this.waitingPassengers);
                 break;
                 
             case 'calls_update':
@@ -1196,9 +1226,10 @@ class ElevatorVisualizer {
                 }
                 this.waitingPassengers[waitFloor][waitDirection]++;
                 
+                // Return event message for metrics (keeping original event structure)
                 return {
-                    type: 'waiting_passengers_update',
-                    data: this.waitingPassengers
+                    type: 'passenger_waiting',
+                    data: event.data
                 };
             
             case 'passenger_boarding':
@@ -1211,9 +1242,10 @@ class ElevatorVisualizer {
                     this.waitingPassengers[boardFloor][boardDirection]--;
                 }
                 
+                // Return event message for metrics (keeping original event structure)
                 return {
-                    type: 'waiting_passengers_update',
-                    data: this.waitingPassengers
+                    type: 'passenger_boarding',
+                    data: event.data
                 };
             
             default:
@@ -1368,27 +1400,43 @@ class ElevatorVisualizer {
     // ==========================================
     
     updateMetrics(message) {
-        const eventType = message.event_type;
+        // Note: message structure from _add_event_log has fields nested in 'data'
+        // Message structure: { time: X, type: 'event_type', data: {...} }
+        const eventType = message.type || message.event_type;  // Support both formats
+        const eventData = message.data || message;  // Data might be nested or flat
         
-        if (eventType === 'passenger_arrival') {
-            // Track passenger generation
+        // Track total passengers from passenger_waiting events
+        if (eventType === 'passenger_waiting') {
+            console.log('[Metrics] passenger_waiting event received:', message);
             this.metrics.totalPassengers++;
         }
         
+        // Track wait time from passenger_boarding events
         if (eventType === 'passenger_boarding') {
-            // Track wait time
-            const waitTime = message.wait_time || 0;
+            console.log('[Metrics] passenger_boarding event received:', message);
+            const waitTime = eventData.wait_time || 0;
+            console.log('[Metrics] Wait time:', waitTime);
             this.metrics.totalWaitTime += waitTime;
             this.metrics.maxWaitTime = Math.max(this.metrics.maxWaitTime, waitTime);
+            this.metrics.boardingCount++;  // Count passengers who boarded
         }
         
+        // Track occupancy from elevator_status events
         if (eventType === 'elevator_status') {
-            // Track occupancy
-            const passengers = message.passengers || 0;
-            const capacity = message.capacity || 10;
+            const passengers = eventData.passengers || 0;
+            const capacity = eventData.capacity || 10;
             const occupancy = (passengers / capacity) * 100;
             this.metrics.totalOccupancy += occupancy;
             this.metrics.occupancyCount++;
+        }
+        
+        // Track journey metrics from passenger_alighting events
+        if (eventType === 'passenger_alighting') {
+            // Optional: Track riding time, total journey time, etc.
+            // Can be used for future metrics
+            const ridingTime = eventData.riding_time || 0;
+            const totalJourneyTime = eventData.total_journey_time || 0;
+            // Store for future use if needed
         }
         
         // Update UI
@@ -1400,9 +1448,9 @@ class ElevatorVisualizer {
         document.getElementById('metric-total-passengers').textContent = 
             this.metrics.totalPassengers;
         
-        // Average wait time
-        const avgWaitTime = this.metrics.totalPassengers > 0 
-            ? (this.metrics.totalWaitTime / this.metrics.totalPassengers).toFixed(1)
+        // Average wait time (use boardingCount instead of totalPassengers)
+        const avgWaitTime = this.metrics.boardingCount > 0 
+            ? (this.metrics.totalWaitTime / this.metrics.boardingCount).toFixed(1)
             : '0.0';
         document.getElementById('metric-avg-wait-time').textContent = 
             `${avgWaitTime}s`;
@@ -1428,6 +1476,7 @@ class ElevatorVisualizer {
             totalPassengers: 0,
             totalWaitTime: 0,
             maxWaitTime: 0,
+            boardingCount: 0,
             totalTrips: 0,
             totalOccupancy: 0,
             occupancyCount: 0

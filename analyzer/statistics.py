@@ -385,18 +385,23 @@ class Statistics:
                 direction = message.get('direction')
                 passenger_name = message.get('passenger_name')
                 elevator_name = message.get('elevator_name')
+                wait_time = message.get('wait_time')
+                wait_time_to_boarding = message.get('wait_time_to_boarding')
                 
                 if floor is not None and direction is not None:
                     # Remove one waiting passenger when someone boards
                     self._update_waiting_passengers(floor, direction, -1)
-                    print(f"[Statistics] {passenger_name} boarded at floor {floor} ({direction}). Waiting passengers decreased.")
+                    wait_time_str = f"{wait_time:.2f}s" if wait_time is not None else "N/A"
+                    print(f"[Statistics] {passenger_name} boarded at floor {floor} ({direction}). Wait time: {wait_time_str}. Waiting passengers decreased.")
                     
-                    # Log event for JSON Lines
+                    # Log event for JSON Lines (include wait_time for metrics)
                     self._add_event_log('passenger_boarding', {
                         'passenger': passenger_name,
                         'floor': floor,
                         'direction': direction,
-                        'elevator': elevator_name
+                        'elevator': elevator_name,
+                        'wait_time': wait_time,
+                        'wait_time_to_boarding': wait_time_to_boarding
                     })
             
             # Record door events (for visualization)
@@ -443,13 +448,19 @@ class Statistics:
                 passenger_name = message.get('passenger_name')
                 floor = message.get('floor')
                 elevator_name = message.get('elevator_name')
+                riding_time = message.get('riding_time')
+                total_journey_time = message.get('total_journey_time')
+                wait_time = message.get('wait_time')
                 
-                # Log event for JSON Lines
+                # Log event for JSON Lines (include metrics)
                 if passenger_name and floor and elevator_name:
                     self._add_event_log('passenger_alighting', {
                         'passenger': passenger_name,
                         'floor': floor,
-                        'elevator': elevator_name
+                        'elevator': elevator_name,
+                        'riding_time': riding_time,
+                        'total_journey_time': total_journey_time,
+                        'wait_time': wait_time
                     })
 
     def _get_elevator_color(self, elevator_name):
