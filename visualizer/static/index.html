@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VTS Control Suite - Real-time Visualization</title>
-    <link rel="stylesheet" href="style.css?v=38">
+    <link rel="stylesheet" href="style.css?v=39">
 </head>
 <body>
     <div class="container">
@@ -25,80 +25,144 @@
             </div>
         </header>
 
-        <main>
-            <!-- Mode Selector -->
-            <section class="mode-selector-panel">
-                <h2>Mode</h2>
-                <div class="mode-buttons">
-                    <button id="mode-live" class="mode-btn active" data-mode="live">
-                        🔴 Live
-                    </button>
-                    <button id="mode-replay" class="mode-btn" data-mode="replay">
-                        📁 Replay
-                    </button>
-                </div>
-                <div id="file-selector" class="file-selector" style="display: none;">
-                    <select id="log-file-select" class="log-file-select">
-                        <option value="">-- Select Log File --</option>
-                    </select>
-                    <button id="btn-load-file" class="btn btn-primary">Load</button>
-                </div>
-            </section>
+        <!-- Horizontal Tab Navigation -->
+        <nav class="tab-navigation">
+            <button class="tab-nav-btn active" data-tab="operation">Operation</button>
+            <button class="tab-nav-btn" data-tab="metrics">Simulation Metrics</button>
+            <button class="tab-nav-btn" data-tab="performance">Performance Monitor</button>
+            <button class="tab-nav-btn" data-tab="log">Event Log</button>
+        </nav>
 
-            <!-- Playback Controls (Replay mode only) - Placed right after Mode for easy access -->
-            <section id="playback-controls" class="playback-controls-panel" style="display: none;">
-                <h2>Playback Controls</h2>
-                <div class="controls-row">
-                    <button id="btn-play-pause" class="btn btn-primary">▶ Play</button>
-                    <button id="btn-restart" class="btn btn-secondary">↻ Restart</button>
-                    <div class="time-display">
-                        <span id="current-time">0:00</span>
-                        <span class="time-separator">/</span>
-                        <span id="total-time">0:00</span>
+        <!-- Tab Contents -->
+        <main class="tab-container">
+            <!-- Tab 1: Operation -->
+            <div id="tab-operation" class="tab-pane active">
+                <div class="operation-layout">
+                    <!-- Left Column: Controls -->
+                    <div class="operation-left">
+                        <!-- Mode Selector -->
+                        <section class="mode-selector-panel">
+                            <h2>Mode</h2>
+                            <div class="mode-buttons">
+                                <button id="mode-live" class="mode-btn active" data-mode="live">
+                                    🔴 Live
+                                </button>
+                                <button id="mode-replay" class="mode-btn" data-mode="replay">
+                                    📁 Replay
+                                </button>
+                            </div>
+                            <div id="file-selector" class="file-selector" style="display: none;">
+                                <select id="log-file-select" class="log-file-select">
+                                    <option value="">-- Select Log File --</option>
+                                </select>
+                                <button id="btn-load-file" class="btn btn-primary">Load</button>
+                            </div>
+                        </section>
+
+                        <!-- Playback Controls (Replay mode only) -->
+                        <section id="playback-controls" class="playback-controls-panel" style="display: none;">
+                            <h2>Playback Controls</h2>
+                            <div class="controls-row">
+                                <button id="btn-play-pause" class="btn btn-primary">▶ Play</button>
+                                <button id="btn-restart" class="btn btn-secondary">↻ Restart</button>
+                                <div class="time-display">
+                                    <span id="current-time">0:00</span>
+                                    <span class="time-separator">/</span>
+                                    <span id="total-time">0:00</span>
+                                </div>
+                                <select id="speed-select" class="speed-select">
+                                    <option value="0.25">0.25x</option>
+                                    <option value="0.5">0.5x</option>
+                                    <option value="1" selected>1x</option>
+                                    <option value="2">2x</option>
+                                    <option value="5">5x</option>
+                                    <option value="10">10x</option>
+                                </select>
+                            </div>
+                            <div class="timeline-row">
+                                <input type="range" id="timeline-slider" class="timeline-slider" 
+                                       min="0" max="100" value="0" step="0.1">
+                            </div>
+                        </section>
                     </div>
-                    <select id="speed-select" class="speed-select">
-                        <option value="0.25">0.25x</option>
-                        <option value="0.5">0.5x</option>
-                        <option value="1" selected>1x</option>
-                        <option value="2">2x</option>
-                        <option value="5">5x</option>
-                        <option value="10">10x</option>
-                    </select>
-                </div>
-                <div class="timeline-row">
-                    <input type="range" id="timeline-slider" class="timeline-slider" 
-                           min="0" max="100" value="0" step="0.1">
-                </div>
-            </section>
 
-            <!-- Visualization Area -->
-            <section class="visualization">
-                <div class="visualization-header">
-                    <h2>Elevator Status</h2>
-                    <div class="simulation-time">
-                        <label>Simulation Time:</label>
-                        <span id="sim-time">0.00s</span>
+                    <!-- Right Column: Elevator Visualization -->
+                    <div class="operation-right">
+                        <section class="visualization">
+                            <div class="visualization-header">
+                                <h2>Elevator Status</h2>
+                                <div class="simulation-time">
+                                    <label>Simulation Time:</label>
+                                    <span id="sim-time">0.00s</span>
+                                </div>
+                            </div>
+                            <div id="elevator-container" class="elevator-container">
+                                <!-- Elevators will be dynamically created here -->
+                            </div>
+                        </section>
                     </div>
                 </div>
-                <div id="elevator-container" class="elevator-container">
-                    <!-- Elevators will be dynamically created here -->
-                </div>
-            </section>
+            </div>
 
-            <!-- Event Log -->
-            <section class="event-log">
-                <h2>Event Log</h2>
-                <div class="log-controls">
-                    <button id="btn-clear-log" class="btn btn-secondary btn-small">Clear Log</button>
-                    <label>
-                        <input type="checkbox" id="chk-auto-scroll" checked>
-                        Auto-scroll
-                    </label>
-                </div>
-                <div id="log-container" class="log-container">
-                    <!-- Event logs will appear here -->
-                </div>
-            </section>
+            <!-- Tab 2: Simulation Metrics -->
+            <div id="tab-metrics" class="tab-pane">
+                <section class="metrics-section">
+                    <h2>Simulation Metrics</h2>
+                    <div class="metrics-container">
+                        <div class="metric-card">
+                            <h3>Passenger Statistics</h3>
+                            <div class="metric-item">
+                                <span class="metric-label">Total Passengers:</span>
+                                <span id="metric-total-passengers" class="metric-value">0</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Avg Wait Time:</span>
+                                <span id="metric-avg-wait-time" class="metric-value">0.0s</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Max Wait Time:</span>
+                                <span id="metric-max-wait-time" class="metric-value">0.0s</span>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3>Elevator Operations</h3>
+                            <div class="metric-item">
+                                <span class="metric-label">Total Trips:</span>
+                                <span id="metric-total-trips" class="metric-value">0</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Avg Occupancy:</span>
+                                <span id="metric-avg-occupancy" class="metric-value">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Tab 3: Performance Monitor -->
+            <div id="tab-performance" class="tab-pane">
+                <section class="performance-section">
+                    <h2>Performance Monitor</h2>
+                    <p style="color: var(--text-secondary); font-style: italic; padding: 20px;">Coming soon: Real-world compatible performance metrics</p>
+                </section>
+            </div>
+
+            <!-- Tab 4: Event Log -->
+            <div id="tab-log" class="tab-pane">
+                <section class="log-section">
+                    <h2>Event Log</h2>
+                    <div class="log-controls">
+                        <button id="btn-clear-log" class="btn btn-secondary btn-small">Clear Log</button>
+                        <label>
+                            <input type="checkbox" id="chk-auto-scroll" checked>
+                            Auto-scroll
+                        </label>
+                    </div>
+                    <div id="log-container" class="log-container">
+                        <!-- Event logs will appear here -->
+                    </div>
+                </section>
+            </div>
         </main>
 
         <footer>
@@ -107,7 +171,6 @@
     </div>
 
     <script src="eventSource.js?v=2"></script>
-    <script src="app.js?v=45"></script>
+    <script src="app.js?v=46"></script>
 </body>
 </html>
-

@@ -25,10 +25,21 @@ class ElevatorVisualizer {
             carCalls: {}    // {elevatorName: Set()}
         };
         
+        // Metrics tracking
+        this.metrics = {
+            totalPassengers: 0,
+            totalWaitTime: 0,
+            maxWaitTime: 0,
+            totalTrips: 0,
+            totalOccupancy: 0,
+            occupancyCount: 0
+        };
+        
         this.initializeUI();
         this.initializeModeSelector();
         this.initializePlaybackControls();
         this.initializeDarkMode();
+        this.initializeTabs();
         
         // Start in live mode
         this.switchToLiveMode();
@@ -131,7 +142,7 @@ class ElevatorVisualizer {
         }
         
         // Set height to match elevator shafts (exact same calculation)
-        const carHeight = 30; // px (must match CSS .elevator-car height)
+        const carHeight = 25; // px (must match CSS .elevator-car height)
         const shaftHeight = carHeight * (numFloors + 1);
         hallShaft.style.height = `${shaftHeight}px`;
         floorLabelsContainer.style.height = `${shaftHeight}px`;
@@ -221,6 +232,9 @@ class ElevatorVisualizer {
         // Clear waiting passengers
         this.waitingPassengers = {};
         
+        // Clear metrics
+        this.resetMetrics();
+        
         // Clear DOM: elevator container
         this.elevatorContainer.innerHTML = '';
         
@@ -242,6 +256,11 @@ class ElevatorVisualizer {
     
     handleMessage(message) {
         const { type, data } = message;
+        
+        // Update metrics for all relevant messages
+        if (data) {
+            this.updateMetrics(data);
+        }
         
         switch (type) {
             case 'elevator_update':
@@ -391,7 +410,7 @@ class ElevatorVisualizer {
         const elevatorShaft = element.querySelector('.elevator-shaft');
         const floorLabelsContainer = element.querySelector('.floor-labels');
         const shaftContainer = element.querySelector('.elevator-shaft-container');
-        const carHeight = 30; // px (must match CSS .elevator-car height)
+        const carHeight = 25; // px (must match CSS .elevator-car height)
         
         if (num_floors) {
             // Set shaft height: car height × (num_floors + 1) to ensure car is always visible
@@ -1308,6 +1327,112 @@ class ElevatorVisualizer {
         
         // Re-initialize placeholder elevators (for live mode)
         this.initializePlaceholderElevators();
+    }
+    
+    // ==========================================
+    // Tab Management
+    // ==========================================
+    
+    initializeTabs() {
+        const tabButtons = document.querySelectorAll('.tab-nav-btn');
+        
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const targetTab = button.getAttribute('data-tab');
+                this.switchTab(targetTab);
+            });
+        });
+    }
+    
+    switchTab(tabName) {
+        // Remove active class from all buttons and panes
+        document.querySelectorAll('.tab-nav-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-pane').forEach(pane => {
+            pane.classList.remove('active');
+        });
+        
+        // Add active class to selected button and pane
+        const selectedButton = document.querySelector(`.tab-nav-btn[data-tab="${tabName}"]`);
+        const selectedPane = document.getElementById(`tab-${tabName}`);
+        
+        if (selectedButton && selectedPane) {
+            selectedButton.classList.add('active');
+            selectedPane.classList.add('active');
+        }
+    }
+    
+    // ==========================================
+    // Metrics Management
+    // ==========================================
+    
+    updateMetrics(message) {
+        const eventType = message.event_type;
+        
+        if (eventType === 'passenger_arrival') {
+            // Track passenger generation
+            this.metrics.totalPassengers++;
+        }
+        
+        if (eventType === 'passenger_boarding') {
+            // Track wait time
+            const waitTime = message.wait_time || 0;
+            this.metrics.totalWaitTime += waitTime;
+            this.metrics.maxWaitTime = Math.max(this.metrics.maxWaitTime, waitTime);
+        }
+        
+        if (eventType === 'elevator_status') {
+            // Track occupancy
+            const passengers = message.passengers || 0;
+            const capacity = message.capacity || 10;
+            const occupancy = (passengers / capacity) * 100;
+            this.metrics.totalOccupancy += occupancy;
+            this.metrics.occupancyCount++;
+        }
+        
+        // Update UI
+        this.refreshMetricsUI();
+    }
+    
+    refreshMetricsUI() {
+        // Total passengers
+        document.getElementById('metric-total-passengers').textContent = 
+            this.metrics.totalPassengers;
+        
+        // Average wait time
+        const avgWaitTime = this.metrics.totalPassengers > 0 
+            ? (this.metrics.totalWaitTime / this.metrics.totalPassengers).toFixed(1)
+            : '0.0';
+        document.getElementById('metric-avg-wait-time').textContent = 
+            `${avgWaitTime}s`;
+        
+        // Max wait time
+        document.getElementById('metric-max-wait-time').textContent = 
+            `${this.metrics.maxWaitTime.toFixed(1)}s`;
+        
+        // Average occupancy
+        const avgOccupancy = this.metrics.occupancyCount > 0
+            ? (this.metrics.totalOccupancy / this.metrics.occupancyCount).toFixed(1)
+            : '0.0';
+        document.getElementById('metric-avg-occupancy').textContent = 
+            `${avgOccupancy}%`;
+        
+        // Total trips (placeholder)
+        document.getElementById('metric-total-trips').textContent = 
+            this.metrics.totalTrips;
+    }
+    
+    resetMetrics() {
+        this.metrics = {
+            totalPassengers: 0,
+            totalWaitTime: 0,
+            maxWaitTime: 0,
+            totalTrips: 0,
+            totalOccupancy: 0,
+            occupancyCount: 0
+        };
+        this.refreshMetricsUI();
     }
 }
 
