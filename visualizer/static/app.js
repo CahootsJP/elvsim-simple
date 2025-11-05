@@ -105,21 +105,11 @@ class ElevatorVisualizer {
         // Clear existing labels
         sharedFloorLabels.innerHTML = '';
         
-        // Calculate shaft height
-        const carHeight = 25; // px
-        const shaftHeight = carHeight * (numFloors + 1);
-        sharedFloorLabels.style.height = `${shaftHeight}px`;
-        
-        // Create floor labels with absolute positioning to match elevator floors
-        for (let f = 1; f <= numFloors; f++) {
+        // Create floor labels using Flexbox (from top to bottom: 10F -> 1F)
+        for (let f = numFloors; f >= 1; f--) {
             const label = document.createElement('div');
             label.className = 'shared-floor-label';
             label.textContent = `${f}F`;
-            
-            // Position each label at the bottom of its floor (same as elevator car positioning)
-            const bottomPercent = ((f - 1) / numFloors) * 100;
-            label.style.bottom = `${bottomPercent}%`;
-            
             sharedFloorLabels.appendChild(label);
         }
     }
@@ -159,19 +149,51 @@ class ElevatorVisualizer {
             `;
         }
         
-        // Create shaft
-        const shaft = document.createElement('div');
-        shaft.className = 'elevator-shaft';
-        shaft.id = `shaft-${elevatorName}`;
+        // Create shaft wrapper with new Flexbox structure
+        const shaftWrapper = document.createElement('div');
+        shaftWrapper.className = 'elevator-shaft-wrapper';
+        shaftWrapper.id = `shaft-${elevatorName}`;
         
-        // Calculate shaft height
-        const carHeight = 25; // px
         const numFloors = data.num_floors || 10;
-        const shaftHeight = carHeight * (numFloors + 1);
-        shaft.style.height = `${shaftHeight}px`;
         
-        // Create elevator car (if not Hall)
+        // Create floors container (Flexbox)
+        const floorsContainer = document.createElement('div');
+        floorsContainer.className = 'elevator-floors';
+        
+        // Create floor elements (from top to bottom: 10F -> 1F)
+        for (let floor = numFloors; floor >= 1; floor--) {
+            const floorDiv = document.createElement('div');
+            floorDiv.className = 'floor';
+            floorDiv.setAttribute('data-floor', floor);
+            
+            // Left side: Hall calls (▲▼)
+            const leftIcons = document.createElement('div');
+            leftIcons.className = 'floor-icons-left';
+            leftIcons.id = `floor-icons-left-${elevatorName}-${floor}`;
+            
+            // Center: Waiting passengers (for Hall only)
+            const centerIcons = document.createElement('div');
+            centerIcons.className = 'floor-icons-center';
+            centerIcons.id = `floor-icons-center-${elevatorName}-${floor}`;
+            
+            // Right side: Car calls (●)
+            const rightIcons = document.createElement('div');
+            rightIcons.className = 'floor-icons-right';
+            rightIcons.id = `floor-icons-right-${elevatorName}-${floor}`;
+            
+            floorDiv.appendChild(leftIcons);
+            floorDiv.appendChild(centerIcons);
+            floorDiv.appendChild(rightIcons);
+            floorsContainer.appendChild(floorDiv);
+        }
+        
+        shaftWrapper.appendChild(floorsContainer);
+        
+        // Create elevator car layer (if not Hall)
         if (elevatorName !== 'Hall') {
+            const carLayer = document.createElement('div');
+            carLayer.className = 'elevator-car-layer';
+            
             const car = document.createElement('div');
             car.className = 'elevator-car door-closed';
             car.id = `car-${elevatorName}`;
@@ -179,11 +201,13 @@ class ElevatorVisualizer {
                 <div class="door door-left"></div>
                 <div class="door door-right"></div>
             `;
-            shaft.appendChild(car);
             
             // Position car at initial floor
             const floorPosition = ((data.floor - 1) / numFloors) * 100;
             car.style.bottom = `${floorPosition}%`;
+            
+            carLayer.appendChild(car);
+            shaftWrapper.appendChild(carLayer);
         }
         
         // Add passenger capacity display (if not Hall)
@@ -206,7 +230,7 @@ class ElevatorVisualizer {
         
         // Append elements
         column.appendChild(header);
-        column.appendChild(shaft);
+        column.appendChild(shaftWrapper);
         if (elevatorName !== 'Hall') {
             const capacityDisplay = column.querySelector('.capacity-display');
             if (capacityDisplay) {
@@ -578,57 +602,54 @@ class ElevatorVisualizer {
     }
     
     updateCallIndicators(elevatorName, data) {
-        const shaft = document.getElementById(`shaft-${elevatorName}`);
-        if (!shaft) return;
-        
-        // Remove existing call indicators
-        shaft.querySelectorAll('.call-indicator').forEach(el => el.remove());
-        
         const numFloors = data.num_floors || this.numFloors || 10;
         
-        // Add car call indicators
-        if (data.car_calls && data.car_calls.length > 0) {
-            data.car_calls.forEach(floor => {
-                const indicator = document.createElement('div');
-                indicator.className = 'call-indicator car-call-indicator';
-                indicator.textContent = '●';
-                indicator.title = `Car call: ${floor}F`;
-                const bottomPercent = ((floor - 1) / numFloors) * 100;
-                indicator.style.bottom = `${bottomPercent}%`;
-                indicator.style.right = '5px';
-                shaft.appendChild(indicator);
-            });
+        // Clear all floor icons first
+        for (let floor = 1; floor <= numFloors; floor++) {
+            const leftContainer = document.getElementById(`floor-icons-left-${elevatorName}-${floor}`);
+            const rightContainer = document.getElementById(`floor-icons-right-${elevatorName}-${floor}`);
+            if (leftContainer) leftContainer.innerHTML = '';
+            if (rightContainer) rightContainer.innerHTML = '';
         }
         
-        // Add hall call UP indicators
+        // Add hall call indicators (LEFT side, vertical: ▲ on top, ▼ on bottom)
         if (data.hall_calls_up && data.hall_calls_up.length > 0) {
             data.hall_calls_up.forEach(floor => {
-                const indicator = document.createElement('div');
-                indicator.className = 'call-indicator hall-call-up-indicator';
-                indicator.textContent = '▲';
-                indicator.title = `Hall call UP: ${floor}F`;
-                // Position in lower half of floor cell
-                const floorHeight = 100 / numFloors;
-                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.38);
-                indicator.style.bottom = `${bottomPercent}%`;
-                indicator.style.left = '5px';
-                shaft.appendChild(indicator);
+                const leftContainer = document.getElementById(`floor-icons-left-${elevatorName}-${floor}`);
+                if (leftContainer) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'call-indicator hall-call-up-indicator';
+                    indicator.textContent = '▲';
+                    indicator.title = `Hall call UP: ${floor}F`;
+                    leftContainer.appendChild(indicator);
+                }
             });
         }
         
-        // Add hall call DOWN indicators
         if (data.hall_calls_down && data.hall_calls_down.length > 0) {
             data.hall_calls_down.forEach(floor => {
-                const indicator = document.createElement('div');
-                indicator.className = 'call-indicator hall-call-down-indicator';
-                indicator.textContent = '▼';
-                indicator.title = `Hall call DOWN: ${floor}F`;
-                // Position in lower half of floor cell, near bottom
-                const floorHeight = 100 / numFloors;
-                const bottomPercent = ((floor - 1) / numFloors) * 100 + (floorHeight * 0.02);
-                indicator.style.bottom = `${bottomPercent}%`;
-                indicator.style.left = '5px';
-                shaft.appendChild(indicator);
+                const leftContainer = document.getElementById(`floor-icons-left-${elevatorName}-${floor}`);
+                if (leftContainer) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'call-indicator hall-call-down-indicator';
+                    indicator.textContent = '▼';
+                    indicator.title = `Hall call DOWN: ${floor}F`;
+                    leftContainer.appendChild(indicator);
+                }
+            });
+        }
+        
+        // Add car call indicators (RIGHT side)
+        if (data.car_calls && data.car_calls.length > 0) {
+            data.car_calls.forEach(floor => {
+                const rightContainer = document.getElementById(`floor-icons-right-${elevatorName}-${floor}`);
+                if (rightContainer) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'call-indicator car-call-indicator';
+                    indicator.textContent = '●';
+                    indicator.title = `Car call: ${floor}F`;
+                    rightContainer.appendChild(indicator);
+                }
             });
         }
     }
@@ -890,49 +911,39 @@ class ElevatorVisualizer {
         console.log('[DEBUG] updateWaitingPassengers called with data:', JSON.stringify(waitingData));
         this.waitingPassengers = waitingData;
         
-        // Update Hall shaft with waiting passengers
-        const hallShaft = document.getElementById('shaft-Hall');
-        if (hallShaft) {
-            // Remove existing waiting passenger indicators
-            hallShaft.querySelectorAll('.waiting-passenger-indicator').forEach(el => el.remove());
-            
-            const numFloors = this.numFloors || 10;
-            
-            // Add waiting passenger indicators
-            for (const [floor, directions] of Object.entries(waitingData)) {
-                const floorNum = parseInt(floor);
-                const bottomPercent = ((floorNum - 1) / numFloors) * 100;
-                
-                if (directions.UP > 0) {
-                    const indicator = document.createElement('div');
-                    indicator.className = 'waiting-passenger-indicator waiting-up';
-                    indicator.textContent = `${directions.UP}👤▲`;
-                    indicator.title = `${directions.UP} passengers waiting for UP`;
-                    indicator.style.bottom = `${bottomPercent}%`;
-                    indicator.style.left = '10px';
-                    hallShaft.appendChild(indicator);
-                }
-                
-                if (directions.DOWN > 0) {
-                    const indicator = document.createElement('div');
-                    indicator.className = 'waiting-passenger-indicator waiting-down';
-                    indicator.textContent = `${directions.DOWN}👤▼`;
-                    indicator.title = `${directions.DOWN} passengers waiting for DOWN`;
-                    indicator.style.bottom = `${bottomPercent}%`;
-                    indicator.style.right = '10px';
-                    hallShaft.appendChild(indicator);
-                }
+        const numFloors = this.numFloors || 10;
+        
+        // Clear all Hall floor center icons first
+        for (let floor = 1; floor <= numFloors; floor++) {
+            const centerContainer = document.getElementById(`floor-icons-center-Hall-${floor}`);
+            if (centerContainer) {
+                centerContainer.innerHTML = '';
             }
         }
         
-        // Clear waiting areas from all elevator displays (kept for compatibility)
-        this.elevators.forEach((elevatorData, elevatorName) => {
-            const elevatorElement = document.getElementById(`elevator-${elevatorName}`);
-            if (elevatorElement) {
-                const numFloors = elevatorData.num_floors;
-                this.renderWaitingPassengers(elevatorElement, numFloors);
+        // Add waiting passenger indicators to Hall floor center icons (vertical layout)
+        for (const [floor, directions] of Object.entries(waitingData)) {
+            const floorNum = parseInt(floor);
+            const centerContainer = document.getElementById(`floor-icons-center-Hall-${floorNum}`);
+            
+            if (centerContainer) {
+                if (directions.UP > 0) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'waiting-passenger-indicator waiting-up';
+                    indicator.textContent = `${directions.UP}👤▲`;
+                    indicator.title = `${directions.UP} passengers waiting for UP`;
+                    centerContainer.appendChild(indicator);
+                }
+                
+                if (directions.DOWN > 0) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'waiting-passenger-indicator waiting-down';
+                    indicator.textContent = `${directions.DOWN}👤▼`;
+                    indicator.title = `${directions.DOWN} passengers waiting for DOWN`;
+                    centerContainer.appendChild(indicator);
+                }
             }
-        });
+        }
     }
     
     renderWaitingPassengers(elevatorElement, numFloors) {
@@ -1774,4 +1785,5 @@ class ElevatorVisualizer {
 document.addEventListener('DOMContentLoaded', () => {
     window.elevatorViz = new ElevatorVisualizer();
 });
+
 

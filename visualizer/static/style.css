@@ -366,7 +366,8 @@ section h2 {
 }
 
 .shared-floor-labels {
-    position: relative; /* For absolute positioning of labels */
+    display: flex;
+    flex-direction: column;
     left: 0;
     z-index: 10;
     background: linear-gradient(90deg, var(--card-bg) 0%, var(--card-bg) 85%, transparent 100%);
@@ -376,7 +377,8 @@ section h2 {
 }
 
 .shared-floor-label {
-    position: absolute; /* Absolute positioning to match elevator floors */
+    flex: 1 1 0; /* Equal height for all labels - same as .floor */
+    min-height: 25px; /* Match floor height */
     font-size: 11px;
     font-weight: 700;
     color: var(--text-secondary);
@@ -387,9 +389,7 @@ section h2 {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    height: 25px; /* Match elevator car height */
     width: 100%;
-    left: 0;
     transition: all 0.2s ease;
 }
 
@@ -616,18 +616,140 @@ section h2 {
     box-shadow: var(--shadow-sm);
 }
 
-/* Call Indicators (for new grid layout) */
-.call-indicator {
+/* ====================================
+   NEW FLEXBOX SHAFT STRUCTURE
+   ==================================== */
+
+.elevator-shaft-wrapper {
+    width: 90px; /* Fixed width - same as column max-width */
+    min-width: 90px;
+    max-width: 90px;
+    position: relative;
+    border: 2px solid var(--border-color);
+    border-radius: 0 0 8px 8px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.elevator-floors {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+}
+
+.floor {
+    flex: 1 1 0; /* Equal height for all floors */
+    min-height: 25px; /* Match car height */
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Left, center, and right sides */
+    padding: 0 3px; /* Smaller horizontal padding */
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Zebra stripe background for floors */
+.floor:nth-child(odd) {
+    background-color: #e2e8f0; /* Light mode - lighter stripe */
+}
+
+.floor:nth-child(even) {
+    background-color: #cbd5e1; /* Light mode - darker stripe */
+}
+
+body.dark-mode .floor:nth-child(odd) {
+    background-color: #4b5563; /* Dark mode - lighter stripe */
+}
+
+body.dark-mode .floor:nth-child(even) {
+    background-color: #374151; /* Dark mode - darker stripe */
+}
+
+.floor:last-child {
+    border-bottom: none;
+}
+
+/* Left side: Hall calls (vertical layout ▲ on top, ▼ below) */
+.floor-icons-left {
+    display: flex;
+    flex-direction: column; /* Vertical layout */
+    gap: 1px;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    min-width: 12px; /* Smaller reserve space */
+    flex-shrink: 0;
+}
+
+/* Center: Waiting passengers (for Hall only) */
+.floor-icons-center {
+    display: flex;
+    flex-direction: row; /* Horizontal layout - side by side */
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    flex: 0 1 auto; /* Can shrink if needed */
+    min-width: 0; /* Allow shrinking */
+    overflow: hidden; /* Hide overflow if too wide */
+}
+
+/* Right side: Car calls (horizontal layout) */
+.floor-icons-right {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    min-width: 12px; /* Smaller reserve space */
+    flex-shrink: 0;
+}
+
+/* Elevator car layer (absolute positioning for animation) */
+.elevator-car-layer {
     position: absolute;
-    font-size: 10px;
-    z-index: 5;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
+    z-index: 10;
+}
+
+/* Hall shaft specific (no car layer needed) */
+.elevator-column[data-elevator="Hall"] .elevator-floors {
+    /* Slate-500 blue-gray colors for Hall */
+}
+
+.elevator-column[data-elevator="Hall"] .floor:nth-child(odd) {
+    background-color: #f3f4f6;
+}
+
+.elevator-column[data-elevator="Hall"] .floor:nth-child(even) {
+    background-color: #e8eaed;
+}
+
+body.dark-mode .elevator-column[data-elevator="Hall"] .floor:nth-child(odd) {
+    background-color: #64748b;
+}
+
+body.dark-mode .elevator-column[data-elevator="Hall"] .floor:nth-child(even) {
+    background-color: #5a6a7e;
+}
+
+/* Call Indicators (for new Flexbox structure) */
+.call-indicator {
+    font-size: 11px;
+    pointer-events: auto;
+    display: inline-block;
+    line-height: 1;
 }
 
 .car-call-indicator {
     color: #c084fc; /* Brighter purple */
     text-shadow: 0 0 3px rgba(192, 132, 252, 0.6);
-    transform: translateY(-50%); /* Move up by half of element height to center */
 }
 
 .hall-call-up-indicator {
@@ -641,15 +763,15 @@ section h2 {
 }
 
 .waiting-passenger-indicator {
-    position: absolute;
-    font-size: 9px;
-    z-index: 5;
-    pointer-events: none;
+    font-size: 8px;
+    pointer-events: auto;
     background: rgba(0, 0, 0, 0.6);
     color: white;
-    padding: 2px 4px;
+    padding: 1px 3px;
     border-radius: 3px;
     white-space: nowrap;
+    display: inline-block;
+    line-height: 1.2;
 }
 
 .waiting-up {
