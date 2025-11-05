@@ -142,12 +142,22 @@ class ElevatorVisualizer {
         const displayName = this.formatElevatorName(elevatorName);
         const header = document.createElement('div');
         header.className = 'elevator-column-header';
-        header.innerHTML = `
-            <div class="elevator-name">${displayName}</div>
-            <div class="elevator-status" id="status-${elevatorName}">
-                ${this.getDirectionIcon(data.direction)} ${this.shortenState(data.state)}
-            </div>
-        `;
+        // Hallの場合は見えないステータス要素を追加して高さを揃える
+        if (elevatorName === 'Hall') {
+            header.innerHTML = `
+                <div class="elevator-name">${displayName}</div>
+                <div class="elevator-status" style="visibility: hidden;" aria-hidden="true">
+                    ○ IDLE
+                </div>
+            `;
+        } else {
+            header.innerHTML = `
+                <div class="elevator-name">${displayName}</div>
+                <div class="elevator-status" id="status-${elevatorName}">
+                    ${this.getDirectionIcon(data.direction)} ${this.shortenState(data.state)}
+                </div>
+            `;
+        }
         
         // Create shaft
         const shaft = document.createElement('div');
@@ -533,10 +543,12 @@ class ElevatorVisualizer {
             column = this.createElevatorColumn(elevator_name, data);
         }
         
-        // Update status in header
-        const statusElement = document.getElementById(`status-${elevator_name}`);
-        if (statusElement) {
-            statusElement.textContent = `${this.getDirectionIcon(direction || 'NO_DIRECTION')} ${this.shortenState(state)}`;
+        // Update status in header (Hallの場合はスキップ)
+        if (elevator_name !== 'Hall') {
+            const statusElement = document.getElementById(`status-${elevator_name}`);
+            if (statusElement) {
+                statusElement.textContent = `${this.getDirectionIcon(direction || 'NO_DIRECTION')} ${this.shortenState(state)}`;
+            }
         }
         
         // Update capacity display

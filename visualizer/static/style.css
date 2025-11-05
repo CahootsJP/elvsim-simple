@@ -372,7 +372,7 @@ section h2 {
     background: linear-gradient(90deg, var(--card-bg) 0%, var(--card-bg) 85%, transparent 100%);
     padding: 0;
     /* Add top margin to align with shaft (after header) */
-    margin-top: 81px; /* Height of elevator-column-header + gap */
+    margin-top: 73px; /* Height of elevator-column-header (65px) + gap (8px) */
 }
 
 .shared-floor-label {
@@ -424,6 +424,12 @@ section h2 {
     letter-spacing: 0.5px;
     box-shadow: var(--shadow-md);
     transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 65px; /* 高さを完全に固定して揃える */
+    box-sizing: border-box;
 }
 
 .elevator-column-header:hover {
@@ -1289,7 +1295,6 @@ body.dark-mode .mode-btn {
 
 body.dark-mode .mode-btn:hover {
     background: var(--control-btn-hover);
-}
 }
 
 .mode-btn:hover {
