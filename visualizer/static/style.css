@@ -403,14 +403,42 @@ section h2 {
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    overflow-x: auto; /* Enable horizontal scroll as fallback */
+    scroll-behavior: smooth; /* Smooth scrolling */
+    scroll-snap-type: x proximity; /* Snap to columns */
+    padding-bottom: 5px; /* Space for scrollbar */
+}
+
+/* Scrollbar styling */
+.elevator-columns::-webkit-scrollbar {
+    height: 8px;
+}
+
+.elevator-columns::-webkit-scrollbar-track {
+    background: var(--bg-color);
+    border-radius: 4px;
+}
+
+.elevator-columns::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+    transition: background 0.3s;
+}
+
+.elevator-columns::-webkit-scrollbar-thumb:hover {
+    background: #1d4ed8;
+}
+
+body.dark-mode .elevator-columns::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
 }
 
 .elevator-column {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-width: 90px;
-    max-width: 120px;
+    flex-shrink: 0; /* Prevent shrinking */
+    scroll-snap-align: start; /* Snap to column start */
 }
 
 .elevator-column-header {
@@ -438,12 +466,12 @@ section h2 {
 }
 
 .elevator-column-header .elevator-name {
-    font-size: 0.95rem;
+    font-size: clamp(0.8rem, 1.5vw, 0.95rem); /* Scale down with width */
     margin-bottom: 4px;
 }
 
 .elevator-column-header .elevator-status {
-    font-size: 0.75rem;
+    font-size: clamp(0.65rem, 1.2vw, 0.75rem); /* Scale down with width */
     background: rgba(255, 255, 255, 0.2);
     padding: 3px 8px;
     border-radius: 10px;
@@ -621,9 +649,10 @@ section h2 {
    ==================================== */
 
 .elevator-shaft-wrapper {
-    width: 90px; /* Fixed width - same as column max-width */
-    min-width: 90px;
-    max-width: 90px;
+    /* Dynamic width based on elevator count: 65px-90px */
+    width: clamp(65px, calc((100vw - 180px) / var(--elevator-count, 4)), 90px);
+    min-width: 65px; /* Minimum width for readability */
+    max-width: 90px; /* Maximum width for comfort */
     position: relative;
     border: 2px solid var(--border-color);
     border-radius: 0 0 8px 8px;
@@ -817,7 +846,7 @@ body.dark-mode .elevator-column[data-elevator="Hall"] .floor:nth-child(even) {
 }
 
 .capacity-text {
-    font-size: 0.65rem;
+    font-size: clamp(0.55rem, 1vw, 0.65rem); /* Scale with width */
     color: var(--text-secondary);
     font-weight: 600;
     white-space: nowrap;

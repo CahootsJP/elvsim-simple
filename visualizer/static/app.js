@@ -239,7 +239,19 @@ class ElevatorVisualizer {
         }
         columnsContainer.appendChild(column);
         
+        // Update elevator count for CSS dynamic sizing
+        this.updateElevatorCount();
+        
         return column;
+    }
+    
+    updateElevatorCount() {
+        const columnsContainer = document.getElementById('elevator-columns');
+        if (columnsContainer) {
+            const elevatorCount = columnsContainer.children.length;
+            document.documentElement.style.setProperty('--elevator-count', elevatorCount);
+            console.log(`[Hybrid] Updated elevator count: ${elevatorCount}`);
+        }
     }
     
     updateCapacityDisplay(elevatorName, passengers, capacity) {
@@ -437,6 +449,9 @@ class ElevatorVisualizer {
         if (sharedFloorLabels) {
             sharedFloorLabels.innerHTML = '';
         }
+        
+        // Update elevator count
+        this.updateElevatorCount();
         
         console.log('[App] All state cleared');
     }
