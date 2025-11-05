@@ -439,6 +439,11 @@ body.dark-mode .elevator-columns::-webkit-scrollbar-thumb {
     gap: 8px;
     flex-shrink: 0; /* Prevent shrinking */
     scroll-snap-align: start; /* Snap to column start */
+    /* Dynamic width based on elevator count: 65px-90px */
+    /* Formula: (viewport - margins - gaps) / count */
+    width: clamp(65px, calc((100vw - 200px - (var(--elevator-count, 4) - 1) * 12px) / var(--elevator-count, 4)), 90px);
+    min-width: 65px;
+    max-width: 90px;
 }
 
 .elevator-column-header {
@@ -649,10 +654,8 @@ body.dark-mode .elevator-columns::-webkit-scrollbar-thumb {
    ==================================== */
 
 .elevator-shaft-wrapper {
-    /* Dynamic width based on elevator count: 65px-90px */
-    width: clamp(65px, calc((100vw - 180px) / var(--elevator-count, 4)), 90px);
-    min-width: 65px; /* Minimum width for readability */
-    max-width: 90px; /* Maximum width for comfort */
+    /* Width inherited from .elevator-column */
+    width: 100%;
     position: relative;
     border: 2px solid var(--border-color);
     border-radius: 0 0 8px 8px;
