@@ -1543,6 +1543,13 @@ class ElevatorVisualizer {
                     data: event.data
                 };
             
+            case 'passenger_alighting':
+                // Return event message for metrics (trips counting)
+                return {
+                    type: 'passenger_alighting',
+                    data: event.data
+                };
+            
             default:
                 // Ignore other event types
                 return null;
@@ -1716,17 +1723,23 @@ class ElevatorVisualizer {
             this.metrics.boardingCount++;  // Count passengers who boarded
         }
         
-        // Track occupancy from elevator_status events
-        if (eventType === 'elevator_status') {
+        // Track occupancy from elevator_update events
+        if (eventType === 'elevator_update') {
             const passengers = eventData.passengers || 0;
-            const capacity = eventData.capacity || 10;
-            const occupancy = (passengers / capacity) * 100;
-            this.metrics.totalOccupancy += occupancy;
-            this.metrics.occupancyCount++;
+            const capacity = eventData.capacity || 50;
+            if (capacity > 0) {
+                const occupancy = (passengers / capacity) * 100;
+                this.metrics.totalOccupancy += occupancy;
+                this.metrics.occupancyCount++;
+            }
         }
         
         // Track journey metrics from passenger_alighting events
         if (eventType === 'passenger_alighting') {
+            // Count completed trips (each passenger alighting completes a trip)
+            this.metrics.totalTrips++;
+            console.log('[Metrics] passenger_alighting event - Total trips:', this.metrics.totalTrips);
+            
             // Optional: Track riding time, total journey time, etc.
             // Can be used for future metrics
             const ridingTime = eventData.riding_time || 0;
@@ -1761,7 +1774,7 @@ class ElevatorVisualizer {
         document.getElementById('metric-avg-occupancy').textContent = 
             `${avgOccupancy}%`;
         
-        // Total trips (placeholder)
+        // Total trips (completed passenger journeys)
         document.getElementById('metric-total-trips').textContent = 
             this.metrics.totalTrips;
     }
