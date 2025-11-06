@@ -41,6 +41,7 @@ class ElevatorVisualizer {
         this.initializePlaybackControls();
         this.initializeDarkMode();
         this.initializeTabs();
+        this.initializeChart();
         
         // Start in live mode
         this.switchToLiveMode();
@@ -1184,9 +1185,33 @@ class ElevatorVisualizer {
                 iconDark.style.display = 'none';
             }
             
+            // Update chart colors for dark mode
+            this.updateChartColors(isDarkMode);
+            
             // Save preference
             localStorage.setItem('darkMode', isDarkMode);
         });
+    }
+    
+    updateChartColors(isDarkMode) {
+        if (!this.waitTimeChart) return;
+        
+        const textColor = isDarkMode ? '#e2e8f0' : '#1e293b';
+        const gridColor = isDarkMode ? 'rgba(148, 163, 184, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        
+        // Update chart options
+        this.waitTimeChart.options.plugins.legend.labels.color = textColor;
+        this.waitTimeChart.options.scales.x.title.color = textColor;
+        this.waitTimeChart.options.scales.x.ticks.color = textColor;
+        this.waitTimeChart.options.scales.x.grid.color = gridColor;
+        this.waitTimeChart.options.scales.y.title.color = textColor;
+        this.waitTimeChart.options.scales.y.ticks.color = textColor;
+        this.waitTimeChart.options.scales.y.grid.color = gridColor;
+        
+        // Re-render chart
+        this.waitTimeChart.update();
+        
+        console.log('[Chart] Colors updated for dark mode:', isDarkMode);
     }
     
     selectMode(mode) {
@@ -1790,6 +1815,106 @@ class ElevatorVisualizer {
             occupancyCount: 0
         };
         this.refreshMetricsUI();
+    }
+    
+    // ==========================================
+    // Chart Management
+    // ==========================================
+    
+    initializeChart() {
+        const canvas = document.getElementById('waitTimeChart');
+        if (!canvas) {
+            console.warn('[Chart] Canvas element not found');
+            return;
+        }
+        
+        // Get computed styles for dark mode compatibility
+        const isDarkMode = document.body.classList.contains('dark-mode');
+        const textColor = isDarkMode ? '#e2e8f0' : '#1e293b';
+        const gridColor = isDarkMode ? 'rgba(148, 163, 184, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        
+        const ctx = canvas.getContext('2d');
+        this.waitTimeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Time labels (will be populated later)
+                datasets: [{
+                    label: 'Average Wait Time (s)',
+                    data: [], // Wait time data (will be populated later)
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4, // Smooth curves
+                    fill: true,
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            color: textColor,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `Wait Time: ${context.parsed.y.toFixed(1)}s`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time',
+                            color: textColor
+                        },
+                        ticks: {
+                            color: textColor,
+                            maxRotation: 45,
+                            minRotation: 0
+                        },
+                        grid: {
+                            color: gridColor
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Wait Time (seconds)',
+                            color: textColor
+                        },
+                        ticks: {
+                            color: textColor
+                        },
+                        grid: {
+                            color: gridColor
+                        },
+                        beginAtZero: true
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
+        });
+        
+        console.log('[Chart] Wait time chart initialized');
     }
 }
 

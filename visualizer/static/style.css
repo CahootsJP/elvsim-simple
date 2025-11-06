@@ -1729,3 +1729,17 @@ body.dark-mode .timeline-slider::-moz-range-thumb {
     font-family: 'Courier New', monospace;
 }
 
+/* Chart Container */
+.chart-container {
+    margin-top: 20px;
+}
+
+.chart-card {
+    grid-column: 1 / -1; /* Span full width */
+}
+
+.chart-wrapper {
+    height: 300px;
+    position: relative;
+}
+
