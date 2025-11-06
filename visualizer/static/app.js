@@ -1528,32 +1528,16 @@ class ElevatorVisualizer {
                 };
             
             case 'passenger_waiting':
-                // Simulate waiting passengers update
-                const waitFloor = event.data.floor;
-                const waitDirection = event.data.direction;
-                
-                if (!this.waitingPassengers[waitFloor]) {
-                    this.waitingPassengers[waitFloor] = { UP: 0, DOWN: 0 };
-                }
-                this.waitingPassengers[waitFloor][waitDirection]++;
-                
-                // Return event message for metrics (keeping original event structure)
+                // Return event message for metrics
+                // NOTE: Count will be updated in handleMessage to avoid double counting
                 return {
                     type: 'passenger_waiting',
                     data: event.data
                 };
             
             case 'passenger_boarding':
-                // Decrement waiting passengers
-                const boardFloor = event.data.floor;
-                const boardDirection = event.data.direction;
-                
-                if (this.waitingPassengers[boardFloor] && 
-                    this.waitingPassengers[boardFloor][boardDirection] > 0) {
-                    this.waitingPassengers[boardFloor][boardDirection]--;
-                }
-                
-                // Return event message for metrics (keeping original event structure)
+                // Return event message for metrics
+                // NOTE: Count will be updated in handleMessage to avoid double counting
                 return {
                     type: 'passenger_boarding',
                     data: event.data
