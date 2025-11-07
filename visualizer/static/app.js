@@ -36,6 +36,21 @@ class ElevatorVisualizer {
             occupancyCount: 0
         };
         
+        // Chart data management
+        this.chartConfig = {
+            updateInterval: 10,     // Aggregation interval in seconds (configurable)
+            maxDataPoints: 50       // Maximum number of data points to display
+        };
+        
+        this.chartData = {
+            lastBucketEndTime: 0,   // Last bucket end time (to track which buckets to flush)
+            currentBucket: {
+                startTime: 0,       // Start time of current bucket (aligned to updateInterval)
+                waitTimes: [],      // Wait times collected in this bucket
+                sampleCount: 0      // Number of passengers in this bucket (for future display)
+            }
+        };
+        
         this.initializeUI();
         this.initializeModeSelector();
         this.initializePlaybackControls();
@@ -1557,7 +1572,8 @@ class ElevatorVisualizer {
                 // NOTE: Count will be updated in handleMessage to avoid double counting
                 return {
                     type: 'passenger_waiting',
-                    data: event.data
+                    data: event.data,
+                    time: event.time  // Add time for consistency
                 };
             
             case 'passenger_boarding':
@@ -1565,14 +1581,16 @@ class ElevatorVisualizer {
                 // NOTE: Count will be updated in handleMessage to avoid double counting
                 return {
                     type: 'passenger_boarding',
-                    data: event.data
+                    data: event.data,
+                    time: event.time  // Add time for chart
                 };
             
             case 'passenger_alighting':
                 // Return event message for metrics (trips counting)
                 return {
                     type: 'passenger_alighting',
-                    data: event.data
+                    data: event.data,
+                    time: event.time  // Add time for consistency
                 };
             
             default:
@@ -1746,6 +1764,9 @@ class ElevatorVisualizer {
             this.metrics.totalWaitTime += waitTime;
             this.metrics.maxWaitTime = Math.max(this.metrics.maxWaitTime, waitTime);
             this.metrics.boardingCount++;  // Count passengers who boarded
+            
+            // Add wait time to chart bucket
+            this.addWaitTimeToChart(waitTime, message.time || this.simulationTime);
         }
         
         // Track occupancy from elevator_update events
@@ -1815,11 +1836,97 @@ class ElevatorVisualizer {
             occupancyCount: 0
         };
         this.refreshMetricsUI();
+        this.resetChartData();  // Also reset chart data
     }
     
     // ==========================================
     // Chart Management
     // ==========================================
+    
+    addWaitTimeToChart(waitTime, currentTime) {
+        const interval = this.chartConfig.updateInterval;
+        
+        // Calculate which bucket this time belongs to (aligned to interval)
+        const currentBucketStart = Math.floor(currentTime / interval) * interval;
+        
+        // Flush all completed buckets between lastBucketEndTime and currentBucketStart
+        // This includes empty buckets (which will show as 0 seconds)
+        while (this.chartData.lastBucketEndTime < currentBucketStart) {
+            const bucketStart = this.chartData.lastBucketEndTime;
+            this.flushChartBucket(bucketStart);
+            this.chartData.lastBucketEndTime += interval;
+        }
+        
+        // Update current bucket start time if needed
+        if (this.chartData.currentBucket.startTime !== currentBucketStart) {
+            this.chartData.currentBucket.startTime = currentBucketStart;
+            this.chartData.currentBucket.waitTimes = [];
+            this.chartData.currentBucket.sampleCount = 0;
+        }
+        
+        // Add wait time to current bucket
+        this.chartData.currentBucket.waitTimes.push(waitTime);
+        this.chartData.currentBucket.sampleCount++;
+    }
+    
+    flushChartBucket(bucketStartTime) {
+        // Calculate average wait time for this bucket
+        // If no passengers, show 0 seconds (no one waiting = 0 wait time)
+        const bucket = this.chartData.currentBucket;
+        let avgWaitTime = 0;
+        let sampleCount = 0;
+        
+        if (bucket.startTime === bucketStartTime && bucket.waitTimes.length > 0) {
+            // This is the current bucket with data
+            avgWaitTime = bucket.waitTimes.reduce((sum, wt) => sum + wt, 0) / bucket.waitTimes.length;
+            sampleCount = bucket.sampleCount;
+        }
+        // else: empty bucket, avgWaitTime stays 0
+        
+        // Format time label (e.g., "0:00", "0:10", "0:20")
+        const minutes = Math.floor(bucketStartTime / 60);
+        const seconds = Math.floor(bucketStartTime % 60);
+        const timeLabel = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        // Add data point to chart
+        if (this.waitTimeChart) {
+            this.waitTimeChart.data.labels.push(timeLabel);
+            this.waitTimeChart.data.datasets[0].data.push(avgWaitTime);
+            
+            // Limit data points to maxDataPoints
+            if (this.waitTimeChart.data.labels.length > this.chartConfig.maxDataPoints) {
+                this.waitTimeChart.data.labels.shift();
+                this.waitTimeChart.data.datasets[0].data.shift();
+            }
+            
+            // Update chart
+            this.waitTimeChart.update('none'); // 'none' for no animation (smoother)
+            
+            if (sampleCount > 0) {
+                console.log(`[Chart] Added data point: ${timeLabel} = ${avgWaitTime.toFixed(2)}s (${sampleCount} samples)`);
+            } else {
+                console.log(`[Chart] Added data point: ${timeLabel} = 0.00s (no passengers)`);
+            }
+        }
+    }
+    
+    resetChartData() {
+        // Clear chart data
+        if (this.waitTimeChart) {
+            this.waitTimeChart.data.labels = [];
+            this.waitTimeChart.data.datasets[0].data = [];
+            this.waitTimeChart.update('none');
+            console.log('[Chart] Chart data cleared');
+        }
+        
+        // Reset bucket and tracking
+        this.chartData.lastBucketEndTime = 0;
+        this.chartData.currentBucket = {
+            startTime: 0,
+            waitTimes: [],
+            sampleCount: 0
+        };
+    }
     
     initializeChart() {
         const canvas = document.getElementById('waitTimeChart');
@@ -1844,7 +1951,7 @@ class ElevatorVisualizer {
                     borderColor: 'rgb(75, 192, 192)',
                     backgroundColor: 'rgba(75, 192, 192, 0.1)',
                     borderWidth: 2,
-                    tension: 0.4, // Smooth curves
+                    tension: 0, // Straight lines (not curved)
                     fill: true,
                     pointRadius: 3,
                     pointHoverRadius: 5
