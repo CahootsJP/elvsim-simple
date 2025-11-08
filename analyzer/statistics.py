@@ -462,6 +462,25 @@ class Statistics:
                         'total_journey_time': total_journey_time,
                         'wait_time': wait_time
                     })
+            
+            # Record full load bypass events (for JSON Lines log)
+            if topic == 'elevator/full_load_bypass':
+                elevator_name = message.get('elevator')
+                floor = message.get('floor')
+                direction = message.get('direction')
+                passengers = message.get('passengers')
+                capacity = message.get('capacity')
+                
+                # Log event for JSON Lines
+                if elevator_name and floor and direction:
+                    self._add_event_log('full_load_bypass', {
+                        'elevator': elevator_name,
+                        'floor': floor,
+                        'direction': direction,
+                        'passengers': passengers,
+                        'capacity': capacity
+                    })
+                    print(f"[Statistics] Full load bypass: {elevator_name} at floor {floor} ({direction}), {passengers}/{capacity} passengers")
 
     def _get_elevator_color(self, elevator_name):
         """Get color for a specific elevator"""

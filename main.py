@@ -30,6 +30,9 @@ def run_simulation():
     MAX_SPEED = 2.5     # Maximum speed (m/s)
     ACCELERATION = 1.0  # Acceleration (m/s^2)
     JERK = 2.0  # Jerk (m/s^3)
+    
+    # --- Elevator behavior configuration ---
+    FULL_LOAD_BYPASS = True  # True: bypass when full, False: stop even when full
 
     print("--- Simulation Setup ---")
     env = simpy.Environment()
@@ -60,6 +63,7 @@ def run_simulation():
         'num_floors': NUM_FLOORS,
         'num_elevators': 3,
         'elevator_capacity': 10,
+        'full_load_bypass': FULL_LOAD_BYPASS,
         'floor_height': FLOOR_HEIGHT,
         'max_speed': MAX_SPEED,
         'acceleration': ACCELERATION,
@@ -92,17 +96,17 @@ def run_simulation():
 
     # Create Elevator 1
     door1 = Door(env, "Elevator_1_Door")
-    elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10)
+    elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
     gcs.register_elevator(elevator1)
     
     # Create Elevator 2
     door2 = Door(env, "Elevator_2_Door")
-    elevator2 = Elevator(env, "Elevator_2", broker, NUM_FLOORS, floor_queues, door=door2, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10)
+    elevator2 = Elevator(env, "Elevator_2", broker, NUM_FLOORS, floor_queues, door=door2, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
     gcs.register_elevator(elevator2)
     
     # Create Elevator 3
     door3 = Door(env, "Elevator_3_Door")
-    elevator3 = Elevator(env, "Elevator_3", broker, NUM_FLOORS, floor_queues, door=door3, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10)
+    elevator3 = Elevator(env, "Elevator_3", broker, NUM_FLOORS, floor_queues, door=door3, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
     gcs.register_elevator(elevator3)
 
     # --- Process startup ---

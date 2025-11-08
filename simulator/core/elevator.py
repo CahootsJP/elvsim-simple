@@ -11,7 +11,7 @@ class Elevator(Entity):
     Elevator that can handle interruptions during movement
     """
 
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10, full_load_bypass: bool = True):
         # Initialize direction before calling super().__init__
         self.direction = "NO_DIRECTION"
         
@@ -24,6 +24,7 @@ class Elevator(Entity):
         self.physics_engine = physics_engine  # Access to PhysicsEngine
         self.hall_buttons = hall_buttons  # Reference to hall buttons
         self.max_capacity = max_capacity  # Maximum number of passengers
+        self.full_load_bypass = full_load_bypass  # True: bypass when full, False: stop even when full
 
         self.current_floor = 1
         
@@ -502,16 +503,25 @@ class Elevator(Entity):
         hall_calls_changed = False
         serviced_directions = []  # Record directions that should be turned off
         
-        # Clear hall calls for directions that were serviced
+        # Clear hall calls for directions that were serviced (only if someone actually boarded)
+        # If elevator is full and no one boarded, keep the hall call for next elevator
         if any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
-            self.hall_calls_up.discard(self.current_floor)
-            hall_calls_changed = True
-            serviced_directions.append("UP")
+            # Check if anyone from this direction actually boarded
+            if len(boarded_passengers) > 0:
+                self.hall_calls_up.discard(self.current_floor)
+                hall_calls_changed = True
+                serviced_directions.append("UP")
+            else:
+                print(f"{self.env.now:.2f} [{self.name}] No one boarded from UP queue (full). Keeping hall call.")
         
         if any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
-            self.hall_calls_down.discard(self.current_floor)
-            hall_calls_changed = True
-            serviced_directions.append("DOWN")
+            # Check if anyone from this direction actually boarded
+            if len(boarded_passengers) > 0:
+                self.hall_calls_down.discard(self.current_floor)
+                hall_calls_changed = True
+                serviced_directions.append("DOWN")
+            else:
+                print(f"{self.env.now:.2f} [{self.name}] No one boarded from DOWN queue (full). Keeping hall call.")
         
         # Turn off hall buttons for serviced directions
         if serviced_directions and self.hall_buttons:
@@ -530,23 +540,84 @@ class Elevator(Entity):
         print(f"{self.env.now:.2f} [{self.name}] Boarding and alighting at floor {self.current_floor} complete.")
         self.env.process(self._report_status())
     
+    def _is_at_full_capacity(self):
+        """
+        Check if elevator is at full capacity.
+        
+        Returns:
+            True if full, False otherwise
+        """
+        if self.max_capacity is None:
+            return False
+        return len(self.passengers_onboard) >= self.max_capacity
+    
+    def _log_full_load_bypass(self, direction):
+        """
+        Log full load bypass event to message broker.
+        
+        Args:
+            direction: Direction of the hall call being bypassed ("UP" or "DOWN")
+        """
+        self.broker.put('elevator/full_load_bypass', {
+            'elevator': self.name,
+            'floor': self.current_floor,
+            'direction': direction,
+            'passengers': len(self.passengers_onboard),
+            'capacity': self.max_capacity,
+            'timestamp': self.env.now
+        })
+    
     def _should_stop_at_current_floor(self):
+        # Always stop for car calls (passengers need to exit)
+        if self.current_floor in self.car_calls:
+            return True
+        
+        # Check hall calls with full_load_bypass consideration
         if self.direction == "UP":
-            if self.current_floor in self.car_calls: return True
-            if self.current_floor in self.hall_calls_up: return True
+            if self.current_floor in self.hall_calls_up:
+                # If full_load_bypass is enabled and elevator is full, bypass
+                if self.full_load_bypass and self._is_at_full_capacity():
+                    print(f"{self.env.now:.2f} [{self.name}] Full load bypass: Full capacity at floor {self.current_floor}, bypassing hall call UP.")
+                    self._log_full_load_bypass("UP")
+                    return False
+                return True
             all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
             if not self._has_any_calls_above() and all_calls and self.current_floor == max(all_calls):
+                # Direction change case: check if we can board
+                if self.full_load_bypass and self._is_at_full_capacity():
+                    print(f"{self.env.now:.2f} [{self.name}] Full load bypass: Full capacity at floor {self.current_floor}, bypassing direction change.")
+                    self._log_full_load_bypass("UP" if self.current_floor in self.hall_calls_up else "DOWN")
+                    return False
                 return True
 
         elif self.direction == "DOWN":
-            if self.current_floor in self.car_calls: return True
-            if self.current_floor in self.hall_calls_down: return True
+            if self.current_floor in self.hall_calls_down:
+                # If full_load_bypass is enabled and elevator is full, bypass
+                if self.full_load_bypass and self._is_at_full_capacity():
+                    print(f"{self.env.now:.2f} [{self.name}] Full load bypass: Full capacity at floor {self.current_floor}, bypassing hall call DOWN.")
+                    self._log_full_load_bypass("DOWN")
+                    return False
+                return True
             all_calls = self.car_calls | self.hall_calls_up | self.hall_calls_down
             if not self._has_any_calls_below() and all_calls and all_calls and self.current_floor == min(all_calls):
+                # Direction change case: check if we can board
+                if self.full_load_bypass and self._is_at_full_capacity():
+                    print(f"{self.env.now:.2f} [{self.name}] Full load bypass: Full capacity at floor {self.current_floor}, bypassing direction change.")
+                    self._log_full_load_bypass("DOWN" if self.current_floor in self.hall_calls_down else "UP")
+                    return False
                 return True
 
         elif self.direction == "NO_DIRECTION":
-            return self._has_any_calls_at_current_floor()
+            has_call = self._has_any_calls_at_current_floor()
+            if has_call:
+                # Check if we can board (only hall calls possible in NO_DIRECTION at current floor)
+                if self.full_load_bypass and self._is_at_full_capacity():
+                    print(f"{self.env.now:.2f} [{self.name}] Full load bypass: Full capacity at floor {self.current_floor}, bypassing hall call.")
+                    # Determine direction from hall calls
+                    direction = "UP" if self.current_floor in self.hall_calls_up else "DOWN"
+                    self._log_full_load_bypass(direction)
+                    return False
+            return has_call
 
         return False
 
