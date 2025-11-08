@@ -1,18 +1,19 @@
 import simpy
-from simulator.core.entity import Entity
 from simulator.infrastructure.message_broker import MessageBroker
 from simulator.core.elevator import Elevator
 from .interfaces.allocation_strategy import IAllocationStrategy
 
-class GroupControlSystem(Entity):
+class GroupControlSystem:
     """
     Group Control System that monitors each elevator's status in real-time
     
-    Uses pluggable allocation strategy for elevator selection.
+    This is a controller, not a simulated entity. It manages elevator allocation
+    using pluggable allocation strategies.
     """
     def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, 
                  strategy: IAllocationStrategy):
-        super().__init__(env, name)
+        self.env = env
+        self.name = name
         self.broker = broker
         self.strategy = strategy  # Allocation strategy
         self.elevators = {}
@@ -20,6 +21,9 @@ class GroupControlSystem(Entity):
         self.elevator_statuses = {}
         
         print(f"{self.env.now:.2f} [GCS] Using strategy: {self.strategy.get_strategy_name()}")
+        
+        # Start GCS process manually (not using Entity base class)
+        self.process = self.env.process(self.run())
 
     def register_elevator(self, elevator: Elevator):
         """
