@@ -181,7 +181,7 @@ class Elevator(Entity):
             else: self.hall_calls_down.add(floor)
             print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
             
-            # 実ホールコールが割り当てられたら、移動コマンドをキャンセル
+            # Cancel move command when real hall call is assigned
             if self.move_command_target_floor is not None:
                 print(f"{self.env.now:.2f} [{self.name}] Move command cancelled due to real hall call assignment.")
                 self.move_command_target_floor = None
@@ -231,24 +231,24 @@ class Elevator(Entity):
 
     def _move_command_listener(self):
         """
-        移動コマンドを受信（アイドル時のみ）
+        Receive move command (only when idle)
         
-        群管理システムからの移動コマンドを受信します。
-        受信条件：エレベータがアイドル状態のときのみ
-        動作：指定階まで移動するが、ドアは開かない
-        キャンセル：実ホールコールが割り当てられた場合にキャンセルされる
+        Receives move commands from the group control system.
+        Reception condition: Only when elevator is in IDLE state
+        Behavior: Moves to specified floor but does NOT open door
+        Cancellation: Cancelled when real hall call is assigned
         """
         move_command_topic = f"elevator/{self.name}/move_command"
         while True:
             command = yield self.broker.get(move_command_topic)
             target_floor = command['floor']
             
-            # 受信条件チェック：アイドル状態かつ方向がNO_DIRECTIONのときのみ
+            # Check reception condition: Only when IDLE state and NO_DIRECTION
             if self.state == "IDLE" and self.direction == "NO_DIRECTION":
                 self.move_command_target_floor = target_floor
                 print(f"{self.env.now:.2f} [{self.name}] Move command received: target floor {target_floor}")
                 
-                # 新しいコールイベントをトリガーして移動を開始
+                # Trigger new call event to start movement
                 if not self.new_call_event.triggered:
                     self.new_call_event.succeed()
                     self.new_call_event = self.env.event()
@@ -257,12 +257,12 @@ class Elevator(Entity):
 
     def _forced_move_command_listener(self):
         """
-        強制移動コマンドを受信（どんな状態でも）
+        Receive forced move command (in any state)
         
-        群管理システムからの強制移動コマンドを受信します。
-        受信条件：エレベータの状態に関わらず常に受信
-        動作：実ホールコールと同等に扱われ、セレクティブコレクティブ応答される
-        キャンセル：実ホールコールと同じなので、キャンセルされない
+        Receives forced move commands from the group control system.
+        Reception condition: Always received regardless of elevator state
+        Behavior: Treated as real hall call, selective collective response applied
+        Cancellation: Not cancelled (treated same as real hall call)
         """
         forced_move_command_topic = f"elevator/{self.name}/forced_move_command"
         while True:
@@ -270,7 +270,7 @@ class Elevator(Entity):
             floor = command['floor']
             direction = command['direction']
             
-            # 実ホールコールと同じように登録
+            # Register same as real hall call
             if direction == "UP":
                 self.hall_calls_up.add(floor)
             else:
