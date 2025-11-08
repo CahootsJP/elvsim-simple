@@ -735,7 +735,7 @@ class Elevator(Entity):
             'timestamp': self.env.now
         })
     
-    def _should_bypass_due_to_full_capacity(self, direction, reason="hall call"):
+    def _should_bypass_due_to_full_capacity(self, direction: str, reason: str = "hall call") -> bool:
         """
         Check if elevator should bypass stop due to full capacity
         
@@ -1008,9 +1008,18 @@ class Elevator(Entity):
         return any(f < self.current_floor for f in all_calls)
 
     def _predict_next_direction_at_arrival(self, arrival_floor):
-        """Predict next direction at arrival floor in advance"""
-        # IMPORTANT: Check if we need to stop at arrival floor first
-        # If we need to stop, we should NOT change direction during braking
+        """
+        Predict next direction at arrival floor in advance.
+        
+        IMPORTANT: Direction should only change if elevator will stop at arrival floor.
+        If not stopping, direction must remain unchanged during braking.
+        
+        Args:
+            arrival_floor: Floor number where elevator will arrive
+        
+        Returns:
+            Predicted direction ("UP", "DOWN", or "NO_DIRECTION")
+        """
         will_stop_at_arrival = False
         
         all_up_calls = self._get_all_up_calls()
