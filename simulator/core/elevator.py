@@ -47,6 +47,9 @@ class Elevator(Entity):
         self.hall_calls_down = set()
         self.passengers_onboard = []
         
+        # Move command support (repositioning when idle)
+        self.move_command_target_floor = None  # Target floor for move command
+        
         self.new_call_event = self.env.event()
         self.status_topic = f"elevator/{self.name}/status"
         
@@ -55,6 +58,8 @@ class Elevator(Entity):
         
         self.env.process(self._hall_call_listener())
         self.env.process(self._car_call_listener())
+        self.env.process(self._move_command_listener())
+        self.env.process(self._forced_move_command_listener())
 
     def _on_state_changed(self, old_state: str, new_state: str):
         """
@@ -176,6 +181,11 @@ class Elevator(Entity):
             else: self.hall_calls_down.add(floor)
             print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
             
+            # 実ホールコールが割り当てられたら、移動コマンドをキャンセル
+            if self.move_command_target_floor is not None:
+                print(f"{self.env.now:.2f} [{self.name}] Move command cancelled due to real hall call assignment.")
+                self.move_command_target_floor = None
+            
             # Send hall_calls status
             self.env.process(self._broadcast_hall_calls_status())
             
@@ -219,6 +229,71 @@ class Elevator(Entity):
                 self.new_call_event.succeed()
                 self.new_call_event = self.env.event()
 
+    def _move_command_listener(self):
+        """
+        移動コマンドを受信（アイドル時のみ）
+        
+        群管理システムからの移動コマンドを受信します。
+        受信条件：エレベータがアイドル状態のときのみ
+        動作：指定階まで移動するが、ドアは開かない
+        キャンセル：実ホールコールが割り当てられた場合にキャンセルされる
+        """
+        move_command_topic = f"elevator/{self.name}/move_command"
+        while True:
+            command = yield self.broker.get(move_command_topic)
+            target_floor = command['floor']
+            
+            # 受信条件チェック：アイドル状態かつ方向がNO_DIRECTIONのときのみ
+            if self.state == "IDLE" and self.direction == "NO_DIRECTION":
+                self.move_command_target_floor = target_floor
+                print(f"{self.env.now:.2f} [{self.name}] Move command received: target floor {target_floor}")
+                
+                # 新しいコールイベントをトリガーして移動を開始
+                if not self.new_call_event.triggered:
+                    self.new_call_event.succeed()
+                    self.new_call_event = self.env.event()
+            else:
+                print(f"{self.env.now:.2f} [{self.name}] Move command ignored (not IDLE): target floor {target_floor}")
+
+    def _forced_move_command_listener(self):
+        """
+        強制移動コマンドを受信（どんな状態でも）
+        
+        群管理システムからの強制移動コマンドを受信します。
+        受信条件：エレベータの状態に関わらず常に受信
+        動作：実ホールコールと同等に扱われ、セレクティブコレクティブ応答される
+        キャンセル：実ホールコールと同じなので、キャンセルされない
+        """
+        forced_move_command_topic = f"elevator/{self.name}/forced_move_command"
+        while True:
+            command = yield self.broker.get(forced_move_command_topic)
+            floor = command['floor']
+            direction = command['direction']
+            
+            # 実ホールコールと同じように登録
+            if direction == "UP":
+                self.hall_calls_up.add(floor)
+            else:
+                self.hall_calls_down.add(floor)
+            
+            print(f"{self.env.now:.2f} [{self.name}] Forced move command registered: Floor {floor} {direction} (treated as hall call)")
+            
+            # Send hall_calls status
+            self.env.process(self._broadcast_hall_calls_status())
+            
+            # If direction is NO_DIRECTION (idle or about to become idle), update direction
+            if self.direction == "NO_DIRECTION":
+                self._decide_direction_on_hall_call_assigned()
+            
+            # Determine if emergency button should be pressed
+            if self._should_interrupt(floor, direction):
+                print(f"{self.env.now:.2f} [{self.name}] Forced move command on the way! INTERRUPTING.")
+                self.process.interrupt()
+            else:
+                if not self.new_call_event.triggered:
+                    self.new_call_event.succeed()
+                    self.new_call_event = self.env.event()
+
 
     def run(self):
         print(f"{self.env.now:.2f} [{self.name}] Operational at floor 1.")
@@ -234,6 +309,43 @@ class Elevator(Entity):
             if self.direction == "NO_DIRECTION":
                 self.set_state_and_direction("IDLE", "NO_DIRECTION")
                 self.current_destination = None
+                
+                # Check if there's a move command to execute
+                if self.move_command_target_floor is not None and self.move_command_target_floor != self.current_floor:
+                    # Execute move command
+                    print(f"{self.env.now:.2f} [{self.name}] Executing move command to floor {self.move_command_target_floor}")
+                    self.current_destination = self.move_command_target_floor
+                    
+                    # Determine direction for move command
+                    if self.current_destination > self.current_floor:
+                        self._update_direction("UP")
+                    else:
+                        self._update_direction("DOWN")
+                    
+                    # Move to target floor
+                    self.set_state("MOVING")
+                    try:
+                        self.current_move_process = self.env.process(self._move_process(self.current_destination))
+                        yield self.current_move_process
+                        
+                        # Arrived at move command target floor - do NOT open door
+                        print(f"{self.env.now:.2f} [{self.name}] Arrived at move command target floor {self.current_floor}. Door remains closed.")
+                        
+                        # Clear move command
+                        self.move_command_target_floor = None
+                        
+                        # Reset direction to NO_DIRECTION
+                        self._update_direction("NO_DIRECTION")
+                        
+                    except Interrupt:
+                        print(f"{self.env.now:.2f} [{self.name}] Move command interrupted by new call.")
+                        if self.current_move_process and self.current_move_process.is_alive:
+                            self.current_move_process.interrupt()
+                        self.current_move_process = None
+                        # Move command should already be cancelled by _hall_call_listener
+                    
+                    continue  # Return to loop start for re-evaluation
+                
                 if not self._has_any_calls():
                     print(f"{self.env.now:.2f} [{self.name}] IDLE. Waiting for new call signal...")
                     yield self.new_call_event
