@@ -15,6 +15,7 @@ from simulator.implementations.traditional.passenger_behavior import AdaptivePas
 # Controller and allocation strategy
 from controller.group_control import GroupControlSystem
 from controller.algorithms.nearest_car import NearestCarStrategy
+from controller.algorithms.test_forced_move import TestForcedMoveStrategy
 
 # Analyzer
 from analyzer.simulation_statistics import SimulationStatistics
@@ -54,6 +55,9 @@ def run_simulation():
     # --- Allocation strategy configuration ---
     allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
     
+    # --- Repositioning strategy configuration (test) ---
+    repositioning_strategy = TestForcedMoveStrategy()
+    
     # Set simulation metadata for JSON Lines log
     import random
     random.seed(42)
@@ -61,7 +65,7 @@ def run_simulation():
     
     sim_stats.set_simulation_metadata({
         'num_floors': NUM_FLOORS,
-        'num_elevators': 3,
+        'num_elevators': 4,
         'elevator_capacity': 10,
         'full_load_bypass': FULL_LOAD_BYPASS,
         'floor_height': FLOOR_HEIGHT,
@@ -87,7 +91,7 @@ def run_simulation():
 
     # --- Entity creation ---
     # Note: GCS no longer takes env parameter - it communicates only through MessageBroker
-    gcs = GroupControlSystem("GCS", broker, allocation_strategy)
+    gcs = GroupControlSystem("GCS", broker, allocation_strategy, repositioning_strategy)
     
     hall_buttons = [
         {'UP': HallButton(env, floor, "UP", broker), 
@@ -110,11 +114,17 @@ def run_simulation():
     elevator3 = Elevator(env, "Elevator_3", broker, NUM_FLOORS, floor_queues, door=door3, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
     gcs.register_elevator(elevator3)
     
+    # Create Elevator 4
+    door4 = Door(env, "Elevator_4_Door")
+    elevator4 = Elevator(env, "Elevator_4", broker, NUM_FLOORS, floor_queues, door=door4, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
+    gcs.register_elevator(elevator4)
+    
     # Start GCS processes (simulator's responsibility to start processes)
     env.process(gcs.run())
     env.process(gcs.start_status_listener("Elevator_1"))
     env.process(gcs.start_status_listener("Elevator_2"))
     env.process(gcs.start_status_listener("Elevator_3"))
+    env.process(gcs.start_status_listener("Elevator_4"))
 
     # --- Process startup ---
     # For normal testing
