@@ -794,6 +794,24 @@ body.dark-mode .elevator-column[data-elevator="Hall"] .floor:nth-child(even) {
     text-shadow: 0 0 3px rgba(239, 68, 68, 0.6);
 }
 
+/* Forced move command indicator (orange filled diamond) */
+.forced-move-command-indicator {
+    color: #f59e0b; /* Orange */
+    text-shadow: 0 0 3px rgba(245, 158, 11, 0.6);
+    font-weight: bold;
+}
+
+.forced-move-command-indicator .direction-arrow {
+    font-size: 9px;
+    margin-left: 1px;
+}
+
+/* Move command indicator (green empty square) */
+.move-command-indicator {
+    color: #10b981; /* Green */
+    text-shadow: 0 0 3px rgba(16, 185, 129, 0.6);
+}
+
 .waiting-passenger-indicator {
     font-size: 8px;
     pointer-events: auto;

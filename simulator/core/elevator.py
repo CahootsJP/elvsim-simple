@@ -121,7 +121,10 @@ class Elevator(Entity):
             "max_capacity": self.max_capacity,  # For WebSocket visualization
             "num_floors": self.num_floors,  # For WebSocket visualization
             "home_floor": self.home_floor,  # Home floor (for repositioning strategies)
-            "main_direction": self.main_direction  # Main traffic direction (for optimization)
+            "main_direction": self.main_direction,  # Main traffic direction (for optimization)
+            "move_command_target_floor": self.move_command_target_floor,  # For visualization
+            "forced_calls_up": list(self.forced_calls_up),  # For visualization
+            "forced_calls_down": list(self.forced_calls_down)  # For visualization
         }
         yield self.broker.put(self.status_topic, status_message)
 

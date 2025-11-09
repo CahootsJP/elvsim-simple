@@ -118,21 +118,31 @@ class Statistics:
                 max_capacity = message.get('max_capacity', 10)
                 num_floors = message.get('num_floors', 10)
                 
+                # Get command information from status message
+                move_command_target = message.get('move_command_target_floor')
+                forced_calls_up = message.get('forced_calls_up', [])
+                forced_calls_down = message.get('forced_calls_down', [])
+                direction = message.get('direction', 'NO_DIRECTION')
+                
                 self.current_elevator_states[elevator_name] = {
                     'elevator_name': elevator_name,
                     'floor': current_floor,
                     'state': state,
+                    'direction': direction,
                     'passengers': passengers_count,
                     'capacity': max_capacity,
                     'num_floors': num_floors,
                     'timestamp': timestamp,
                     'car_calls': self.current_elevator_states.get(elevator_name, {}).get('car_calls', []),  # Preserve car_calls
                     'hall_calls_up': self.current_elevator_states.get(elevator_name, {}).get('hall_calls_up', []),  # Preserve hall_calls_up
-                    'hall_calls_down': self.current_elevator_states.get(elevator_name, {}).get('hall_calls_down', [])  # Preserve hall_calls_down
+                    'hall_calls_down': self.current_elevator_states.get(elevator_name, {}).get('hall_calls_down', []),  # Preserve hall_calls_down
+                    'move_command_target_floor': move_command_target,  # For visualization
+                    'forced_calls_up': forced_calls_up,  # For visualization
+                    'forced_calls_down': forced_calls_down  # For visualization
                 }
                 
                 # Log event for JSON Lines
-                direction = message.get('direction', 'NO_DIRECTION')
+                
                 self._add_event_log('elevator_status', {
                     'elevator': elevator_name,
                     'floor': current_floor,
@@ -140,7 +150,10 @@ class Statistics:
                     'state': state,
                     'direction': direction,
                     'passengers': passengers_count,
-                    'capacity': max_capacity
+                    'capacity': max_capacity,
+                    'move_command_target_floor': move_command_target,
+                    'forced_calls_up': forced_calls_up,
+                    'forced_calls_down': forced_calls_down
                 })
                 
                 # Send to WebSocket
@@ -182,6 +195,57 @@ class Statistics:
                     self._send_to_websocket({
                         'type': 'elevator_update',
                         'data': self.current_elevator_states[elevator_name]
+                    })
+            
+            # Record forced_calls information (for forced move commands)
+            forced_calls_match = re.search(r'elevator/(.*?)/forced_calls', topic)
+            if forced_calls_match:
+                elevator_name = forced_calls_match.group(1)
+                timestamp = message.get('timestamp')
+                forced_calls_up = message.get('forced_calls_up', [])
+                forced_calls_down = message.get('forced_calls_down', [])
+                current_floor = message.get('current_floor')
+                
+                # Log events for each forced call
+                for floor in forced_calls_up:
+                    self._add_event_log('forced_move_command', {
+                        'elevator': elevator_name,
+                        'floor': floor,
+                        'direction': 'UP',
+                        'current_floor': current_floor
+                    })
+                
+                for floor in forced_calls_down:
+                    self._add_event_log('forced_move_command', {
+                        'elevator': elevator_name,
+                        'floor': floor,
+                        'direction': 'DOWN',
+                        'current_floor': current_floor
+                    })
+                
+                # Update current elevator state with forced_calls for real-time display
+                if elevator_name in self.current_elevator_states:
+                    self.current_elevator_states[elevator_name]['forced_calls_up'] = forced_calls_up
+                    self.current_elevator_states[elevator_name]['forced_calls_down'] = forced_calls_down
+                    
+                    # Send updated state to WebSocket
+                    self._send_to_websocket({
+                        'type': 'elevator_update',
+                        'data': self.current_elevator_states[elevator_name]
+                    })
+            
+            # Record move_command (repositioning when idle)
+            move_command_match = re.search(r'elevator/(.*?)/move_command', topic)
+            if move_command_match:
+                elevator_name = move_command_match.group(1)
+                floor = message.get('floor')
+                timestamp = message.get('timestamp')
+                
+                if floor is not None:
+                    # Log event for JSON Lines
+                    self._add_event_log('move_command', {
+                        'elevator': elevator_name,
+                        'floor': floor
                     })
             
             # Record hall call assignments (for color-coded visualization)

@@ -635,11 +635,13 @@ class ElevatorVisualizer {
     updateCallIndicators(elevatorName, data) {
         const numFloors = data.num_floors || this.numFloors || 10;
         
-        // Clear all floor icons first
+        // Clear all floor icons first (left, center, right)
         for (let floor = 1; floor <= numFloors; floor++) {
             const leftContainer = document.getElementById(`floor-icons-left-${elevatorName}-${floor}`);
+            const centerContainer = document.getElementById(`floor-icons-center-${elevatorName}-${floor}`);
             const rightContainer = document.getElementById(`floor-icons-right-${elevatorName}-${floor}`);
             if (leftContainer) leftContainer.innerHTML = '';
+            if (centerContainer) centerContainer.innerHTML = '';
             if (rightContainer) rightContainer.innerHTML = '';
         }
         
@@ -668,6 +670,46 @@ class ElevatorVisualizer {
                     leftContainer.appendChild(indicator);
                 }
             });
+        }
+        
+        // Add forced move command indicators (CENTER, orange filled square with direction)
+        if (data.forced_calls_up && data.forced_calls_up.length > 0) {
+            data.forced_calls_up.forEach(floor => {
+                const centerContainer = document.getElementById(`floor-icons-center-${elevatorName}-${floor}`);
+                if (centerContainer) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'call-indicator forced-move-command-indicator';
+                    indicator.innerHTML = '◆<span class="direction-arrow">↑</span>';
+                    indicator.title = `Forced move command: ${floor}F UP`;
+                    centerContainer.appendChild(indicator);
+                }
+            });
+        }
+        
+        if (data.forced_calls_down && data.forced_calls_down.length > 0) {
+            data.forced_calls_down.forEach(floor => {
+                const centerContainer = document.getElementById(`floor-icons-center-${elevatorName}-${floor}`);
+                if (centerContainer) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'call-indicator forced-move-command-indicator';
+                    indicator.innerHTML = '◆<span class="direction-arrow">↓</span>';
+                    indicator.title = `Forced move command: ${floor}F DOWN`;
+                    centerContainer.appendChild(indicator);
+                }
+            });
+        }
+        
+        // Add move command indicator (CENTER, green empty square, no direction)
+        if (data.move_command_target_floor && elevatorName !== 'Hall') {
+            const floor = data.move_command_target_floor;
+            const centerContainer = document.getElementById(`floor-icons-center-${elevatorName}-${floor}`);
+            if (centerContainer) {
+                const indicator = document.createElement('span');
+                indicator.className = 'call-indicator move-command-indicator';
+                indicator.textContent = '□';
+                indicator.title = `Move command: ${floor}F`;
+                centerContainer.appendChild(indicator);
+            }
         }
         
         // Add car call indicators (RIGHT side)
