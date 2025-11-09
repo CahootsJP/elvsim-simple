@@ -86,7 +86,8 @@ def run_simulation():
     ]
 
     # --- Entity creation ---
-    gcs = GroupControlSystem(env, "GCS", broker, allocation_strategy)
+    # Note: GCS no longer takes env parameter - it communicates only through MessageBroker
+    gcs = GroupControlSystem("GCS", broker, allocation_strategy)
     
     hall_buttons = [
         {'UP': HallButton(env, floor, "UP", broker), 
@@ -108,6 +109,12 @@ def run_simulation():
     door3 = Door(env, "Elevator_3_Door")
     elevator3 = Elevator(env, "Elevator_3", broker, NUM_FLOORS, floor_queues, door=door3, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
     gcs.register_elevator(elevator3)
+    
+    # Start GCS processes (simulator's responsibility to start processes)
+    env.process(gcs.run())
+    env.process(gcs.start_status_listener("Elevator_1"))
+    env.process(gcs.start_status_listener("Elevator_2"))
+    env.process(gcs.start_status_listener("Elevator_3"))
 
     # --- Process startup ---
     # For normal testing

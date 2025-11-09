@@ -46,3 +46,16 @@ class MessageBroker:
         Returns the global broadcast pipe
         """
         return self.broadcast_pipe
+    
+    def get_current_time(self) -> float:
+        """
+        Get current simulation time
+        
+        This method provides time abstraction, allowing external systems
+        (like GroupControlSystem) to access time without direct dependency
+        on SimPy environment.
+        
+        Returns:
+            Current simulation time
+        """
+        return self.env.now
