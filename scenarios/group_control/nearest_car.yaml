@@ -1,0 +1,20 @@
+# Group Control Configuration
+# This configuration can be used in both simulation and real elevator systems
+
+group_control:
+  # Call allocation strategy
+  allocation_strategy:
+    name: "NearestCar"
+    parameters: {}
+  
+  # Elevator repositioning strategy
+  repositioning_strategy:
+    name: "None"  # Options: "None", "TestForcedMove", etc.
+    parameters: {}
+  
+  # Call reassignment policy
+  reassignment_policy:
+    enabled: false
+    name: "EarliestArrival"
+    parameters: {}
+

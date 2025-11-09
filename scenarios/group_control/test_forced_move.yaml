@@ -1,0 +1,20 @@
+# Group Control Configuration with Test Forced Move Repositioning
+# This configuration demonstrates the forced move command functionality
+
+group_control:
+  # Call allocation strategy
+  allocation_strategy:
+    name: "NearestCar"
+    parameters: {}
+  
+  # Elevator repositioning strategy (Test: Send to home floor when idle)
+  repositioning_strategy:
+    name: "TestForcedMove"
+    parameters: {}
+  
+  # Call reassignment policy
+  reassignment_policy:
+    enabled: false
+    name: "EarliestArrival"
+    parameters: {}
+

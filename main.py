@@ -1,4 +1,8 @@
 import simpy
+import random
+
+# Configuration
+from config import load_group_control_config, load_simulation_config
 
 # Simulator components
 from simulator.infrastructure.message_broker import MessageBroker
@@ -20,67 +24,100 @@ from controller.algorithms.test_forced_move import TestForcedMoveStrategy
 # Analyzer
 from analyzer.simulation_statistics import SimulationStatistics
 
-def run_simulation():
-    """Set up and run the entire simulation"""
-    # --- Simulation constants ---
-    SIM_DURATION = 600  # Extended from 200 to 600 seconds (10 minutes)
-    NUM_FLOORS = 10
-
-    # --- Physical world definition ---
-    FLOOR_HEIGHT = 3.5  # Height of each floor (m)
-    MAX_SPEED = 2.5     # Maximum speed (m/s)
-    ACCELERATION = 1.0  # Acceleration (m/s^2)
-    JERK = 2.0  # Jerk (m/s^3)
+def run_simulation(sim_config_path="scenarios/simulation/default.yaml",
+                   gc_config_path="scenarios/group_control/test_forced_move.yaml"):
+    """
+    Set up and run the entire simulation
     
-    # --- Elevator behavior configuration ---
-    FULL_LOAD_BYPASS = True  # True: bypass when full, False: stop even when full
+    Args:
+        sim_config_path: Path to simulation configuration YAML file
+        gc_config_path: Path to group control configuration YAML file
+    """
+    print("--- Loading Configuration ---")
+    
+    # Load configurations
+    sim_config = load_simulation_config(sim_config_path)
+    gc_config = load_group_control_config(gc_config_path)
+    
+    print(f"Simulation Config: {sim_config_path}")
+    print(f"Group Control Config: {gc_config_path}")
+    
+    # Extract configuration values for easier access
+    NUM_FLOORS = sim_config.building.num_floors
+    FLOOR_HEIGHT = sim_config.building.floor_height
+    NUM_ELEVATORS = sim_config.elevator.num_elevators
+    MAX_CAPACITY = sim_config.elevator.max_capacity
+    MAX_SPEED = sim_config.elevator.rated_speed
+    ACCELERATION = sim_config.elevator.acceleration
+    JERK = sim_config.elevator.jerk
+    FULL_LOAD_BYPASS = sim_config.elevator.full_load_bypass
+    HOME_FLOOR = sim_config.elevator.home_floor
+    MAIN_DIRECTION = sim_config.elevator.main_direction
+    
+    DOOR_OPEN_TIME = sim_config.door.open_time
+    DOOR_CLOSE_TIME = sim_config.door.close_time
+    
+    SIM_DURATION = sim_config.traffic.simulation_duration
+    PASSENGER_GENERATION_RATE = sim_config.traffic.passenger_generation_rate
+    
+    # Set random seed if specified
+    if sim_config.random_seed is not None:
+        random.seed(sim_config.random_seed)
+        print(f"Random seed fixed to {sim_config.random_seed} for reproducible results")
+    else:
+        print("Random seed not set - results will vary")
 
-    print("--- Simulation Setup ---")
+    print("\n--- Simulation Setup ---")
     env = simpy.Environment()
     broker = MessageBroker(env)
     broadcast_pipe = broker.get_broadcast_pipe()
     
     # Create statistics collector
-    # Note: We only use SimulationStatistics for now
-    # RealtimePerformanceMonitor causes event loss due to shared broadcast pipe
     sim_stats = SimulationStatistics(env, broadcast_pipe)
-    
-    # Start listener
     env.process(sim_stats.start_listening())
     
-    # --- Call system configuration ---
-    call_system = TraditionalCallSystem(num_floors=NUM_FLOORS)
-    passenger_behavior = AdaptivePassengerBehavior()
-    
-    # --- Allocation strategy configuration ---
-    allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
-    
-    # --- Repositioning strategy configuration (test) ---
-    repositioning_strategy = TestForcedMoveStrategy()
-    
     # Set simulation metadata for JSON Lines log
-    import random
-    random.seed(42)
-    print("Random seed fixed to 42 for reproducible results")
-    
     sim_stats.set_simulation_metadata({
         'num_floors': NUM_FLOORS,
-        'num_elevators': 4,
-        'elevator_capacity': 10,
+        'num_elevators': NUM_ELEVATORS,
+        'elevator_capacity': MAX_CAPACITY,
         'full_load_bypass': FULL_LOAD_BYPASS,
         'floor_height': FLOOR_HEIGHT,
         'max_speed': MAX_SPEED,
         'acceleration': ACCELERATION,
         'jerk': JERK,
         'sim_duration': SIM_DURATION,
-        'random_seed': 42
+        'random_seed': sim_config.random_seed,
+        'config_files': {
+            'simulation': sim_config_path,
+            'group_control': gc_config_path
+        }
     })
+    
+    # --- Call system configuration ---
+    call_system = TraditionalCallSystem(num_floors=NUM_FLOORS)
+    passenger_behavior = AdaptivePassengerBehavior()
+    
+    # --- Create strategies from config ---
+    # Allocation strategy
+    alloc_strategy_name = gc_config.allocation_strategy.name
+    if alloc_strategy_name == "NearestCar":
+        allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
+    else:
+        raise ValueError(f"Unknown allocation strategy: {alloc_strategy_name}")
+    
+    # Repositioning strategy
+    repos_strategy_name = gc_config.repositioning_strategy.name
+    if repos_strategy_name == "TestForcedMove":
+        repositioning_strategy = TestForcedMoveStrategy()
+    elif repos_strategy_name == "None":
+        repositioning_strategy = None
+    else:
+        raise ValueError(f"Unknown repositioning strategy: {repos_strategy_name}")
 
     # --- Physics engine preparation ---
     floor_heights = [0] + [i * FLOOR_HEIGHT for i in range(1, NUM_FLOORS + 1)]
     physics_engine = PhysicsEngine(floor_heights, MAX_SPEED, ACCELERATION, JERK)
-    
-    # Use practical table method by default
     flight_profiles = physics_engine.precompute_flight_profiles()
 
     # --- Shared resource creation ---
@@ -90,7 +127,6 @@ def run_simulation():
     ]
 
     # --- Entity creation ---
-    # Note: GCS no longer takes env parameter - it communicates only through MessageBroker
     gcs = GroupControlSystem("GCS", broker, allocation_strategy, repositioning_strategy)
     
     hall_buttons = [
@@ -99,40 +135,40 @@ def run_simulation():
         for floor in range(NUM_FLOORS + 1)
     ]
 
-    # Create Elevator 1
-    door1 = Door(env, "Elevator_1_Door")
-    elevator1 = Elevator(env, "Elevator_1", broker, NUM_FLOORS, floor_queues, door=door1, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
-    gcs.register_elevator(elevator1)
+    # Create elevators dynamically based on config
+    elevators = []
+    for i in range(1, NUM_ELEVATORS + 1):
+        door = Door(env, f"Elevator_{i}_Door")
+        elevator = Elevator(
+            env, f"Elevator_{i}", broker, NUM_FLOORS, floor_queues,
+            door=door,
+            flight_profiles=flight_profiles,
+            physics_engine=physics_engine,
+            hall_buttons=hall_buttons,
+            max_capacity=MAX_CAPACITY,
+            full_load_bypass=FULL_LOAD_BYPASS,
+            home_floor=HOME_FLOOR,
+            main_direction=MAIN_DIRECTION
+        )
+        gcs.register_elevator(elevator)
+        elevators.append(elevator)
     
-    # Create Elevator 2
-    door2 = Door(env, "Elevator_2_Door")
-    elevator2 = Elevator(env, "Elevator_2", broker, NUM_FLOORS, floor_queues, door=door2, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
-    gcs.register_elevator(elevator2)
-    
-    # Create Elevator 3
-    door3 = Door(env, "Elevator_3_Door")
-    elevator3 = Elevator(env, "Elevator_3", broker, NUM_FLOORS, floor_queues, door=door3, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
-    gcs.register_elevator(elevator3)
-    
-    # Create Elevator 4
-    door4 = Door(env, "Elevator_4_Door")
-    elevator4 = Elevator(env, "Elevator_4", broker, NUM_FLOORS, floor_queues, door=door4, flight_profiles=flight_profiles, physics_engine=physics_engine, hall_buttons=hall_buttons, max_capacity=10, full_load_bypass=FULL_LOAD_BYPASS)
-    gcs.register_elevator(elevator4)
-    
-    # Start GCS processes (simulator's responsibility to start processes)
+    # Start GCS processes
     env.process(gcs.run())
-    env.process(gcs.start_status_listener("Elevator_1"))
-    env.process(gcs.start_status_listener("Elevator_2"))
-    env.process(gcs.start_status_listener("Elevator_3"))
-    env.process(gcs.start_status_listener("Elevator_4"))
+    for i in range(1, NUM_ELEVATORS + 1):
+        env.process(gcs.start_status_listener(f"Elevator_{i}"))
 
     # --- Process startup ---
     # For normal testing
     # env.process(passenger_generator(env, broker, hall_buttons, floor_queues))
     
     # For integrated testing (boarding/alighting on same floor)
-    env.process(passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
-                                                    call_system, passenger_behavior, sim_stats))
+    env.process(passenger_generator_integrated_test(
+        env, broker, hall_buttons, floor_queues, 
+        call_system, passenger_behavior, sim_stats,
+        generation_rate=PASSENGER_GENERATION_RATE,
+        num_floors=NUM_FLOORS
+    ))
 
     print("\n--- Simulation Start ---")
     env.run(until=SIM_DURATION)
@@ -151,11 +187,16 @@ def run_simulation():
     sim_stats.plot_trajectory_diagram()
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
-                                       call_system, passenger_behavior, statistics):
-    """Continuous passenger generation for extended simulation"""
-    import random
+                                       call_system, passenger_behavior, statistics,
+                                       generation_rate=0.1, num_floors=10):
+    """
+    Continuous passenger generation for extended simulation
     
-    print("--- Continuous Passenger Generation (Extended) ---")
+    Args:
+        generation_rate: Passengers per second (e.g., 0.1 = 1 passenger every 10 seconds average)
+        num_floors: Number of floors in the building
+    """
+    print(f"--- Continuous Passenger Generation (Rate: {generation_rate} passengers/sec) ---")
     
     passenger_id = 0
     base_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", 
@@ -163,17 +204,21 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
                  "Rachel", "Steve", "Tina", "Uma", "Victor", "Wendy", "Xavier", "Yuki", "Zack"]
     
     while True:
-        # Wait random interval between passengers (1-5 seconds) - high frequency
-        yield env.timeout(random.uniform(1, 5))
+        # Wait based on generation rate (exponential distribution)
+        if generation_rate > 0:
+            wait_time = random.expovariate(generation_rate)
+        else:
+            wait_time = random.uniform(1, 5)  # Fallback
+        yield env.timeout(wait_time)
         
         passenger_id += 1
         name = f"{base_names[passenger_id % len(base_names)]}_{passenger_id}"
         
         # Random floor selection
-        arrival_floor = random.randint(1, 10)
-        destination_floor = random.randint(1, 10)
+        arrival_floor = random.randint(1, num_floors)
+        destination_floor = random.randint(1, num_floors)
         while destination_floor == arrival_floor:
-            destination_floor = random.randint(1, 10)
+            destination_floor = random.randint(1, num_floors)
         
         move_speed = random.uniform(0.8, 1.5)
         

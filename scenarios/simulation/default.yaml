@@ -1,0 +1,42 @@
+# Simulation Configuration: Default Settings
+# Basic configuration matching the original main.py settings
+
+simulation:
+  # Building specifications
+  building:
+    num_floors: 10
+    floor_height: 3.5  # meters
+    lobby_floor: 1
+  
+  # Elevator specifications
+  elevator:
+    num_elevators: 4
+    max_capacity: 10  # persons
+    rated_speed: 2.5  # m/s
+    acceleration: 1.0  # m/s²
+    jerk: 2.0  # m/s³
+    full_load_bypass: true
+    home_floor: 1
+    main_direction: "UP"
+  
+  # Door specifications
+  door:
+    open_time: 2.0  # seconds
+    close_time: 2.0  # seconds
+    reopen_delay: 0.5  # seconds
+  
+  # Traffic pattern
+  traffic:
+    pattern: "uniform"
+    simulation_duration: 300.0  # seconds (5 minutes)
+    passenger_generation_rate: 0.1  # passengers per second
+    od_matrix: null  # Uniform distribution
+    
+    # Passenger behavior
+    avg_boarding_time: 1.0  # seconds per passenger
+    avg_alighting_time: 0.8  # seconds per passenger
+  
+  # Simulation control
+  random_seed: null  # Random seed for reproducibility (null = random)
+  realtime_factor: 0.0  # 0.0 = as fast as possible, 1.0 = realtime
+

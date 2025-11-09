@@ -1,0 +1,55 @@
+# Simulation Configuration: Office Building - Morning Rush Hour
+# Typical office building scenario with upward peak traffic
+
+simulation:
+  # Building specifications
+  building:
+    num_floors: 10
+    floor_height: 3.5  # meters
+    lobby_floor: 1
+  
+  # Elevator specifications
+  elevator:
+    num_elevators: 4
+    max_capacity: 10  # persons
+    rated_speed: 2.5  # m/s
+    acceleration: 1.0  # m/s²
+    jerk: 2.0  # m/s³
+    full_load_bypass: true
+    home_floor: 1
+    main_direction: "UP"
+  
+  # Door specifications
+  door:
+    open_time: 2.0  # seconds
+    close_time: 2.0  # seconds
+    reopen_delay: 0.5  # seconds
+  
+  # Traffic pattern
+  traffic:
+    pattern: "morning_rush"
+    simulation_duration: 300.0  # seconds (5 minutes)
+    passenger_generation_rate: 0.1  # passengers per second
+    
+    # Origin-Destination matrix (10x10 for 10 floors)
+    # High traffic from floor 1 to upper floors (morning rush)
+    od_matrix:
+      - [0.00, 0.15, 0.15, 0.15, 0.15, 0.10, 0.10, 0.08, 0.07, 0.05]  # From floor 1
+      - [0.90, 0.00, 0.02, 0.02, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 2
+      - [0.90, 0.02, 0.00, 0.02, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 3
+      - [0.90, 0.02, 0.02, 0.00, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 4
+      - [0.90, 0.02, 0.02, 0.02, 0.00, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 5
+      - [0.90, 0.02, 0.02, 0.02, 0.02, 0.00, 0.01, 0.01, 0.00, 0.00]  # From floor 6
+      - [0.90, 0.02, 0.02, 0.02, 0.02, 0.01, 0.00, 0.01, 0.00, 0.00]  # From floor 7
+      - [0.92, 0.02, 0.02, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00]  # From floor 8
+      - [0.93, 0.02, 0.02, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00]  # From floor 9
+      - [0.94, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00]  # From floor 10
+    
+    # Passenger behavior
+    avg_boarding_time: 1.0  # seconds per passenger
+    avg_alighting_time: 0.8  # seconds per passenger
+  
+  # Simulation control
+  random_seed: 42  # For reproducibility
+  realtime_factor: 0.0  # 0.0 = as fast as possible, 1.0 = realtime
+

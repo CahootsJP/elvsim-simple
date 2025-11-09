@@ -90,14 +90,36 @@ pip install elvsim
 ### Run Simulation
 
 ```bash
+# Run with default configuration
 python main.py
+
+# Run with custom configuration files
+python -c "from main import run_simulation; run_simulation('scenarios/simulation/office_morning_rush.yaml', 'scenarios/group_control/nearest_car.yaml')"
 ```
 
 This will:
-- ✅ Simulate 3 elevators with 10 floors
-- ✅ Run for 600 seconds (10 minutes)
+- ✅ Simulate 4 elevators with 10 floors
+- ✅ Run for configured duration (default: 300 seconds)
 - ✅ Save logs to `simulation_log.jsonl`
 - ✅ Generate trajectory diagram
+
+### Configuration Files
+
+**NEW**: Settings are now managed via YAML configuration files!
+
+```bash
+# Available configurations
+scenarios/
+├── group_control/           # Group control settings (real-system compatible)
+│   ├── nearest_car.yaml
+│   └── test_forced_move.yaml
+└── simulation/             # Simulation settings (simulator only)
+    ├── default.yaml
+    ├── office_morning_rush.yaml
+    └── test_short.yaml
+```
+
+See [`config/README.md`](config/README.md) for detailed configuration documentation.
 
 ---
 
@@ -136,6 +158,22 @@ For details, see [`visualizer/README.md`](visualizer/README.md).
 
 ```
 elvsim-simple/
+│
+├── config/                 # Configuration management (NEW!)
+│   ├── __init__.py         # Configuration package
+│   ├── group_control.py    # Group control config classes
+│   ├── simulation.py       # Simulation config classes
+│   ├── config_loader.py    # YAML loader utilities
+│   └── README.md           # Configuration documentation
+│
+├── scenarios/              # Configuration files (NEW!)
+│   ├── group_control/      # Group control settings
+│   │   ├── nearest_car.yaml
+│   │   └── test_forced_move.yaml
+│   └── simulation/         # Simulation settings
+│       ├── default.yaml
+│       ├── office_morning_rush.yaml
+│       └── test_short.yaml
 │
 ├── simulator/              # PyPI: elvsim-simulator
 │   ├── core/               # Core entities
@@ -263,47 +301,78 @@ pip install elvsim-controller-pro
 
 ---
 
-## 📊 Simulation Parameters (`main.py`)
+## 📊 Simulation Parameters (Configuration Files)
+
+**NEW**: Parameters are now configured via YAML files instead of hardcoded values!
+
+### Default Configuration (`scenarios/simulation/default.yaml`)
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
-| `SIM_DURATION` | 600s | Simulation time |
-| `NUM_FLOORS` | 10 | Number of floors |
-| `NUM_ELEVATORS` | 3 | Number of elevators |
-| `FLOOR_HEIGHT` | 3.5m | Floor height |
-| `MAX_SPEED` | 2.5m/s | Maximum speed |
-| `ACCELERATION` | 1.0m/s² | Acceleration |
-| `JERK` | 2.0m/s³ | Jerk |
-| `CAPACITY` | 10 people | Capacity |
+| `simulation_duration` | 300s | Simulation time |
+| `num_floors` | 10 | Number of floors |
+| `num_elevators` | 4 | Number of elevators |
+| `floor_height` | 3.5m | Floor height |
+| `rated_speed` | 2.5m/s | Maximum speed |
+| `acceleration` | 1.0m/s² | Acceleration |
+| `jerk` | 2.0m/s³ | Jerk |
+| `max_capacity` | 10 people | Capacity |
+| `passenger_generation_rate` | 0.1/s | Passenger generation rate |
+
+Edit configuration files in `scenarios/` to customize parameters!
 
 ---
 
 ## 🔧 Customization
 
+**NEW**: Use configuration files for easy customization!
+
 ### Change Number of Elevators
 
-Edit the following section in `main.py`:
+Edit `scenarios/simulation/default.yaml`:
 
-```python
-# Create elevators
-for i in range(1, 4):  # 3 elevators → change to any number
-    door = Door(env, f"Elevator_{i}_Door")
-    elevator = Elevator(env, f"Elevator_{i}", broker, NUM_FLOORS, ...)
-    gcs.register_elevator(elevator)
+```yaml
+simulation:
+  elevator:
+    num_elevators: 4  # Change to any number
+    max_capacity: 10
+    rated_speed: 2.5
+    # ... other settings
 ```
 
 ### Change Passenger Generation Pattern
 
-Edit the `passenger_generator_integrated_test()` function in `main.py`:
+Edit `scenarios/simulation/default.yaml`:
 
-```python
-def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues):
-    # Customize passenger generation logic here
-    yield env.timeout(random.uniform(1, 5))  # Generation interval
-    arrival_floor = random.randint(1, 10)    # Origin floor
-    destination_floor = random.randint(1, 10) # Destination floor
-    ...
+```yaml
+simulation:
+  traffic:
+    passenger_generation_rate: 0.2  # Passengers per second (0.2 = 1 per 5 seconds avg)
+    simulation_duration: 600.0      # Simulation time in seconds
+    
+    # Custom Origin-Destination matrix (optional)
+    od_matrix:
+      - [0.00, 0.15, 0.15, ...]  # From floor 1 to others
+      - [0.90, 0.00, 0.02, ...]  # From floor 2 to others
+      # ...
 ```
+
+See [`config/README.md`](config/README.md) for full configuration options.
+
+### Create Custom Scenario
+
+1. Copy existing configuration:
+   ```bash
+   cp scenarios/simulation/default.yaml scenarios/simulation/my_scenario.yaml
+   ```
+
+2. Edit settings in `my_scenario.yaml`
+
+3. Run simulation:
+   ```python
+   from main import run_simulation
+   run_simulation('scenarios/simulation/my_scenario.yaml')
+   ```
 
 ---
 

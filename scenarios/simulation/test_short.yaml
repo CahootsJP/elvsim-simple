@@ -1,0 +1,33 @@
+# Short test simulation (10 seconds)
+simulation:
+  building:
+    num_floors: 10
+    floor_height: 3.5
+    lobby_floor: 1
+  
+  elevator:
+    num_elevators: 4
+    max_capacity: 10
+    rated_speed: 2.5
+    acceleration: 1.0
+    jerk: 2.0
+    full_load_bypass: true
+    home_floor: 1
+    main_direction: "UP"
+  
+  door:
+    open_time: 2.0
+    close_time: 2.0
+    reopen_delay: 0.5
+  
+  traffic:
+    pattern: "uniform"
+    simulation_duration: 10.0  # 10 seconds for quick test
+    passenger_generation_rate: 0.1
+    od_matrix: null
+    avg_boarding_time: 1.0
+    avg_alighting_time: 0.8
+  
+  random_seed: 42
+  realtime_factor: 0.0
+
