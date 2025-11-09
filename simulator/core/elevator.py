@@ -14,7 +14,7 @@ class Elevator(Entity):
     # Physics constants
     MIN_BRAKE_TIME_THRESHOLD = 0.05  # Minimum brake time to trigger DECELERATING state (seconds)
 
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10, full_load_bypass: bool = True):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10, full_load_bypass: bool = True, home_floor: int = 1, main_direction: str = "UP"):
         # Initialize direction before calling super().__init__
         self.direction = "NO_DIRECTION"
         
@@ -28,6 +28,10 @@ class Elevator(Entity):
         self.hall_buttons = hall_buttons  # Reference to hall buttons
         self.max_capacity = max_capacity  # Maximum number of passengers
         self.full_load_bypass = full_load_bypass  # True: bypass when full, False: stop even when full
+        
+        # Building characteristics
+        self.home_floor = home_floor  # Home floor (typically lobby where elevator returns when idle)
+        self.main_direction = main_direction  # Main traffic direction ("UP" or "DOWN", typically "UP" for office buildings)
 
         self.current_floor = 1
         
@@ -115,7 +119,9 @@ class Elevator(Entity):
             "passengers": len(self.passengers_onboard),
             "passengers_count": len(self.passengers_onboard),  # For WebSocket visualization
             "max_capacity": self.max_capacity,  # For WebSocket visualization
-            "num_floors": self.num_floors  # For WebSocket visualization
+            "num_floors": self.num_floors,  # For WebSocket visualization
+            "home_floor": self.home_floor,  # Home floor (for repositioning strategies)
+            "main_direction": self.main_direction  # Main traffic direction (for optimization)
         }
         yield self.broker.put(self.status_topic, status_message)
 
