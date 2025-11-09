@@ -25,6 +25,7 @@ class Statistics:
         self.door_events_history = {}  # Door events history by elevator
         self.passenger_count_history = {}  # Passenger count history by elevator for visualization
         self.waiting_passengers = {}  # Current waiting passengers by floor and direction
+        self.last_forced_calls = {}  # Track previous forced_calls state to detect removals
         
         # Track current elevator states for real-time updates
         self.current_elevator_states = {}  # {elevator_name: {floor, state, passengers, etc.}}
@@ -202,12 +203,26 @@ class Statistics:
             if forced_calls_match:
                 elevator_name = forced_calls_match.group(1)
                 timestamp = message.get('timestamp')
-                forced_calls_up = message.get('forced_calls_up', [])
-                forced_calls_down = message.get('forced_calls_down', [])
+                forced_calls_up = set(message.get('forced_calls_up', []))
+                forced_calls_down = set(message.get('forced_calls_down', []))
                 current_floor = message.get('current_floor')
                 
-                # Log events for each forced call
-                for floor in forced_calls_up:
+                # Initialize previous state if not exists
+                if elevator_name not in self.last_forced_calls:
+                    self.last_forced_calls[elevator_name] = {
+                        'up': set(),
+                        'down': set()
+                    }
+                
+                prev_forced_up = self.last_forced_calls[elevator_name]['up']
+                prev_forced_down = self.last_forced_calls[elevator_name]['down']
+                
+                # Detect NEW forced calls (ON events)
+                new_forced_up = forced_calls_up - prev_forced_up
+                new_forced_down = forced_calls_down - prev_forced_down
+                
+                # Log ON events for new forced calls
+                for floor in new_forced_up:
                     self._add_event_log('forced_move_command', {
                         'elevator': elevator_name,
                         'floor': floor,
@@ -215,7 +230,7 @@ class Statistics:
                         'current_floor': current_floor
                     })
                 
-                for floor in forced_calls_down:
+                for floor in new_forced_down:
                     self._add_event_log('forced_move_command', {
                         'elevator': elevator_name,
                         'floor': floor,
@@ -223,10 +238,33 @@ class Statistics:
                         'current_floor': current_floor
                     })
                 
+                # Detect REMOVED forced calls (OFF events)
+                removed_forced_up = prev_forced_up - forced_calls_up
+                removed_forced_down = prev_forced_down - forced_calls_down
+                
+                # Log OFF events for removed forced calls
+                for floor in removed_forced_up:
+                    self._add_event_log('forced_call_off', {
+                        'elevator': elevator_name,
+                        'floor': floor,
+                        'direction': 'UP'
+                    })
+                
+                for floor in removed_forced_down:
+                    self._add_event_log('forced_call_off', {
+                        'elevator': elevator_name,
+                        'floor': floor,
+                        'direction': 'DOWN'
+                    })
+                
+                # Update last known state
+                self.last_forced_calls[elevator_name]['up'] = forced_calls_up.copy()
+                self.last_forced_calls[elevator_name]['down'] = forced_calls_down.copy()
+                
                 # Update current elevator state with forced_calls for real-time display
                 if elevator_name in self.current_elevator_states:
-                    self.current_elevator_states[elevator_name]['forced_calls_up'] = forced_calls_up
-                    self.current_elevator_states[elevator_name]['forced_calls_down'] = forced_calls_down
+                    self.current_elevator_states[elevator_name]['forced_calls_up'] = list(forced_calls_up)
+                    self.current_elevator_states[elevator_name]['forced_calls_down'] = list(forced_calls_down)
                     
                     # Send updated state to WebSocket
                     self._send_to_websocket({

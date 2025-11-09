@@ -22,7 +22,9 @@ class ElevatorVisualizer {
         // Replay state tracking
         this.replayState = {
             hallCalls: {},  // {elevatorName: {up: Set(), down: Set()}}
-            carCalls: {}    // {elevatorName: Set()}
+            carCalls: {},    // {elevatorName: Set()}
+            forcedCalls: {}, // {elevatorName: {up: Set(), down: Set()}}
+            moveCommands: {} // {elevatorName: targetFloor}
         };
         
         // Metrics tracking
@@ -445,7 +447,9 @@ class ElevatorVisualizer {
         // Clear replay state
         this.replayState = {
             hallCalls: {},
-            carCalls: {}
+            carCalls: {},
+            forcedCalls: {},
+            moveCommands: {}
         };
         
         // Clear waiting passengers
@@ -1462,19 +1466,49 @@ class ElevatorVisualizer {
         // Convert JSONL event format to WebSocket message format
         switch (event.type) {
             case 'elevator_status':
+                // Track forced_calls and move_commands in replay state
+                const elevatorName = event.data.elevator;
+                
+                // Initialize forced calls tracking if needed
+                if (!this.replayState.forcedCalls[elevatorName]) {
+                    this.replayState.forcedCalls[elevatorName] = {
+                        up: new Set(),
+                        down: new Set()
+                    };
+                }
+                
+                // Initialize move commands tracking if needed
+                if (this.replayState.moveCommands[elevatorName] === undefined) {
+                    this.replayState.moveCommands[elevatorName] = null;
+                }
+                
+                // Note: forced_calls are now managed by forced_move_command (ON) and forced_call_off (OFF) events
+                // No need to process from elevator_status
+                
+                // Track move command (set when not null/undefined)
+                if (event.data.move_command_target_floor !== null && event.data.move_command_target_floor !== undefined) {
+                    this.replayState.moveCommands[elevatorName] = event.data.move_command_target_floor;
+                } else if (event.data.move_command_target_floor === null) {
+                    // Explicitly null means cleared
+                    delete this.replayState.moveCommands[elevatorName];
+                }
+                
                 return {
                     type: 'elevator_update',
                     data: {
-                        elevator_name: event.data.elevator,
+                        elevator_name: elevatorName,
                         floor: event.data.floor,
                         state: event.data.state,
                         direction: event.data.direction || 'NO_DIRECTION',
                         passengers: event.data.passengers,
                         capacity: event.data.capacity,
                         num_floors: 10, // Default
-                        car_calls: this.getCarCallsForElevator(event.data.elevator),
-                        hall_calls_up: this.getHallCallsUp(event.data.elevator),
-                        hall_calls_down: this.getHallCallsDown(event.data.elevator)
+                        car_calls: this.getCarCallsForElevator(elevatorName),
+                        hall_calls_up: this.getHallCallsUp(elevatorName),
+                        hall_calls_down: this.getHallCallsDown(elevatorName),
+                        move_command_target_floor: this.replayState.moveCommands[elevatorName],
+                        forced_calls_up: Array.from(this.replayState.forcedCalls[elevatorName].up),
+                        forced_calls_down: Array.from(this.replayState.forcedCalls[elevatorName].down)
                     }
                 };
             
@@ -1509,6 +1543,10 @@ class ElevatorVisualizer {
                 }
                 
                 // Immediately trigger calls update (without changing elevator position)
+                // Initialize forced calls if needed
+                if (!this.replayState.forcedCalls[elevator]) {
+                    this.replayState.forcedCalls[elevator] = { up: new Set(), down: new Set() };
+                }
                 return {
                     type: 'calls_update',
                     data: {
@@ -1516,7 +1554,10 @@ class ElevatorVisualizer {
                         num_floors: 10,
                         car_calls: this.getCarCallsForElevator(elevator),
                         hall_calls_up: this.getHallCallsUp(elevator),
-                        hall_calls_down: this.getHallCallsDown(elevator)
+                        hall_calls_down: this.getHallCallsDown(elevator),
+                        move_command_target_floor: this.replayState.moveCommands[elevator],
+                        forced_calls_up: Array.from(this.replayState.forcedCalls[elevator].up),
+                        forced_calls_down: Array.from(this.replayState.forcedCalls[elevator].down)
                     }
                 };
             
@@ -1535,6 +1576,10 @@ class ElevatorVisualizer {
                 }
                 
                 // Immediately trigger calls update to hide hall call
+                // Initialize forced calls if needed
+                if (!this.replayState.forcedCalls[offElevator]) {
+                    this.replayState.forcedCalls[offElevator] = { up: new Set(), down: new Set() };
+                }
                 return {
                     type: 'calls_update',
                     data: {
@@ -1542,7 +1587,10 @@ class ElevatorVisualizer {
                         num_floors: 10,
                         car_calls: this.getCarCallsForElevator(offElevator),
                         hall_calls_up: this.getHallCallsUp(offElevator),
-                        hall_calls_down: this.getHallCallsDown(offElevator)
+                        hall_calls_down: this.getHallCallsDown(offElevator),
+                        move_command_target_floor: this.replayState.moveCommands[offElevator],
+                        forced_calls_up: Array.from(this.replayState.forcedCalls[offElevator].up),
+                        forced_calls_down: Array.from(this.replayState.forcedCalls[offElevator].down)
                     }
                 };
             
@@ -1565,6 +1613,10 @@ class ElevatorVisualizer {
                 this.replayState.carCalls[carElevator].add(carFloor);
                 
                 // Immediately trigger calls update to show car call
+                // Initialize forced calls if needed
+                if (!this.replayState.forcedCalls[carElevator]) {
+                    this.replayState.forcedCalls[carElevator] = { up: new Set(), down: new Set() };
+                }
                 return {
                     type: 'calls_update',
                     data: {
@@ -1572,7 +1624,10 @@ class ElevatorVisualizer {
                         num_floors: 10,
                         car_calls: this.getCarCallsForElevator(carElevator),
                         hall_calls_up: this.getHallCallsUp(carElevator),
-                        hall_calls_down: this.getHallCallsDown(carElevator)
+                        hall_calls_down: this.getHallCallsDown(carElevator),
+                        move_command_target_floor: this.replayState.moveCommands[carElevator],
+                        forced_calls_up: Array.from(this.replayState.forcedCalls[carElevator].up),
+                        forced_calls_down: Array.from(this.replayState.forcedCalls[carElevator].down)
                     }
                 };
             
@@ -1586,6 +1641,10 @@ class ElevatorVisualizer {
                 }
                 
                 // Immediately trigger calls update to hide car call
+                // Initialize forced calls if needed
+                if (!this.replayState.forcedCalls[carOffElevator]) {
+                    this.replayState.forcedCalls[carOffElevator] = { up: new Set(), down: new Set() };
+                }
                 return {
                     type: 'calls_update',
                     data: {
@@ -1593,7 +1652,10 @@ class ElevatorVisualizer {
                         num_floors: 10,
                         car_calls: this.getCarCallsForElevator(carOffElevator),
                         hall_calls_up: this.getHallCallsUp(carOffElevator),
-                        hall_calls_down: this.getHallCallsDown(carOffElevator)
+                        hall_calls_down: this.getHallCallsDown(carOffElevator),
+                        move_command_target_floor: this.replayState.moveCommands[carOffElevator],
+                        forced_calls_up: Array.from(this.replayState.forcedCalls[carOffElevator].up),
+                        forced_calls_down: Array.from(this.replayState.forcedCalls[carOffElevator].down)
                     }
                 };
             
@@ -1633,6 +1695,73 @@ class ElevatorVisualizer {
                     type: 'passenger_alighting',
                     data: event.data,
                     time: event.time  // Add time for consistency
+                };
+            
+            case 'forced_move_command':
+                // Add forced call to replay state (ON event)
+                const onElevator = event.data.elevator;
+                const onFloor = event.data.floor;
+                const onDirection = event.data.direction;
+                
+                if (!this.replayState.forcedCalls[onElevator]) {
+                    this.replayState.forcedCalls[onElevator] = {
+                        up: new Set(),
+                        down: new Set()
+                    };
+                }
+                
+                if (onDirection === 'UP') {
+                    this.replayState.forcedCalls[onElevator].up.add(onFloor);
+                } else {
+                    this.replayState.forcedCalls[onElevator].down.add(onFloor);
+                }
+                
+                console.log(`[Replay] forced_move_command: ${onElevator} floor ${onFloor} ${onDirection} - ON`);
+                
+                // Immediately trigger calls update to show forced call (same as hall_call_assignment)
+                return {
+                    type: 'calls_update',
+                    data: {
+                        elevator_name: onElevator,
+                        num_floors: 10,
+                        car_calls: this.getCarCallsForElevator(onElevator),
+                        hall_calls_up: this.getHallCallsUp(onElevator),
+                        hall_calls_down: this.getHallCallsDown(onElevator),
+                        move_command_target_floor: this.replayState.moveCommands[onElevator],
+                        forced_calls_up: Array.from(this.replayState.forcedCalls[onElevator].up),
+                        forced_calls_down: Array.from(this.replayState.forcedCalls[onElevator].down)
+                    }
+                };
+            
+            case 'forced_call_off':
+                // Remove forced call from replay state (OFF event)
+                const forcedOffElevator = event.data.elevator;
+                const forcedOffFloor = event.data.floor;
+                const forcedOffDirection = event.data.direction;
+                
+                if (this.replayState && this.replayState.forcedCalls[forcedOffElevator]) {
+                    if (forcedOffDirection === 'UP') {
+                        this.replayState.forcedCalls[forcedOffElevator].up.delete(forcedOffFloor);
+                    } else {
+                        this.replayState.forcedCalls[forcedOffElevator].down.delete(forcedOffFloor);
+                    }
+                }
+                
+                console.log(`[Replay] forced_call_off: ${forcedOffElevator} floor ${forcedOffFloor} ${forcedOffDirection} - OFF`);
+                
+                // Immediately trigger calls update to hide forced call (same as hall_call_off)
+                return {
+                    type: 'calls_update',
+                    data: {
+                        elevator_name: forcedOffElevator,
+                        num_floors: 10,
+                        car_calls: this.getCarCallsForElevator(forcedOffElevator),
+                        hall_calls_up: this.getHallCallsUp(forcedOffElevator),
+                        hall_calls_down: this.getHallCallsDown(forcedOffElevator),
+                        move_command_target_floor: this.replayState.moveCommands[forcedOffElevator],
+                        forced_calls_up: Array.from(this.replayState.forcedCalls[forcedOffElevator].up),
+                        forced_calls_down: Array.from(this.replayState.forcedCalls[forcedOffElevator].down)
+                    }
                 };
             
             default:
