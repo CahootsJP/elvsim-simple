@@ -24,7 +24,7 @@ from controller.algorithms.test_forced_move import TestForcedMoveStrategy
 # Analyzer
 from analyzer.simulation_statistics import SimulationStatistics
 
-def run_simulation(sim_config_path="scenarios/simulation/default.yaml",
+def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yaml",
                    gc_config_path="scenarios/group_control/test_forced_move.yaml"):
     """
     Set up and run the entire simulation
@@ -167,7 +167,8 @@ def run_simulation(sim_config_path="scenarios/simulation/default.yaml",
         env, broker, hall_buttons, floor_queues, 
         call_system, passenger_behavior, sim_stats,
         generation_rate=PASSENGER_GENERATION_RATE,
-        num_floors=NUM_FLOORS
+        num_floors=NUM_FLOORS,
+        od_matrix=sim_config.traffic.od_matrix
     ))
 
     print("\n--- Simulation Start ---")
@@ -188,15 +189,20 @@ def run_simulation(sim_config_path="scenarios/simulation/default.yaml",
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
                                        call_system, passenger_behavior, statistics,
-                                       generation_rate=0.1, num_floors=10):
+                                       generation_rate=0.1, num_floors=10, od_matrix=None):
     """
     Continuous passenger generation for extended simulation
     
     Args:
         generation_rate: Passengers per second (e.g., 0.1 = 1 passenger every 10 seconds average)
         num_floors: Number of floors in the building
+        od_matrix: Origin-Destination matrix (num_floors x num_floors). If None, uses uniform distribution.
     """
     print(f"--- Continuous Passenger Generation (Rate: {generation_rate} passengers/sec) ---")
+    if od_matrix is not None:
+        print(f"    Using OD matrix ({len(od_matrix)}x{len(od_matrix[0])}) for traffic pattern")
+    else:
+        print(f"    Using uniform distribution (no OD matrix)")
     
     passenger_id = 0
     base_names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Henry", 
@@ -214,11 +220,35 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
         passenger_id += 1
         name = f"{base_names[passenger_id % len(base_names)]}_{passenger_id}"
         
-        # Random floor selection
-        arrival_floor = random.randint(1, num_floors)
-        destination_floor = random.randint(1, num_floors)
-        while destination_floor == arrival_floor:
+        # Floor selection based on OD matrix or uniform distribution
+        if od_matrix is not None and len(od_matrix) == num_floors:
+            # Use OD matrix to determine origin and destination
+            # 1. Select origin floor based on total outgoing traffic from each floor
+            origin_weights = [sum(row) for row in od_matrix]
+            arrival_floor = random.choices(range(1, num_floors + 1), weights=origin_weights, k=1)[0]
+            
+            # 2. Select destination floor based on OD matrix row for the origin floor
+            od_row = od_matrix[arrival_floor - 1]  # 0-indexed
+            # Exclude same-floor trips (set probability to 0)
+            destination_weights = od_row.copy()
+            destination_weights[arrival_floor - 1] = 0.0
+            
+            # Normalize weights
+            total_weight = sum(destination_weights)
+            if total_weight > 0:
+                destination_weights = [w / total_weight for w in destination_weights]
+                destination_floor = random.choices(range(1, num_floors + 1), weights=destination_weights, k=1)[0]
+            else:
+                # Fallback: random destination (excluding origin)
+                destination_floor = random.randint(1, num_floors)
+                while destination_floor == arrival_floor:
+                    destination_floor = random.randint(1, num_floors)
+        else:
+            # Fallback: Uniform random distribution
+            arrival_floor = random.randint(1, num_floors)
             destination_floor = random.randint(1, num_floors)
+            while destination_floor == arrival_floor:
+                destination_floor = random.randint(1, num_floors)
         
         move_speed = random.uniform(0.8, 1.5)
         

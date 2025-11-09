@@ -29,21 +29,25 @@ simulation:
   traffic:
     pattern: "morning_rush"
     simulation_duration: 300.0  # seconds (5 minutes)
-    passenger_generation_rate: 0.1  # passengers per second
+    passenger_generation_rate: 0.3  # passengers per second (increased for morning rush)
     
     # Origin-Destination matrix (10x10 for 10 floors)
-    # High traffic from floor 1 to upper floors (morning rush)
+    # Morning rush: Heavy upward traffic from floor 1 (lobby) to upper floors
+    # Row sum represents generation rate from that floor
     od_matrix:
-      - [0.00, 0.15, 0.15, 0.15, 0.15, 0.10, 0.10, 0.08, 0.07, 0.05]  # From floor 1
-      - [0.90, 0.00, 0.02, 0.02, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 2
-      - [0.90, 0.02, 0.00, 0.02, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 3
-      - [0.90, 0.02, 0.02, 0.00, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 4
-      - [0.90, 0.02, 0.02, 0.02, 0.00, 0.01, 0.01, 0.01, 0.01, 0.00]  # From floor 5
-      - [0.90, 0.02, 0.02, 0.02, 0.02, 0.00, 0.01, 0.01, 0.00, 0.00]  # From floor 6
-      - [0.90, 0.02, 0.02, 0.02, 0.02, 0.01, 0.00, 0.01, 0.00, 0.00]  # From floor 7
-      - [0.92, 0.02, 0.02, 0.02, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00]  # From floor 8
-      - [0.93, 0.02, 0.02, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00]  # From floor 9
-      - [0.94, 0.02, 0.01, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00]  # From floor 10
+      # Floor 1 (Lobby): Heavy generation - people arriving and going up
+      - [0.00, 1.50, 1.50, 1.50, 1.50, 1.00, 1.00, 0.80, 0.70, 0.50]  # Sum = 10.00 (90% of traffic)
+      
+      # Floors 2-10: Minimal generation - few people leaving upper floors during morning rush
+      - [0.09, 0.00, 0.002, 0.002, 0.002, 0.001, 0.001, 0.001, 0.001, 0.00]  # Floor 2, Sum = 0.10
+      - [0.09, 0.002, 0.00, 0.002, 0.002, 0.001, 0.001, 0.001, 0.001, 0.00]  # Floor 3, Sum = 0.10
+      - [0.09, 0.002, 0.002, 0.00, 0.002, 0.001, 0.001, 0.001, 0.001, 0.00]  # Floor 4, Sum = 0.10
+      - [0.09, 0.002, 0.002, 0.002, 0.00, 0.001, 0.001, 0.001, 0.001, 0.00]  # Floor 5, Sum = 0.10
+      - [0.09, 0.002, 0.002, 0.002, 0.002, 0.00, 0.001, 0.001, 0.00, 0.00]  # Floor 6, Sum = 0.10
+      - [0.09, 0.002, 0.002, 0.002, 0.002, 0.001, 0.00, 0.001, 0.00, 0.00]  # Floor 7, Sum = 0.10
+      - [0.092, 0.002, 0.002, 0.002, 0.001, 0.001, 0.00, 0.00, 0.00, 0.00]  # Floor 8, Sum = 0.10
+      - [0.093, 0.002, 0.002, 0.001, 0.001, 0.001, 0.00, 0.00, 0.00, 0.00]  # Floor 9, Sum = 0.10
+      - [0.094, 0.002, 0.001, 0.001, 0.001, 0.001, 0.00, 0.00, 0.00, 0.00]  # Floor 10, Sum = 0.10
     
     # Passenger behavior
     avg_boarding_time: 1.0  # seconds per passenger
