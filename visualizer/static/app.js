@@ -521,6 +521,9 @@ class ElevatorVisualizer {
                 }
                 this.waitingPassengers[waitFloor][waitDirection]++;
                 
+                // Add to event log
+                this.addLog('info', `${data.passenger} waiting at floor ${waitFloor} ${waitDirection}`, message.time);
+                
                 // Trigger visualization update
                 this.updateWaitingPassengers(this.waitingPassengers);
                 break;
@@ -536,8 +539,111 @@ class ElevatorVisualizer {
                     this.waitingPassengers[boardFloor][boardDirection]--;
                 }
                 
+                // Add to event log
+                this.addLog('success', `${data.passenger_name} boarded ${data.elevator_name} at floor ${boardFloor}`, message.time);
+                
                 // Trigger visualization update
                 this.updateWaitingPassengers(this.waitingPassengers);
+                break;
+                
+            case 'passenger_alighting':
+                // Handle passenger alighting event
+                this.addLog('info', `${data.passenger_name} alighted from ${data.elevator_name} at floor ${data.floor}`, message.time);
+                break;
+            
+            case 'hall_call_registered':
+                // Handle hall call registration
+                this.addLog('warning', `Hall call registered: Floor ${data.floor} ${data.direction}`, message.time);
+                break;
+            
+            case 'hall_call_assignment':
+                // Handle hall call assignment
+                this.addLog('info', `Hall call ${data.floor} ${data.direction} assigned to ${data.elevator}`, message.time);
+                // Update call indicators (trigger calls_update)
+                this.updateCallsOnly({
+                    elevator_name: data.elevator,
+                    car_calls: this.getCarCallsForElevator(data.elevator),
+                    hall_calls_up: this.getHallCallsUp(data.elevator),
+                    hall_calls_down: this.getHallCallsDown(data.elevator),
+                    move_command_target_floor: this.replayState?.moveCommands?.[data.elevator],
+                    forced_calls_up: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].up) : [],
+                    forced_calls_down: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].down) : []
+                });
+                break;
+            
+            case 'hall_call_off':
+                // Handle hall call off
+                this.addLog('info', `Hall call off: Floor ${data.floor} ${data.direction} [${data.elevator}]`, message.time);
+                // Update call indicators
+                this.updateCallsOnly({
+                    elevator_name: data.elevator,
+                    car_calls: this.getCarCallsForElevator(data.elevator),
+                    hall_calls_up: this.getHallCallsUp(data.elevator),
+                    hall_calls_down: this.getHallCallsDown(data.elevator),
+                    move_command_target_floor: this.replayState?.moveCommands?.[data.elevator],
+                    forced_calls_up: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].up) : [],
+                    forced_calls_down: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].down) : []
+                });
+                break;
+            
+            case 'car_call_registered':
+                // Handle car call registration
+                this.addLog('info', `[${data.elevator_name}] Car call to floor ${data.floor}`, message.time);
+                // Update call indicators
+                this.updateCallsOnly({
+                    elevator_name: data.elevator_name,
+                    car_calls: this.getCarCallsForElevator(data.elevator_name),
+                    hall_calls_up: this.getHallCallsUp(data.elevator_name),
+                    hall_calls_down: this.getHallCallsDown(data.elevator_name),
+                    move_command_target_floor: this.replayState?.moveCommands?.[data.elevator_name],
+                    forced_calls_up: this.replayState?.forcedCalls?.[data.elevator_name] ? Array.from(this.replayState.forcedCalls[data.elevator_name].up) : [],
+                    forced_calls_down: this.replayState?.forcedCalls?.[data.elevator_name] ? Array.from(this.replayState.forcedCalls[data.elevator_name].down) : []
+                });
+                break;
+            
+            case 'car_call_off':
+                // Handle car call off
+                this.addLog('info', `[${data.elevator}] Car call off: Floor ${data.floor}`, message.time);
+                // Update call indicators
+                this.updateCallsOnly({
+                    elevator_name: data.elevator,
+                    car_calls: this.getCarCallsForElevator(data.elevator),
+                    hall_calls_up: this.getHallCallsUp(data.elevator),
+                    hall_calls_down: this.getHallCallsDown(data.elevator),
+                    move_command_target_floor: this.replayState?.moveCommands?.[data.elevator],
+                    forced_calls_up: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].up) : [],
+                    forced_calls_down: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].down) : []
+                });
+                break;
+            
+            case 'forced_move_command':
+                // Handle forced move command
+                this.addLog('warning', `[${data.elevator}] Forced move command: Floor ${data.floor} ${data.direction}`, message.time);
+                // Update call indicators
+                this.updateCallsOnly({
+                    elevator_name: data.elevator,
+                    car_calls: this.getCarCallsForElevator(data.elevator),
+                    hall_calls_up: this.getHallCallsUp(data.elevator),
+                    hall_calls_down: this.getHallCallsDown(data.elevator),
+                    move_command_target_floor: this.replayState?.moveCommands?.[data.elevator],
+                    forced_calls_up: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].up) : [],
+                    forced_calls_down: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].down) : []
+                });
+                break;
+            
+            case 'forced_call_off':
+                // Handle forced call off
+                this.addLog('info', `[${data.elevator}] Forced call off: Floor ${data.floor} ${data.direction}`, message.time);
+                // Update call indicators
+                this.updateCallsOnly({
+                    elevator_name: data.elevator,
+                    car_calls: this.getCarCallsForElevator(data.elevator),
+                    hall_calls_up: this.getHallCallsUp(data.elevator),
+                    hall_calls_down: this.getHallCallsDown(data.elevator),
+                    move_command_target_floor: this.replayState?.moveCommands?.[data.elevator],
+                    forced_calls_up: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].up) : [],
+                    forced_calls_down: this.replayState?.forcedCalls?.[data.elevator] ? Array.from(this.replayState.forcedCalls[data.elevator].down) : []
+                });
                 break;
                 
             case 'calls_update':
@@ -1513,8 +1619,15 @@ class ElevatorVisualizer {
                 };
             
             case 'hall_call_registered':
-                // Store hall call for later display
-                return null; // Will be displayed via elevator_status
+                // Return hall_call_registered event for event log
+                return {
+                    type: 'hall_call_registered',
+                    data: {
+                        floor: event.data.floor,
+                        direction: event.data.direction
+                    },
+                    time: event.time
+                };
             
             case 'hall_call_assignment':
                 // Track hall call assignment
@@ -1542,23 +1655,15 @@ class ElevatorVisualizer {
                     this.replayState.hallCalls[elevator].down.add(floor);
                 }
                 
-                // Immediately trigger calls update (without changing elevator position)
-                // Initialize forced calls if needed
-                if (!this.replayState.forcedCalls[elevator]) {
-                    this.replayState.forcedCalls[elevator] = { up: new Set(), down: new Set() };
-                }
+                // Return hall_call_assignment event for event log
                 return {
-                    type: 'calls_update',
+                    type: 'hall_call_assignment',
                     data: {
-                        elevator_name: elevator,
-                        num_floors: 10,
-                        car_calls: this.getCarCallsForElevator(elevator),
-                        hall_calls_up: this.getHallCallsUp(elevator),
-                        hall_calls_down: this.getHallCallsDown(elevator),
-                        move_command_target_floor: this.replayState.moveCommands[elevator],
-                        forced_calls_up: Array.from(this.replayState.forcedCalls[elevator].up),
-                        forced_calls_down: Array.from(this.replayState.forcedCalls[elevator].down)
-                    }
+                        elevator: elevator,
+                        floor: floor,
+                        direction: direction
+                    },
+                    time: event.time
                 };
             
             case 'hall_call_off':
@@ -1575,23 +1680,15 @@ class ElevatorVisualizer {
                     }
                 }
                 
-                // Immediately trigger calls update to hide hall call
-                // Initialize forced calls if needed
-                if (!this.replayState.forcedCalls[offElevator]) {
-                    this.replayState.forcedCalls[offElevator] = { up: new Set(), down: new Set() };
-                }
+                // Return hall_call_off event for event log
                 return {
-                    type: 'calls_update',
+                    type: 'hall_call_off',
                     data: {
-                        elevator_name: offElevator,
-                        num_floors: 10,
-                        car_calls: this.getCarCallsForElevator(offElevator),
-                        hall_calls_up: this.getHallCallsUp(offElevator),
-                        hall_calls_down: this.getHallCallsDown(offElevator),
-                        move_command_target_floor: this.replayState.moveCommands[offElevator],
-                        forced_calls_up: Array.from(this.replayState.forcedCalls[offElevator].up),
-                        forced_calls_down: Array.from(this.replayState.forcedCalls[offElevator].down)
-                    }
+                        elevator: offElevator,
+                        floor: offFloor,
+                        direction: offDirection
+                    },
+                    time: event.time
                 };
             
             case 'car_call_registered':
@@ -1612,23 +1709,14 @@ class ElevatorVisualizer {
                 
                 this.replayState.carCalls[carElevator].add(carFloor);
                 
-                // Immediately trigger calls update to show car call
-                // Initialize forced calls if needed
-                if (!this.replayState.forcedCalls[carElevator]) {
-                    this.replayState.forcedCalls[carElevator] = { up: new Set(), down: new Set() };
-                }
+                // Return car_call_registered event for event log
                 return {
-                    type: 'calls_update',
+                    type: 'car_call_registered',
                     data: {
                         elevator_name: carElevator,
-                        num_floors: 10,
-                        car_calls: this.getCarCallsForElevator(carElevator),
-                        hall_calls_up: this.getHallCallsUp(carElevator),
-                        hall_calls_down: this.getHallCallsDown(carElevator),
-                        move_command_target_floor: this.replayState.moveCommands[carElevator],
-                        forced_calls_up: Array.from(this.replayState.forcedCalls[carElevator].up),
-                        forced_calls_down: Array.from(this.replayState.forcedCalls[carElevator].down)
-                    }
+                        floor: carFloor
+                    },
+                    time: event.time
                 };
             
             case 'car_call_off':
@@ -1640,23 +1728,14 @@ class ElevatorVisualizer {
                     this.replayState.carCalls[carOffElevator].delete(carOffFloor);
                 }
                 
-                // Immediately trigger calls update to hide car call
-                // Initialize forced calls if needed
-                if (!this.replayState.forcedCalls[carOffElevator]) {
-                    this.replayState.forcedCalls[carOffElevator] = { up: new Set(), down: new Set() };
-                }
+                // Return car_call_off event for event log
                 return {
-                    type: 'calls_update',
+                    type: 'car_call_off',
                     data: {
-                        elevator_name: carOffElevator,
-                        num_floors: 10,
-                        car_calls: this.getCarCallsForElevator(carOffElevator),
-                        hall_calls_up: this.getHallCallsUp(carOffElevator),
-                        hall_calls_down: this.getHallCallsDown(carOffElevator),
-                        move_command_target_floor: this.replayState.moveCommands[carOffElevator],
-                        forced_calls_up: Array.from(this.replayState.forcedCalls[carOffElevator].up),
-                        forced_calls_down: Array.from(this.replayState.forcedCalls[carOffElevator].down)
-                    }
+                        elevator: carOffElevator,
+                        floor: carOffFloor
+                    },
+                    time: event.time
                 };
             
             case 'door_event':
@@ -1718,19 +1797,15 @@ class ElevatorVisualizer {
                 
                 console.log(`[Replay] forced_move_command: ${onElevator} floor ${onFloor} ${onDirection} - ON`);
                 
-                // Immediately trigger calls update to show forced call (same as hall_call_assignment)
+                // Return forced_move_command event for event log
                 return {
-                    type: 'calls_update',
+                    type: 'forced_move_command',
                     data: {
-                        elevator_name: onElevator,
-                        num_floors: 10,
-                        car_calls: this.getCarCallsForElevator(onElevator),
-                        hall_calls_up: this.getHallCallsUp(onElevator),
-                        hall_calls_down: this.getHallCallsDown(onElevator),
-                        move_command_target_floor: this.replayState.moveCommands[onElevator],
-                        forced_calls_up: Array.from(this.replayState.forcedCalls[onElevator].up),
-                        forced_calls_down: Array.from(this.replayState.forcedCalls[onElevator].down)
-                    }
+                        elevator: onElevator,
+                        floor: onFloor,
+                        direction: onDirection
+                    },
+                    time: event.time
                 };
             
             case 'forced_call_off':
@@ -1749,19 +1824,15 @@ class ElevatorVisualizer {
                 
                 console.log(`[Replay] forced_call_off: ${forcedOffElevator} floor ${forcedOffFloor} ${forcedOffDirection} - OFF`);
                 
-                // Immediately trigger calls update to hide forced call (same as hall_call_off)
+                // Return forced_call_off event for event log
                 return {
-                    type: 'calls_update',
+                    type: 'forced_call_off',
                     data: {
-                        elevator_name: forcedOffElevator,
-                        num_floors: 10,
-                        car_calls: this.getCarCallsForElevator(forcedOffElevator),
-                        hall_calls_up: this.getHallCallsUp(forcedOffElevator),
-                        hall_calls_down: this.getHallCallsDown(forcedOffElevator),
-                        move_command_target_floor: this.replayState.moveCommands[forcedOffElevator],
-                        forced_calls_up: Array.from(this.replayState.forcedCalls[forcedOffElevator].up),
-                        forced_calls_down: Array.from(this.replayState.forcedCalls[forcedOffElevator].down)
-                    }
+                        elevator: forcedOffElevator,
+                        floor: forcedOffFloor,
+                        direction: forcedOffDirection
+                    },
+                    time: event.time
                 };
             
             default:
