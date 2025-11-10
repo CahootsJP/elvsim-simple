@@ -38,6 +38,18 @@ class ElevatorVisualizer {
             occupancyCount: 0
         };
         
+        // Performance Monitor metrics (real-world compatible)
+        this.performanceMetrics = {
+            hallCalls: [],          // Track hall call registration and response
+            responseTimes: [],      // Response times for completed hall calls
+            longResponseCount: 0,   // Count of responses > 60s
+            totalTrips: 0,          // Number of completed trips (passenger alightings)
+            doorOperations: 0,      // Count of door open/close cycles
+            elevatorDistances: {},  // Per-elevator travel distance
+            elevatorTrips: {},      // Per-elevator trip count
+            lastFloors: {}          // Track last floor for distance calculation
+        };
+        
         // Chart data management
         this.chartConfig = {
             updateInterval: 10,     // Aggregation interval in seconds (configurable)
@@ -2028,6 +2040,13 @@ class ElevatorVisualizer {
             this.metrics.totalTrips++;
             console.log('[Metrics] passenger_alighting event - Total trips:', this.metrics.totalTrips);
             
+            // Performance metrics: Count trips per elevator
+            const elevator = eventData.elevator_name || eventData.elevator;
+            if (elevator) {
+                this.performanceMetrics.totalTrips++;
+                this.performanceMetrics.elevatorTrips[elevator] = (this.performanceMetrics.elevatorTrips[elevator] || 0) + 1;
+            }
+            
             // Optional: Track riding time, total journey time, etc.
             // Can be used for future metrics
             const ridingTime = eventData.riding_time || 0;
@@ -2035,8 +2054,74 @@ class ElevatorVisualizer {
             // Store for future use if needed
         }
         
+        // Performance metrics: Track hall call registration
+        if (eventType === 'hall_call_registered') {
+            const callKey = `${eventData.floor}_${eventData.direction}`;
+            this.performanceMetrics.hallCalls.push({
+                floor: eventData.floor,
+                direction: eventData.direction,
+                registeredTime: message.time || this.simulationTime,
+                key: callKey
+            });
+        }
+        
+        // Performance metrics: Calculate response time from passenger boarding
+        if (eventType === 'passenger_boarding') {
+            const floor = eventData.floor;
+            const direction = eventData.direction;
+            const callKey = `${floor}_${direction}`;
+            const boardingTime = message.time || this.simulationTime;
+            
+            // Find the matching hall call
+            const hallCallIndex = this.performanceMetrics.hallCalls.findIndex(call => call.key === callKey);
+            if (hallCallIndex >= 0) {
+                const hallCall = this.performanceMetrics.hallCalls[hallCallIndex];
+                const responseTime = boardingTime - hallCall.registeredTime;
+                this.performanceMetrics.responseTimes.push(responseTime);
+                
+                // Count long responses (>60s)
+                if (responseTime > 60) {
+                    this.performanceMetrics.longResponseCount++;
+                }
+                
+                // Remove this hall call from tracking
+                this.performanceMetrics.hallCalls.splice(hallCallIndex, 1);
+            }
+        }
+        
+        // Performance metrics: Count door operations
+        if (eventType === 'door_event' || (eventType === 'event' && eventData.event_type)) {
+            const doorEventType = eventData.event_type || eventData.event;
+            // Count DOOR_OPENING_COMPLETE as one operation (open + close cycle counted when open)
+            if (doorEventType === 'DOOR_OPENING_COMPLETE' || doorEventType === 'DOOR_OPENED') {
+                this.performanceMetrics.doorOperations++;
+            }
+        }
+        
+        // Performance metrics: Track elevator movement distance
+        if (eventType === 'elevator_update' || eventType === 'elevator_status') {
+            const elevator = eventData.elevator_name || eventData.elevator;
+            const currentFloor = eventData.floor;
+            
+            if (elevator && currentFloor !== undefined) {
+                // Initialize if needed
+                if (!this.performanceMetrics.elevatorDistances[elevator]) {
+                    this.performanceMetrics.elevatorDistances[elevator] = 0;
+                    this.performanceMetrics.lastFloors[elevator] = currentFloor;
+                }
+                
+                // Calculate distance if floor changed
+                if (this.performanceMetrics.lastFloors[elevator] !== currentFloor) {
+                    const distance = Math.abs(currentFloor - this.performanceMetrics.lastFloors[elevator]);
+                    this.performanceMetrics.elevatorDistances[elevator] += distance;
+                    this.performanceMetrics.lastFloors[elevator] = currentFloor;
+                }
+            }
+        }
+        
         // Update UI
         this.refreshMetricsUI();
+        this.updatePerformanceMonitor();
     }
     
     refreshMetricsUI() {
@@ -2067,6 +2152,82 @@ class ElevatorVisualizer {
             this.metrics.totalTrips;
     }
     
+    updatePerformanceMonitor() {
+        // Calculate average response time
+        const responseTimes = this.performanceMetrics.responseTimes;
+        const avgResponseTime = responseTimes.length > 0
+            ? (responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length).toFixed(1)
+            : '-';
+        const avgElement = document.getElementById('perf-avg-response-time');
+        if (avgElement) {
+            avgElement.textContent = avgResponseTime !== '-' ? `${avgResponseTime}s` : '-';
+        }
+        
+        // Calculate max response time
+        const maxResponseTime = responseTimes.length > 0
+            ? Math.max(...responseTimes).toFixed(1)
+            : '-';
+        const maxElement = document.getElementById('perf-max-response-time');
+        if (maxElement) {
+            maxElement.textContent = maxResponseTime !== '-' ? `${maxResponseTime}s` : '-';
+        }
+        
+        // Long response count
+        const longResponseElement = document.getElementById('perf-long-response-count');
+        if (longResponseElement) {
+            longResponseElement.textContent = `${this.performanceMetrics.longResponseCount} calls`;
+        }
+        
+        // Total trips
+        const tripsElement = document.getElementById('perf-total-trips');
+        if (tripsElement) {
+            tripsElement.textContent = this.performanceMetrics.totalTrips;
+        }
+        
+        // Door operations
+        const doorElement = document.getElementById('perf-door-operations');
+        if (doorElement) {
+            doorElement.textContent = this.performanceMetrics.doorOperations;
+        }
+        
+        // Total distance (sum of all elevators, convert floors to meters, assuming 3.5m per floor)
+        const totalDistance = Object.values(this.performanceMetrics.elevatorDistances)
+            .reduce((sum, dist) => sum + dist, 0) * 3.5;
+        const distanceElement = document.getElementById('perf-total-distance');
+        if (distanceElement) {
+            distanceElement.textContent = totalDistance > 0 ? `${totalDistance.toFixed(1)} m` : '0 m';
+        }
+        
+        // Per-elevator stats
+        this.updatePerElevatorStats();
+    }
+    
+    updatePerElevatorStats() {
+        const container = document.getElementById('per-elevator-stats');
+        if (!container) return;
+        
+        const elevatorNames = Object.keys(this.performanceMetrics.elevatorTrips).sort();
+        
+        if (elevatorNames.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-secondary); font-style: italic;">No data available yet...</p>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        elevatorNames.forEach(elevatorName => {
+            const trips = this.performanceMetrics.elevatorTrips[elevatorName] || 0;
+            const distance = (this.performanceMetrics.elevatorDistances[elevatorName] || 0) * 3.5; // Convert to meters
+            
+            const statItem = document.createElement('div');
+            statItem.className = 'elevator-stat-item';
+            statItem.innerHTML = `
+                <span class="elevator-stat-name">${elevatorName}</span>
+                <span class="elevator-stat-value">${trips} trips, ${distance.toFixed(1)}m</span>
+            `;
+            container.appendChild(statItem);
+        });
+    }
+    
     resetMetrics() {
         this.metrics = {
             totalPassengers: 0,
@@ -2077,7 +2238,21 @@ class ElevatorVisualizer {
             totalOccupancy: 0,
             occupancyCount: 0
         };
+        
+        // Reset performance metrics
+        this.performanceMetrics = {
+            hallCalls: [],
+            responseTimes: [],
+            longResponseCount: 0,
+            totalTrips: 0,
+            doorOperations: 0,
+            elevatorDistances: {},
+            elevatorTrips: {},
+            lastFloors: {}
+        };
+        
         this.refreshMetricsUI();
+        this.updatePerformanceMonitor();
         this.resetChartData();  // Also reset chart data
     }
     

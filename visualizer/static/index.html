@@ -161,7 +161,52 @@
             <div id="tab-performance" class="tab-pane">
                 <section class="performance-section">
                     <h2>Performance Monitor</h2>
-                    <p style="color: var(--text-secondary); font-style: italic; padding: 20px;">Coming soon: Real-world compatible performance metrics</p>
+                    <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 20px;">Real-world compatible metrics (available for both simulation and actual elevators)</p>
+                    
+                    <div class="metrics-container">
+                        <!-- Service Quality -->
+                        <div class="metric-card">
+                            <h3>📊 Service Quality</h3>
+                            <div class="metric-item">
+                                <span class="metric-label">Hall Call Response Time (avg):</span>
+                                <span id="perf-avg-response-time" class="metric-value">-</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Max Response Time:</span>
+                                <span id="perf-max-response-time" class="metric-value">-</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Long Response (&gt;60s):</span>
+                                <span id="perf-long-response-count" class="metric-value">0 calls</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Elevator Operations -->
+                        <div class="metric-card">
+                            <h3>🚀 Elevator Operations</h3>
+                            <div class="metric-item">
+                                <span class="metric-label">Total Trips:</span>
+                                <span id="perf-total-trips" class="metric-value">0</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Door Operations:</span>
+                                <span id="perf-door-operations" class="metric-value">0</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Total Distance:</span>
+                                <span id="perf-total-distance" class="metric-value">0 m</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Per-Elevator Stats -->
+                    <div class="metric-card" style="margin-top: 20px;">
+                        <h3>📈 Per-Elevator Stats</h3>
+                        <div id="per-elevator-stats" class="per-elevator-stats">
+                            <!-- Dynamically populated -->
+                            <p style="color: var(--text-secondary); font-style: italic;">No data available yet...</p>
+                        </div>
+                    </div>
                 </section>
             </div>
 

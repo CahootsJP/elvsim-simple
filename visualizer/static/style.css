@@ -1761,3 +1761,29 @@ body.dark-mode .timeline-slider::-moz-range-thumb {
     position: relative;
 }
 
+/* Per-Elevator Stats */
+.per-elevator-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.elevator-stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.elevator-stat-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.elevator-stat-value {
+    font-family: 'Courier New', monospace;
+    color: var(--text-secondary);
+}
+
