@@ -50,6 +50,9 @@ class ElevatorVisualizer {
             lastFloors: {}          // Track last floor for distance calculation
         };
         
+        // Track elevator states for change detection
+        this.elevatorStates = {};
+        
         // Chart data management
         this.chartConfig = {
             updateInterval: 10,     // Aggregation interval in seconds (configurable)
@@ -65,12 +68,23 @@ class ElevatorVisualizer {
             }
         };
         
+        // Event filter state
+        this.eventFilters = {
+            door: true,        // Default: ON (as requested)
+            hall: false,
+            car: false,
+            passenger: false,
+            elevator: true,    // Default: ON (as requested)
+            command: false
+        };
+        
         this.initializeUI();
         this.initializeModeSelector();
         this.initializePlaybackControls();
         this.initializeDarkMode();
         this.initializeTabs();
         this.initializeChart();
+        this.initializeEventFilters();
         
         // Start in live mode
         this.switchToLiveMode();
@@ -508,6 +522,8 @@ class ElevatorVisualizer {
         switch (type) {
             case 'elevator_update':
                 this.updateElevator(data);
+                // Also handle status updates for event log
+                this.handleElevatorStatusUpdate(data, message.time);
                 break;
                 
             case 'event':
@@ -1241,6 +1257,15 @@ class ElevatorVisualizer {
         const logEntry = document.createElement('div');
         logEntry.className = `log-entry log-${type}`;
         
+        // Determine category and add as data attribute
+        const category = this.getEventCategory(message);
+        logEntry.dataset.category = category;
+        
+        // Apply filter immediately
+        if (!this.eventFilters[category]) {
+            logEntry.style.display = 'none';
+        }
+        
         const time = timestamp !== null ? timestamp.toFixed(2) : new Date().toLocaleTimeString();
         logEntry.innerHTML = `
             <span class="log-time">[${time}]</span>
@@ -1259,6 +1284,69 @@ class ElevatorVisualizer {
         while (this.logContainer.children.length > maxEntries) {
             this.logContainer.removeChild(this.logContainer.firstChild);
         }
+    }
+    
+    handleElevatorStatusUpdate(data, time) {
+        const elevator = data.elevator_name || data.elevator;
+        const currentFloor = data.floor;
+        const currentState = data.state;
+        const direction = data.direction;
+        const passengers = data.passengers;
+        
+        if (!elevator || currentFloor === undefined || !currentState) {
+            return; // Invalid data
+        }
+        
+        // Initialize tracking if needed
+        if (!this.elevatorStates[elevator]) {
+            this.elevatorStates[elevator] = {
+                floor: currentFloor,
+                state: currentState,
+                direction: direction
+            };
+            // Log initial state
+            this.addLog('info', `[${elevator}] Initial state: ${currentState} at floor ${currentFloor}, ${direction}, ${passengers} pax`, time);
+            return;
+        }
+        
+        const lastState = this.elevatorStates[elevator];
+        
+        // Check for state transitions
+        if (lastState.state !== currentState) {
+            // Important state transitions to log
+            
+            // Movement started
+            if (currentState === 'MOVING' && lastState.state !== 'MOVING') {
+                this.addLog('info', `[${elevator}] ▲ Started moving ${direction} from floor ${currentFloor}`, time);
+            }
+            
+            // Arrived at floor (entered STOPPING state at a new floor)
+            if (currentState === 'STOPPING' && lastState.state === 'DECELERATING') {
+                this.addLog('info', `[${elevator}] ✓ Arrived at floor ${currentFloor} (${direction})`, time);
+            }
+            
+            // Became idle
+            if (currentState === 'IDLE' && lastState.state !== 'IDLE') {
+                this.addLog('info', `[${elevator}] ○ Now IDLE at floor ${currentFloor}`, time);
+            }
+            
+            // Decelerating (approaching floor)
+            if (currentState === 'DECELERATING' && lastState.state === 'MOVING') {
+                this.addLog('info', `[${elevator}] ⊙ Decelerating, approaching floor ${currentFloor}`, time);
+            }
+        }
+        
+        // Check for floor changes during movement
+        if (lastState.floor !== currentFloor && currentState === 'MOVING') {
+            this.addLog('info', `[${elevator}] → Passing floor ${currentFloor} ${direction}`, time);
+        }
+        
+        // Update stored state
+        this.elevatorStates[elevator] = {
+            floor: currentFloor,
+            state: currentState,
+            direction: direction
+        };
     }
     
     clearLog() {
@@ -1391,6 +1479,100 @@ class ElevatorVisualizer {
         this.waitTimeChart.update();
         
         console.log('[Chart] Colors updated for dark mode:', isDarkMode);
+    }
+    
+    initializeEventFilters() {
+        // Get all filter checkboxes
+        const filterCheckboxes = document.querySelectorAll('.event-filter');
+        
+        // Set initial state based on eventFilters
+        filterCheckboxes.forEach(checkbox => {
+            const category = checkbox.dataset.category;
+            checkbox.checked = this.eventFilters[category];
+        });
+        
+        // Add event listeners to checkboxes
+        filterCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const category = e.target.dataset.category;
+                this.eventFilters[category] = e.target.checked;
+                this.applyEventFilters();
+            });
+        });
+        
+        // Select All button
+        const btnSelectAll = document.getElementById('btn-select-all-filters');
+        btnSelectAll.addEventListener('click', () => {
+            Object.keys(this.eventFilters).forEach(category => {
+                this.eventFilters[category] = true;
+            });
+            filterCheckboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            this.applyEventFilters();
+        });
+        
+        // Deselect All button
+        const btnDeselectAll = document.getElementById('btn-deselect-all-filters');
+        btnDeselectAll.addEventListener('click', () => {
+            Object.keys(this.eventFilters).forEach(category => {
+                this.eventFilters[category] = false;
+            });
+            filterCheckboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            this.applyEventFilters();
+        });
+    }
+    
+    getEventCategory(message) {
+        // Determine event category from message content
+        const lowerMessage = message.toLowerCase();
+        
+        if (lowerMessage.includes('door') || lowerMessage.includes('opening') || lowerMessage.includes('closing')) {
+            return 'door';
+        }
+        if (lowerMessage.includes('hall call')) {
+            return 'hall';
+        }
+        if (lowerMessage.includes('car call')) {
+            return 'car';
+        }
+        if (lowerMessage.includes('waiting') || lowerMessage.includes('boarded') || lowerMessage.includes('alighted')) {
+            return 'passenger';
+        }
+        if (lowerMessage.includes('forced')) {
+            return 'command';
+        }
+        // Elevator status: movement, state changes, arrival, etc.
+        if (lowerMessage.includes('moving') || 
+            lowerMessage.includes('arrived') || 
+            lowerMessage.includes('idle') ||
+            lowerMessage.includes('decelerating') ||
+            lowerMessage.includes('passing') ||
+            lowerMessage.includes('started') ||
+            lowerMessage.includes('initial state') ||
+            message.includes('▲') || 
+            message.includes('✓') || 
+            message.includes('○') || 
+            message.includes('⊙') || 
+            message.includes('→')) {
+            return 'elevator';
+        }
+        // Default to elevator for other messages
+        return 'elevator';
+    }
+    
+    applyEventFilters() {
+        // Apply filters to all existing log entries
+        const logEntries = this.logContainer.querySelectorAll('.log-entry');
+        
+        logEntries.forEach(entry => {
+            const category = entry.dataset.category;
+            if (category && this.eventFilters[category] !== undefined) {
+                entry.style.display = this.eventFilters[category] ? '' : 'none';
+            }
+        });
     }
     
     selectMode(mode) {
@@ -2099,22 +2281,30 @@ class ElevatorVisualizer {
         }
         
         // Performance metrics: Track elevator movement distance
+        // Only count when elevator arrives at a new floor (state becomes STOPPING)
         if (eventType === 'elevator_update' || eventType === 'elevator_status') {
             const elevator = eventData.elevator_name || eventData.elevator;
             const currentFloor = eventData.floor;
+            const state = eventData.state;
             
             if (elevator && currentFloor !== undefined) {
                 // Initialize if needed
                 if (!this.performanceMetrics.elevatorDistances[elevator]) {
                     this.performanceMetrics.elevatorDistances[elevator] = 0;
+                    this.performanceMetrics.elevatorTrips[elevator] = this.performanceMetrics.elevatorTrips[elevator] || 0;
+                }
+                
+                // Track last position for all states
+                if (!this.performanceMetrics.lastFloors[elevator]) {
                     this.performanceMetrics.lastFloors[elevator] = currentFloor;
                 }
                 
-                // Calculate distance if floor changed
-                if (this.performanceMetrics.lastFloors[elevator] !== currentFloor) {
+                // Calculate distance only when arriving at a floor (STOPPING state)
+                if (state === 'STOPPING' && this.performanceMetrics.lastFloors[elevator] !== currentFloor) {
                     const distance = Math.abs(currentFloor - this.performanceMetrics.lastFloors[elevator]);
                     this.performanceMetrics.elevatorDistances[elevator] += distance;
                     this.performanceMetrics.lastFloors[elevator] = currentFloor;
+                    console.log(`[Performance] ${elevator} moved ${distance} floors to floor ${currentFloor}. Total: ${this.performanceMetrics.elevatorDistances[elevator]}`);
                 }
             }
         }
@@ -2250,6 +2440,9 @@ class ElevatorVisualizer {
             elevatorTrips: {},
             lastFloors: {}
         };
+        
+        // Reset elevator state tracking
+        this.elevatorStates = {};
         
         this.refreshMetricsUI();
         this.updatePerformanceMonitor();

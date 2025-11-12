@@ -221,6 +221,46 @@
                             Auto-scroll
                         </label>
                     </div>
+                    
+                    <!-- Event Filter Section -->
+                    <div class="event-filter-section">
+                        <h3>Filter by Category:</h3>
+                        <div class="event-filter-controls">
+                            <div class="filter-group">
+                                <label class="filter-checkbox">
+                                    <input type="checkbox" id="filter-door" class="event-filter" data-category="door" checked>
+                                    <span>🚪 Door Events</span>
+                                </label>
+                                <label class="filter-checkbox">
+                                    <input type="checkbox" id="filter-hall" class="event-filter" data-category="hall">
+                                    <span>🔼 Hall Calls</span>
+                                </label>
+                                <label class="filter-checkbox">
+                                    <input type="checkbox" id="filter-car" class="event-filter" data-category="car">
+                                    <span>🎯 Car Calls</span>
+                                </label>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-checkbox">
+                                    <input type="checkbox" id="filter-passenger" class="event-filter" data-category="passenger">
+                                    <span>👤 Passengers</span>
+                                </label>
+                                <label class="filter-checkbox">
+                                    <input type="checkbox" id="filter-elevator" class="event-filter" data-category="elevator" checked>
+                                    <span>📊 Elevator Status</span>
+                                </label>
+                                <label class="filter-checkbox">
+                                    <input type="checkbox" id="filter-command" class="event-filter" data-category="command">
+                                    <span>⚡ Commands</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="filter-actions">
+                            <button id="btn-select-all-filters" class="btn btn-secondary btn-small">Select All</button>
+                            <button id="btn-deselect-all-filters" class="btn btn-secondary btn-small">Deselect All</button>
+                        </div>
+                    </div>
+                    
                     <div id="log-container" class="log-container">
                         <!-- Event logs will appear here -->
                     </div>
