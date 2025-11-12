@@ -10,11 +10,11 @@ class Elevator(Entity):
     """
     Elevator that can handle interruptions during movement
     """
-    
+
     # Physics constants
     MIN_BRAKE_TIME_THRESHOLD = 0.05  # Minimum brake time to trigger DECELERATING state (seconds)
 
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10, full_load_bypass: bool = True, home_floor: int = 1, main_direction: str = "UP"):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10, full_load_bypass: bool = True, home_floor: int = 1, main_direction: str = "UP", service_floors=None, building=None):
         # Initialize direction before calling super().__init__
         self.direction = "NO_DIRECTION"
         
@@ -32,6 +32,18 @@ class Elevator(Entity):
         # Building characteristics
         self.home_floor = home_floor  # Home floor (typically lobby where elevator returns when idle)
         self.main_direction = main_direction  # Main traffic direction ("UP" or "DOWN", typically "UP" for office buildings)
+        self.building = building  # Building object for floor name mapping
+        
+        # Service floors: floors this elevator can stop at
+        # If None, elevator services all floors
+        if service_floors is None:
+            self.service_floors = list(range(1, num_floors + 1))
+        else:
+            self.service_floors = sorted(service_floors)
+            # Validate service floors
+            for floor in self.service_floors:
+                if floor < 1 or floor > num_floors:
+                    raise ValueError(f"Invalid service floor {floor} for elevator {name}. Must be between 1 and {num_floors}.")
 
         self.current_floor = 1
         
@@ -124,7 +136,8 @@ class Elevator(Entity):
             "main_direction": self.main_direction,  # Main traffic direction (for optimization)
             "move_command_target_floor": self.move_command_target_floor,  # For visualization
             "forced_calls_up": list(self.forced_calls_up),  # For visualization
-            "forced_calls_down": list(self.forced_calls_down)  # For visualization
+            "forced_calls_down": list(self.forced_calls_down),  # For visualization
+            "service_floors": self.service_floors  # Service floors (floors this elevator can stop at)
         }
         yield self.broker.put(self.status_topic, status_message)
 
@@ -182,6 +195,18 @@ class Elevator(Entity):
     def get_max_capacity(self):
         """Get maximum capacity of elevator."""
         return self.max_capacity
+    
+    def can_serve_floor(self, floor: int) -> bool:
+        """
+        Check if this elevator can serve (stop at) the specified floor.
+        
+        Args:
+            floor: Control floor number to check
+            
+        Returns:
+            True if this elevator services the floor, False otherwise
+        """
+        return floor in self.service_floors
 
     def _should_interrupt(self, new_floor, new_direction):
         """Determine if current movement should be interrupted"""
@@ -204,6 +229,11 @@ class Elevator(Entity):
             task = yield self.broker.get(task_topic)
             details = task['details']
             floor, direction = details['floor'], details['direction']
+            
+            # Reject hall calls for non-service floors
+            if not self.can_serve_floor(floor):
+                print(f"{self.env.now:.2f} [{self.name}] Hall call rejected: Floor {floor} is not in service floors.")
+                continue
             
             if direction == "UP": self.hall_calls_up.add(floor)
             else: self.hall_calls_down.add(floor)
@@ -236,6 +266,11 @@ class Elevator(Entity):
             car_call = yield self.broker.get(car_call_topic)
             dest_floor = car_call['destination']
             passenger_name = car_call['passenger_name']
+            
+            # Reject car calls for non-service floors
+            if not self.can_serve_floor(dest_floor):
+                print(f"{self.env.now:.2f} [{self.name}] Car call from '{passenger_name}' rejected: Floor {dest_floor} is not in service floors.")
+                continue
             
             # Ignore already registered car_calls (actual elevator behavior)
             if dest_floor in self.car_calls:
@@ -271,6 +306,11 @@ class Elevator(Entity):
             command = yield self.broker.get(move_command_topic)
             target_floor = command['floor']
             
+            # Reject move commands for non-service floors
+            if not self.can_serve_floor(target_floor):
+                print(f"{self.env.now:.2f} [{self.name}] Move command rejected: Floor {target_floor} is not in service floors.")
+                continue
+            
             # Check reception condition: Only when IDLE state and NO_DIRECTION
             if self.state == "IDLE" and self.direction == "NO_DIRECTION":
                 self.move_command_target_floor = target_floor
@@ -297,6 +337,11 @@ class Elevator(Entity):
             command = yield self.broker.get(forced_move_command_topic)
             floor = command['floor']
             direction = command['direction']
+            
+            # Reject forced move commands for non-service floors
+            if not self.can_serve_floor(floor):
+                print(f"{self.env.now:.2f} [{self.name}] Forced move command rejected: Floor {floor} is not in service floors.")
+                continue
             
             # Register in separate set to distinguish from real hall calls
             if direction == "UP":
@@ -564,7 +609,7 @@ class Elevator(Entity):
     def _get_all_down_calls(self):
         """Get all DOWN calls (hall calls + forced calls)"""
         return self.hall_calls_down | self.forced_calls_down
-    
+
     def _get_next_stop_floor(self):
         if self.direction == "UP":
             up_calls = [f for f in (self.car_calls | self._get_all_up_calls()) if f > self.current_floor]
@@ -767,6 +812,10 @@ class Elevator(Entity):
         return True
     
     def _should_stop_at_current_floor(self):
+        # NEVER stop at non-service floors
+        if not self.can_serve_floor(self.current_floor):
+            return False
+        
         # Always stop for car calls (passengers need to exit)
         if self.current_floor in self.car_calls:
             return True
@@ -894,7 +943,7 @@ class Elevator(Entity):
         # If there are calls above, keep going UP
         if self._has_any_calls_above():
             return
-        
+            
         # If at the top call, handle direction reversal
         if self._is_at_top_call():
             self._handle_top_call_reversal()
@@ -914,7 +963,7 @@ class Elevator(Entity):
         if self._is_at_bottom_call():
             self._handle_bottom_call_reversal()
             return
-        
+                
         # If past the farthest call, reverse to UP
         if self._is_past_farthest_call("DOWN"):
             self._update_direction("UP")
@@ -980,7 +1029,7 @@ class Elevator(Entity):
         elif self.current_floor in all_down_calls:
             # DOWN call at current floor - keep DOWN direction
             return
-        
+                
         # No call at current floor, check where other calls are
         all_hall_calls = all_up_calls | all_down_calls
         if all_hall_calls:
@@ -1080,16 +1129,16 @@ class Elevator(Entity):
         if self.direction == "UP":
             if arrival_floor in future_hall_calls_down or arrival_floor in future_forced_calls_down:
                 up_calls_above = any(f > arrival_floor for f in future_car_calls | future_hall_calls_up | future_forced_calls_up)
-                if not up_calls_above:
-                    future_hall_calls_down.discard(arrival_floor)
-                    future_forced_calls_down.discard(arrival_floor)
+            if not up_calls_above:
+                future_hall_calls_down.discard(arrival_floor)
+                future_forced_calls_down.discard(arrival_floor)
         # Service UP calls even during DOWN movement when reaching bottom floor
         if self.direction == "DOWN":
             if arrival_floor in future_hall_calls_up or arrival_floor in future_forced_calls_up:
                 down_calls_below = any(f < arrival_floor for f in future_car_calls | future_hall_calls_down | future_forced_calls_down)
-                if not down_calls_below:
-                    future_hall_calls_up.discard(arrival_floor)
-                    future_forced_calls_up.discard(arrival_floor)
+            if not down_calls_below:
+                future_hall_calls_up.discard(arrival_floor)
+                future_forced_calls_up.discard(arrival_floor)
         
         # Determine next direction from remaining calls (including forced calls)
         all_remaining_calls = future_car_calls | future_hall_calls_up | future_hall_calls_down | future_forced_calls_up | future_forced_calls_down

@@ -144,9 +144,49 @@ class IPassengerBehavior(ABC):
     # ========================================
     
     @abstractmethod
+    def select_best_elevator(self, passenger, available_permissions: list) -> dict:
+        """
+        Select the best elevator from multiple available options
+        
+        Args:
+            passenger: Passenger object
+            available_permissions: List of permission_data dicts, each containing:
+                {
+                    'elevator_name': str,
+                    'completion_event': simpy.Event,
+                    'door_open_time': float,
+                    'passengers_count': int
+                }
+        
+        Returns:
+            The selected permission_data dict (from available_permissions list)
+            None if all elevators should be rejected
+        
+        Example Implementations:
+            Traditional:
+                - Priority 1: Select elevator with fewest passengers
+                - Priority 2: Select elevator that opened door first
+            
+            DCS:
+                - Select only the assigned elevator
+            
+            VIP:
+                - Select VIP-designated elevators only
+        
+        Note:
+            This method is called when 1 or more elevators have opened doors.
+            For single elevator, the decision is straightforward.
+            For multiple elevators, apply selection strategy.
+        """
+        pass
+    
+    @abstractmethod
     def should_board_elevator(self, passenger, permission_data: dict) -> bool:
         """
         Decide whether to accept boarding permission
+        
+        DEPRECATED: This method is kept for backward compatibility.
+        New implementations should use select_best_elevator() instead.
         
         Args:
             passenger: Passenger object
@@ -158,16 +198,6 @@ class IPassengerBehavior(ABC):
         Returns:
             True if the passenger should board
             False if the passenger should wait for another elevator
-        
-        Example Implementations:
-            Traditional:
-                - Always return True (accept all elevators)
-            
-            DCS:
-                - Return True only if elevator_name matches assigned elevator
-            
-            VIP:
-                - Return True only for VIP-designated elevators
         """
         pass
 

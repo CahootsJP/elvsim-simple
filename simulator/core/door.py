@@ -154,11 +154,12 @@ class Door(Entity):
                     # Board the passenger
                     passenger = yield queue.get()
                     board_permission_event = self.env.event()
-                    # Pass elevator name and door open time along with permission event
+                    # Pass elevator name, door open time, and real-time passenger count
                     permission_data = {
                         'completion_event': board_permission_event,
                         'elevator_name': self.elevator_name,
-                        'door_open_time': door_open_start_time  # Pass door open time for passenger metrics
+                        'door_open_time': door_open_start_time,  # Pass door open time for passenger metrics
+                        'passengers_count': actual_current_capacity + len(boarded_passengers)  # Real-time count
                     }
                     yield passenger.board_permission_event.put(permission_data)
                     yield board_permission_event

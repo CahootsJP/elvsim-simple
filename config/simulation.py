@@ -15,6 +15,7 @@ class BuildingConfig:
     num_floors: int = 10
     floor_height: float = 3.5  # meters
     lobby_floor: int = 1
+    floors: Optional[List[Dict[str, Any]]] = None  # Floor definitions (control_floor, display_name, floor_height)
     
     def __post_init__(self):
         if self.num_floors < 2:
@@ -23,6 +24,11 @@ class BuildingConfig:
             raise ValueError("floor_height must be positive")
         if not (1 <= self.lobby_floor <= self.num_floors):
             raise ValueError(f"lobby_floor must be between 1 and {self.num_floors}")
+        
+        # Validate floors if provided
+        if self.floors is not None:
+            if len(self.floors) != self.num_floors:
+                raise ValueError(f"floors list length ({len(self.floors)}) must match num_floors ({self.num_floors})")
 
 
 @dataclass
@@ -36,6 +42,8 @@ class ElevatorConfig:
     full_load_bypass: bool = True
     home_floor: int = 1
     main_direction: str = "UP"
+    service_floors: Optional[List[int]] = None  # Service floors (None = all floors)
+    per_elevator: Optional[List[Dict[str, Any]]] = None  # Per-elevator configuration
     
     def __post_init__(self):
         if self.num_elevators < 1:
@@ -50,6 +58,11 @@ class ElevatorConfig:
             raise ValueError("jerk must be positive")
         if self.main_direction not in ["UP", "DOWN"]:
             raise ValueError("main_direction must be 'UP' or 'DOWN'")
+        
+        # Validate per_elevator if provided
+        if self.per_elevator is not None:
+            if len(self.per_elevator) != self.num_elevators:
+                raise ValueError(f"per_elevator list length ({len(self.per_elevator)}) must match num_elevators ({self.num_elevators})")
 
 
 @dataclass
@@ -129,7 +142,8 @@ class SimulationConfig:
         building = BuildingConfig(
             num_floors=building_data.get('num_floors', 10),
             floor_height=building_data.get('floor_height', 3.5),
-            lobby_floor=building_data.get('lobby_floor', 1)
+            lobby_floor=building_data.get('lobby_floor', 1),
+            floors=building_data.get('floors')
         )
         
         # Parse elevator config
@@ -142,7 +156,9 @@ class SimulationConfig:
             jerk=elevator_data.get('jerk', 2.0),
             full_load_bypass=elevator_data.get('full_load_bypass', True),
             home_floor=elevator_data.get('home_floor', 1),
-            main_direction=elevator_data.get('main_direction', 'UP')
+            main_direction=elevator_data.get('main_direction', 'UP'),
+            service_floors=elevator_data.get('service_floors'),
+            per_elevator=elevator_data.get('per_elevator')
         )
         
         # Parse door config

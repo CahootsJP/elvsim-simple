@@ -85,12 +85,35 @@ class TraditionalPassengerBehavior(IPassengerBehavior):
     # Common Methods
     # ========================================
     
+    def select_best_elevator(self, passenger, available_permissions: list) -> dict:
+        """
+        Select the best elevator from available options
+        
+        Priority 1: Fewest passengers (空いている方)
+        Priority 2: Earliest door open time (早く到着した方)
+        """
+        if not available_permissions:
+            return None
+        
+        if len(available_permissions) == 1:
+            # Only one elevator - board immediately
+            return available_permissions[0]
+        
+        # Multiple elevators - apply selection strategy
+        # Priority 1: Fewest passengers
+        min_passengers = min(p.get('passengers_count', 0) for p in available_permissions)
+        candidates = [p for p in available_permissions if p.get('passengers_count', 0) == min_passengers]
+        
+        # Priority 2: Earliest door open time
+        selected = min(candidates, key=lambda p: p.get('door_open_time', float('inf')))
+        
+        return selected
+    
     def should_board_elevator(self, passenger, permission_data: dict) -> bool:
         """
-        Accept all boarding permissions in traditional mode
+        DEPRECATED: Kept for backward compatibility
         
-        Traditional passengers board any elevator that opens at their floor.
-        No elevator assignment, so accept all permissions.
+        Accept all boarding permissions in traditional mode.
         """
         return True
 
@@ -106,22 +129,23 @@ class AdaptivePassengerBehavior(TraditionalPassengerBehavior):
         behavior = AdaptivePassengerBehavior()
     """
     
-    def should_board_elevator(self, passenger, permission_data: dict) -> bool:
+    def select_best_elevator(self, passenger, available_permissions: list) -> dict:
         """
-        Board elevator based on assignment (if any)
+        Select the best elevator considering DCS assignment
         
-        Traditional floor:
-            - Accept all elevators (no assignment)
-        
-        DCS floor:
-            - Only board assigned elevator
+        If DCS assignment exists, only select the assigned elevator.
+        Otherwise, use traditional selection strategy.
         """
-        # If no elevator is assigned (Traditional), accept all
+        # Check for DCS assignment
         assigned = self.get_assigned_elevator(passenger)
-        if assigned is None:
-            return True
+        if assigned is not None:
+            # Only select the assigned elevator
+            for perm in available_permissions:
+                if perm.get('elevator_name') == assigned:
+                    return perm
+            # Assigned elevator not available
+            return None
         
-        # If assigned (DCS), only board the assigned elevator
-        elevator_name = permission_data.get('elevator_name')
-        return elevator_name == assigned
+        # No DCS assignment - use traditional selection
+        return super().select_best_elevator(passenger, available_permissions)
 

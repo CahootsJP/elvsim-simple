@@ -161,8 +161,20 @@ class GroupControlSystem:
                     'timestamp': self.broker.get_current_time()
                 }
                 
-                # Delegate selection to strategy
-                selected_elevator = self.strategy.select_elevator(call_data, self.elevator_statuses)
+                # Filter elevators that can service this floor
+                call_floor = call_data['floor']
+                serviceable_statuses = {
+                    elev_name: status 
+                    for elev_name, status in self.elevator_statuses.items()
+                    if call_floor in status.get('service_floors', [])
+                }
+                
+                if not serviceable_statuses:
+                    print(f"{self.broker.get_current_time():.2f} [GCS] WARNING: No elevator can service floor {call_floor}. Hall call dropped.")
+                    continue
+                
+                # Delegate selection to strategy (only with serviceable elevators)
+                selected_elevator = self.strategy.select_elevator(call_data, serviceable_statuses)
                 
                 task_message = {
                     "task_type": "ASSIGN_HALL_CALL",

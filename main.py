@@ -10,6 +10,7 @@ from simulator.core.elevator import Elevator
 from simulator.core.hall_button import HallButton
 from simulator.core.passenger import Passenger
 from simulator.core.door import Door
+from simulator.core.building import Building, FloorDefinition
 from simulator.physics.physics_engine import PhysicsEngine
 
 # Call system and behavior interfaces
@@ -76,24 +77,6 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     sim_stats = SimulationStatistics(env, broadcast_pipe)
     env.process(sim_stats.start_listening())
     
-    # Set simulation metadata for JSON Lines log
-    sim_stats.set_simulation_metadata({
-        'num_floors': NUM_FLOORS,
-        'num_elevators': NUM_ELEVATORS,
-        'elevator_capacity': MAX_CAPACITY,
-        'full_load_bypass': FULL_LOAD_BYPASS,
-        'floor_height': FLOOR_HEIGHT,
-        'max_speed': MAX_SPEED,
-        'acceleration': ACCELERATION,
-        'jerk': JERK,
-        'sim_duration': SIM_DURATION,
-        'random_seed': sim_config.random_seed,
-        'config_files': {
-            'simulation': sim_config_path,
-            'group_control': gc_config_path
-        }
-    })
-    
     # --- Call system configuration ---
     call_system = TraditionalCallSystem(num_floors=NUM_FLOORS)
     passenger_behavior = AdaptivePassengerBehavior()
@@ -115,8 +98,68 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     else:
         raise ValueError(f"Unknown repositioning strategy: {repos_strategy_name}")
 
+    # --- Building floor definitions ---
+    # Create Building object from configuration
+    if sim_config.building.floors is not None:
+        # Use explicit floor definitions from config
+        floor_defs = [
+            FloorDefinition(
+                control_floor=f['control_floor'],
+                display_name=f['display_name'],
+                floor_height=f.get('floor_height', FLOOR_HEIGHT)
+            )
+            for f in sim_config.building.floors
+        ]
+    else:
+        # Auto-generate simple floor definitions (1="1F", 2="2F", etc.)
+        floor_defs = [
+            FloorDefinition(
+                control_floor=i,
+                display_name=f"{i}F",
+                floor_height=FLOOR_HEIGHT
+            )
+            for i in range(1, NUM_FLOORS + 1)
+        ]
+    
+    building = Building(floor_defs)
+    print(f"Building created with {building.num_floors} floors: {building.all_floors}")
+    
+    # Set simulation metadata for JSON Lines log (after building is created)
+    sim_stats.set_simulation_metadata({
+        'num_floors': NUM_FLOORS,
+        'num_elevators': NUM_ELEVATORS,
+        'elevator_capacity': MAX_CAPACITY,
+        'full_load_bypass': FULL_LOAD_BYPASS,
+        'floor_height': FLOOR_HEIGHT,
+        'max_speed': MAX_SPEED,
+        'acceleration': ACCELERATION,
+        'jerk': JERK,
+        'sim_duration': SIM_DURATION,
+        'random_seed': sim_config.random_seed,
+        'config_files': {
+            'simulation': sim_config_path,
+            'group_control': gc_config_path
+        },
+        'building': {
+            'floors': [
+                {
+                    'control_floor': f.control_floor,
+                    'display_name': f.display_name,
+                    'floor_height': f.floor_height
+                }
+                for f in building.floors
+            ]
+        }
+    })
+    
     # --- Physics engine preparation ---
-    floor_heights = [0] + [i * FLOOR_HEIGHT for i in range(1, NUM_FLOORS + 1)]
+    # Use actual floor heights from building definition
+    floor_heights = [0]  # Ground level
+    for i in range(1, NUM_FLOORS + 1):
+        prev_height = floor_heights[-1]
+        floor_height = building.get_floor_height(i)
+        floor_heights.append(prev_height + floor_height)
+    
     physics_engine = PhysicsEngine(floor_heights, MAX_SPEED, ACCELERATION, JERK)
     flight_profiles = physics_engine.precompute_flight_profiles()
 
@@ -137,26 +180,64 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
 
     # Create elevators dynamically based on config
     elevators = []
-    for i in range(1, NUM_ELEVATORS + 1):
-        door = Door(env, f"Elevator_{i}_Door")
-        elevator = Elevator(
-            env, f"Elevator_{i}", broker, NUM_FLOORS, floor_queues,
-            door=door,
-            flight_profiles=flight_profiles,
-            physics_engine=physics_engine,
-            hall_buttons=hall_buttons,
-            max_capacity=MAX_CAPACITY,
-            full_load_bypass=FULL_LOAD_BYPASS,
-            home_floor=HOME_FLOOR,
-            main_direction=MAIN_DIRECTION
-        )
-        gcs.register_elevator(elevator)
-        elevators.append(elevator)
+    
+    # Check if per-elevator configuration exists
+    if hasattr(sim_config.elevator, 'per_elevator') and sim_config.elevator.per_elevator:
+        # Use individual elevator configurations
+        for elev_config in sim_config.elevator.per_elevator:
+            elev_name = elev_config['name']
+            elev_service_floors = elev_config.get('service_floors', None)
+            elev_home_floor = elev_config.get('home_floor', HOME_FLOOR)
+            elev_main_dir = elev_config.get('main_direction', MAIN_DIRECTION)
+            
+            door = Door(env, f"{elev_name}_Door")
+            elevator = Elevator(
+                env, elev_name, broker, NUM_FLOORS, floor_queues,
+                door=door,
+                flight_profiles=flight_profiles,
+                physics_engine=physics_engine,
+                hall_buttons=hall_buttons,
+                max_capacity=MAX_CAPACITY,
+                full_load_bypass=FULL_LOAD_BYPASS,
+                home_floor=elev_home_floor,
+                main_direction=elev_main_dir,
+                service_floors=elev_service_floors,
+                building=building
+            )
+            gcs.register_elevator(elevator)
+            elevators.append(elevator)
+            print(f"Created {elev_name} with service floors: {elev_service_floors or 'all'}")
+    else:
+        # Use uniform configuration for all elevators
+        common_service_floors = getattr(sim_config.elevator, 'service_floors', None)
+        
+        for i in range(1, NUM_ELEVATORS + 1):
+            door = Door(env, f"Elevator_{i}_Door")
+            elevator = Elevator(
+                env, f"Elevator_{i}", broker, NUM_FLOORS, floor_queues,
+                door=door,
+                flight_profiles=flight_profiles,
+                physics_engine=physics_engine,
+                hall_buttons=hall_buttons,
+                max_capacity=MAX_CAPACITY,
+                full_load_bypass=FULL_LOAD_BYPASS,
+                home_floor=HOME_FLOOR,
+                main_direction=MAIN_DIRECTION,
+                service_floors=common_service_floors,
+                building=building
+            )
+            gcs.register_elevator(elevator)
+            elevators.append(elevator)
+        
+        if common_service_floors:
+            print(f"All elevators created with service floors: {common_service_floors}")
+        else:
+            print(f"All elevators created with full floor service")
     
     # Start GCS processes
     env.process(gcs.run())
-    for i in range(1, NUM_ELEVATORS + 1):
-        env.process(gcs.start_status_listener(f"Elevator_{i}"))
+    for elevator in elevators:
+        env.process(gcs.start_status_listener(elevator.name))
 
     # --- Process startup ---
     # For normal testing
@@ -168,7 +249,8 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
         call_system, passenger_behavior, sim_stats,
         generation_rate=PASSENGER_GENERATION_RATE,
         num_floors=NUM_FLOORS,
-        od_matrix=sim_config.traffic.od_matrix
+        od_matrix=sim_config.traffic.od_matrix,
+        elevators=elevators  # Pass elevators for service floor validation
     ))
 
     print("\n--- Simulation Start ---")
@@ -189,7 +271,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
                                        call_system, passenger_behavior, statistics,
-                                       generation_rate=0.1, num_floors=10, od_matrix=None):
+                                       generation_rate=0.1, num_floors=10, od_matrix=None, elevators=None):
     """
     Continuous passenger generation for extended simulation
     
@@ -197,6 +279,7 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
         generation_rate: Passengers per second (e.g., 0.1 = 1 passenger every 10 seconds average)
         num_floors: Number of floors in the building
         od_matrix: Origin-Destination matrix (num_floors x num_floors). If None, uses uniform distribution.
+        elevators: List of Elevator objects (for service floor validation)
     """
     print(f"--- Continuous Passenger Generation (Rate: {generation_rate} passengers/sec) ---")
     if od_matrix is not None:
@@ -249,6 +332,17 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
             destination_floor = random.randint(1, num_floors)
             while destination_floor == arrival_floor:
                 destination_floor = random.randint(1, num_floors)
+        
+        # Service floor validation: ensure at least one elevator can serve both floors
+        if elevators:
+            serviceable = any(
+                elev.can_serve_floor(arrival_floor) and elev.can_serve_floor(destination_floor)
+                for elev in elevators
+            )
+            if not serviceable:
+                # Skip this passenger generation (no elevator can serve this trip)
+                print(f"{env.now:.2f} [PassengerGen] Skipped passenger {name}: No elevator can serve {arrival_floor} -> {destination_floor}")
+                continue
         
         move_speed = random.uniform(0.8, 1.5)
         

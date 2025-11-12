@@ -140,19 +140,33 @@ class Passenger(Entity):
             
             # Check 2: Has boarding permission arrived?
             if len(self.board_permission_event.items) > 0:
-                # Get permission data
-                permission_data = yield self.board_permission_event.get()
-                completion_event = permission_data['completion_event']
-                elevator_name = permission_data.get('elevator_name', None)
-                door_open_time = permission_data.get('door_open_time', None)
+                # Collect all available permissions (may be multiple elevators)
+                available_permissions = []
+                while len(self.board_permission_event.items) > 0:
+                    permission = yield self.board_permission_event.get()
+                    available_permissions.append(permission)
                 
-                # Check 3: Use behavior to decide if should board this elevator
-                if not self.behavior.should_board_elevator(self, permission_data):
-                    print(f"{self.env.now:.2f} [{self.name}] Rejecting elevator {elevator_name} (not assigned to me).")
-                    completion_event.succeed()  # Notify door anyway
-                    continue  # Wait for correct elevator
+                # Select the best elevator using behavior strategy
+                selected_permission = self.behavior.select_best_elevator(self, available_permissions)
                 
-                print(f"{self.env.now:.2f} [{self.name}] Boarding elevator.")
+                if selected_permission is None:
+                    # All elevators were rejected - put back permissions and continue waiting
+                    for perm in available_permissions:
+                        perm['completion_event'].succeed()  # Notify doors
+                    continue
+                
+                # Reject other elevators
+                for perm in available_permissions:
+                    if perm != selected_permission:
+                        print(f"{self.env.now:.2f} [{self.name}] Rejecting elevator {perm.get('elevator_name')} (chose another).")
+                        perm['completion_event'].succeed()  # Notify door
+                
+                # Board the selected elevator
+                completion_event = selected_permission['completion_event']
+                elevator_name = selected_permission.get('elevator_name', None)
+                door_open_time = selected_permission.get('door_open_time', None)
+                
+                print(f"{self.env.now:.2f} [{self.name}] Boarding elevator {elevator_name}.")
                 
                 # Record door open time (self-tracking)
                 if door_open_time is not None:
