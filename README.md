@@ -47,7 +47,11 @@ SimPy-based discrete event simulation system with web visualization support.
 - [x] Nearest Car Strategy (Circular Distance-based)
 - [x] Real-time Status Monitoring
 - [x] Dynamic Hall Call Assignment
-- [x] Pluggable Algorithm Design
+- [x] Pluggable Algorithm Design (Strategy Pattern)
+- [x] Allocation Strategy Interface (`IAllocationStrategy`)
+- [x] Repositioning Strategy Interface (`IRepositioningStrategy`)
+- [x] Move Commands (Idle repositioning)
+- [x] Forced Move Commands (Predictive hall call equivalent)
 
 ### Data Analysis (`analyzer/`)
 - [x] JSON Lines Format Logging
@@ -58,6 +62,13 @@ SimPy-based discrete event simulation system with web visualization support.
 ### Web Visualization (`visualizer/`)
 - [x] Live Mode (Real-time Display)
 - [x] Replay Mode (Playback Controls with speed adjustment)
+- [x] Call Status Indicators (hall calls ●, car calls ○, forced calls ◆, move commands ▲)
+- [x] Performance Monitor Tab (Real-world compatible metrics)
+  - Response times (avg, max, long response count)
+  - Trip counts, door operations, travel distances
+  - Per-elevator statistics
+- [x] Event Log with Category Filtering
+  - Door events, hall calls, car calls, passengers, elevator status, commands
 - [x] Dark Mode UI
 - [x] Multi-elevator Display (scalable)
 - [x] HTTP Long Polling (WebSocket-free)
@@ -146,8 +157,12 @@ elvsim-viz
 http://localhost:5000
 ```
 
+**Features:**
 - **Live**: Observe in real-time
 - **Replay**: Replay after execution (with speed control and seeking)
+- **Performance Monitor**: Real-world compatible metrics (response times, trips, door operations, distances)
+- **Event Log**: Filterable by category (door, hall calls, car calls, passengers, elevator status, commands)
+- **Call Indicators**: Visual display of hall calls (●), car calls (○), forced calls (◆), and move commands (▲)
 - **Dark Mode**: Toggle theme with button
 
 For details, see [`visualizer/README.md`](visualizer/README.md).
@@ -248,7 +263,9 @@ elvsim-simple/
 - ✅ Multi-elevator group control (Group Control System)
 - ✅ Real-time status monitoring
 - ✅ Dynamic assignment algorithms
-- ✅ Pluggable algorithm design
+- ✅ Pluggable algorithm design (Allocation & Repositioning strategies)
+- ✅ Move commands (idle repositioning)
+- ✅ Forced move commands (hall call equivalent for predictive positioning)
 
 ### Data Collection & Analysis (`analyzer/`)
 - ✅ JSON Lines format logs (`simulation_log.jsonl`)
@@ -261,6 +278,9 @@ elvsim-simple/
 - ✅ Multi-elevator display (scalable)
 - ✅ Elevator hall panel (waiting passenger display)
 - ✅ Color-coded by elevator
+- ✅ Call status indicators (hall calls ●, car calls ○, forced calls ◆, move commands ▲)
+- ✅ Event log with category-based filtering (door, hall calls, car calls, passengers, elevator status, commands)
+- ✅ Performance monitor (response times, trip counts, door operations, distances) - Real-world compatible
 - ✅ Playback speed control & seek functionality
 - ✅ Dark mode support
 - ✅ HTTP Long Polling (no WebSocket required)
@@ -464,11 +484,12 @@ MIT License - See [LICENSE](LICENSE) for details
 
 ## 🚀 Next Steps
 
-1. **Adjust Simulation Parameters**: Edit `main.py`
-2. **Improve Group Control Algorithms**: Edit `controller/group_control.py`
-3. **Extend Web UI**: Edit `visualizer/static/`
-4. **Connect Real Elevators**: Send data in the same JSONL format
-5. **Develop Custom Algorithms**: Add to `controller/algorithms/`
+1. **Adjust Simulation Parameters**: Edit configuration files in `scenarios/simulation/`
+2. **Customize Group Control**: Edit configuration files in `scenarios/group_control/`
+3. **Develop Custom Algorithms**: Implement `IAllocationStrategy` or `IRepositioningStrategy` in `controller/algorithms/`
+4. **Extend Web UI**: Edit `visualizer/static/`
+5. **Connect Real Elevators**: Send data in the same JSONL format
+6. **Analyze Performance**: Use Performance Monitor tab in web visualizer
 
 ---
 
