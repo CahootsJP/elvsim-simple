@@ -250,7 +250,8 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
         generation_rate=PASSENGER_GENERATION_RATE,
         num_floors=NUM_FLOORS,
         od_matrix=sim_config.traffic.od_matrix,
-        elevators=elevators  # Pass elevators for service floor validation
+        elevators=elevators,  # Pass elevators for service floor validation
+        move_speed_config=sim_config.traffic.passenger_move_speed
     ))
 
     print("\n--- Simulation Start ---")
@@ -271,7 +272,8 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
 
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
                                        call_system, passenger_behavior, statistics,
-                                       generation_rate=0.1, num_floors=10, od_matrix=None, elevators=None):
+                                       generation_rate=0.1, num_floors=10, od_matrix=None, elevators=None,
+                                       move_speed_config=1.0):
     """
     Continuous passenger generation for extended simulation
     
@@ -344,7 +346,13 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
                 print(f"{env.now:.2f} [PassengerGen] Skipped passenger {name}: No elevator can serve {arrival_floor} -> {destination_floor}")
                 continue
         
-        move_speed = random.uniform(0.8, 1.5)
+        # Determine move_speed based on configuration
+        if isinstance(move_speed_config, dict):
+            # Random range
+            move_speed = random.uniform(move_speed_config['min'], move_speed_config['max'])
+        else:
+            # Fixed value
+            move_speed = move_speed_config
         
         # Create passenger (using call_system and behavior)
         passenger = Passenger(env, name, broker, hall_buttons, floor_queues,

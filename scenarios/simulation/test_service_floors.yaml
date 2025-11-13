@@ -85,6 +85,7 @@ simulation:
     # Passenger behavior
     avg_boarding_time: 1.0  # seconds per passenger
     avg_alighting_time: 0.8  # seconds per passenger
+    passenger_move_speed: 1.0  # Fixed value for consistent testing
   
   # Simulation control
   random_seed: 42  # Fixed seed for reproducibility

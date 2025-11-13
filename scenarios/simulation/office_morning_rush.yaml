@@ -52,6 +52,9 @@ simulation:
     # Passenger behavior
     avg_boarding_time: 1.0  # seconds per passenger
     avg_alighting_time: 0.8  # seconds per passenger
+    passenger_move_speed:  # Random range for more realistic behavior
+      min: 0.8
+      max: 1.5
   
   # Simulation control
   random_seed: 42  # For reproducibility

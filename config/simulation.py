@@ -92,6 +92,7 @@ class TrafficConfig:
     # Passenger behavior
     avg_boarding_time: float = 1.0  # seconds per passenger
     avg_alighting_time: float = 0.8  # seconds per passenger
+    passenger_move_speed: Any = 1.0  # Fixed value (float) or range (dict with 'min' and 'max')
     
     def __post_init__(self):
         if self.simulation_duration <= 0:
@@ -102,6 +103,22 @@ class TrafficConfig:
             raise ValueError("avg_boarding_time must be positive")
         if self.avg_alighting_time <= 0:
             raise ValueError("avg_alighting_time must be positive")
+        
+        # Validate passenger_move_speed
+        if isinstance(self.passenger_move_speed, dict):
+            if 'min' not in self.passenger_move_speed or 'max' not in self.passenger_move_speed:
+                raise ValueError("passenger_move_speed dict must have 'min' and 'max' keys")
+            if self.passenger_move_speed['min'] <= 0:
+                raise ValueError("passenger_move_speed min must be positive")
+            if self.passenger_move_speed['max'] <= 0:
+                raise ValueError("passenger_move_speed max must be positive")
+            if self.passenger_move_speed['min'] > self.passenger_move_speed['max']:
+                raise ValueError("passenger_move_speed min must be <= max")
+        elif isinstance(self.passenger_move_speed, (int, float)):
+            if self.passenger_move_speed <= 0:
+                raise ValueError("passenger_move_speed must be positive")
+        else:
+            raise ValueError("passenger_move_speed must be a number or dict with 'min' and 'max'")
         
         # Validate OD matrix if provided
         if self.od_matrix is not None:
