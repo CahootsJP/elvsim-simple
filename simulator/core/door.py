@@ -13,6 +13,7 @@ class Door(Entity):
         self.elevator_name: str = elevator_name
         self.elevator = elevator  # Reference to parent elevator
         self._current_floor: int = 1  # Default floor
+        self.call_system = None  # Call system (ICallSystem) for DCS detection
         self.set_state('IDLE')  # Door state: IDLE, OPENING, OPEN, CLOSING, CLOSED
         self.sensor_timeout = 1.0  # Photoelectric sensor timeout (seconds to wait after queue becomes empty)
         print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
@@ -62,8 +63,12 @@ class Door(Entity):
     def set_current_floor(self, floor: int):
         """Set current floor number."""
         self._current_floor = floor
+    
+    def set_call_system(self, call_system):
+        """Set call system (ICallSystem) for DCS detection"""
+        self.call_system = call_system
 
-    def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues, has_car_call_here=False):
+    def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues, has_car_call_here=False, is_dcs_floor=False):
         """
         Main boarding and alighting process called directly by the elevator operator
         
@@ -89,9 +94,13 @@ class Door(Entity):
         
         # Collect waiting passenger names from all boarding queues (for metrics)
         # IMPORTANT: Must collect BEFORE door opens to capture the correct "door open" time
+        # Also collect waiting passengers for DCS auto-registration
         waiting_passenger_names = []
+        waiting_passengers_for_dcs = []  # Store passenger objects for DCS auto-registration
         for queue in boarding_queues:
-            waiting_passenger_names.extend([p.name for p in queue.items])
+            queue_passengers = [p for p in queue.items]
+            waiting_passenger_names.extend([p.name for p in queue_passengers])
+            waiting_passengers_for_dcs.extend(queue_passengers)
         
         # Send door opening start event with waiting passengers list
         yield self.env.process(self._broadcast_door_event("DOOR_OPENING_START", 
@@ -165,6 +174,17 @@ class Door(Entity):
                     yield board_permission_event
                     boarded_passengers.append(passenger)
                     
+                    # DCS: Photoelectric sensor detects first passenger boarding
+                    # Automatically register car calls for all waiting passengers at this floor
+                    if is_dcs_floor and len(boarded_passengers) == 1:
+                        # First passenger boarded - register car calls for:
+                        # 1. This passenger (who just boarded)
+                        # 2. All other waiting passengers that were in queues when door opened
+                        # Note: We use waiting_passengers_for_dcs which was captured before door opened
+                        self._register_dcs_car_calls_for_waiting_passengers(
+                            waiting_passengers_for_dcs, elevator_name, first_passenger=passenger
+                        )
+                    
                     # Real-time update: add passenger to elevator immediately and report status
                     if self.elevator:
                         self.elevator.passengers_onboard.append(passenger)
@@ -201,4 +221,47 @@ class Door(Entity):
             "boarded": boarded_passengers,
             "failed_to_board": failed_to_board_passengers
         }
+    
+    def _register_dcs_car_calls_for_waiting_passengers(self, waiting_passengers_list, elevator_name: str, first_passenger=None):
+        """
+        Register car calls automatically for all waiting passengers at DCS floor
+        
+        This simulates the photoelectric sensor detecting the first passenger boarding,
+        which triggers automatic registration of all waiting passengers' destinations.
+        
+        Args:
+            waiting_passengers_list: List of passenger objects that were waiting when door opened
+            elevator_name: Name of the elevator
+            first_passenger: The first passenger who just boarded (to include their destination)
+        """
+        if not self.broker or not self.elevator:
+            return
+        
+        # Start with passengers that were waiting when door opened
+        waiting_passengers = list(waiting_passengers_list)
+        
+        # Include the first passenger who just boarded
+        if first_passenger:
+            waiting_passengers.append(first_passenger)
+        
+        if not waiting_passengers:
+            return
+        
+        # Register car calls for all waiting passengers (including first passenger)
+        destinations_registered = set()
+        for passenger in waiting_passengers:
+            destination = passenger.destination_floor
+            if destination not in destinations_registered:
+                # Register car call
+                car_call_topic = f"elevator/{elevator_name}/car_call"
+                car_call_message = {
+                    'destination': destination,
+                    'passenger_name': passenger.name,
+                    'auto_registered': True  # Flag to indicate automatic registration
+                }
+                self.broker.put(car_call_topic, car_call_message)
+                destinations_registered.add(destination)
+                print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Auto-registered car call for floor {destination} (passenger: {passenger.name})")
+        
+        print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Auto-registered {len(destinations_registered)} car call(s) for {len(waiting_passengers)} passenger(s) at DCS floor")
 

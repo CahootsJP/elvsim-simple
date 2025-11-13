@@ -89,8 +89,8 @@ class TraditionalPassengerBehavior(IPassengerBehavior):
         """
         Select the best elevator from available options
         
-        Priority 1: Fewest passengers (空いている方)
-        Priority 2: Earliest door open time (早く到着した方)
+        Priority 1: Fewest passengers (less crowded)
+        Priority 2: Earliest door open time (arrived first)
         """
         if not available_permissions:
             return None

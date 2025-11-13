@@ -93,4 +93,35 @@ class ICallSystem(ABC):
             Total number of floors
         """
         pass
+    
+    def is_dcs_floor(self, floor: int) -> bool:
+        """
+        Check if a floor uses DCS (Destination Control System)
+        
+        Default implementation uses get_floor_call_type().
+        Can be overridden for performance optimization.
+        
+        Args:
+            floor: Floor number
+        
+        Returns:
+            True if the floor uses DCS, False if Traditional
+        """
+        return self.get_floor_call_type(floor) == 'DCS'
+    
+    def has_car_buttons(self) -> bool:
+        """
+        Check if elevators have car buttons (destination buttons inside elevator)
+        
+        FULL DCS: No car buttons (destinations registered at hall panel)
+        Hybrid DCS: Has car buttons (for traditional floors)
+        Traditional: Has car buttons
+        
+        Default implementation: Returns True (assumes car buttons exist)
+        Override in FullDCSCallSystem to return False
+        
+        Returns:
+            True if elevators have car buttons, False otherwise
+        """
+        return True
 

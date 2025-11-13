@@ -66,6 +66,31 @@ class ElevatorConfig:
 
 
 @dataclass
+class CallSystemConfig:
+    """Call system configuration (DCS/Traditional)"""
+    call_system_type: str = "TRADITIONAL"  # TRADITIONAL, FULL_DCS, LOBBY_DCS, ZONED_DCS
+    dcs_floors: Optional[List[int]] = None  # For ZONED_DCS: list of floors with DCS
+    lobby_floor: Optional[int] = None  # For LOBBY_DCS: floor number with DCS panel
+    
+    def __post_init__(self):
+        valid_types = ["TRADITIONAL", "FULL_DCS", "LOBBY_DCS", "ZONED_DCS"]
+        if self.call_system_type not in valid_types:
+            raise ValueError(f"call_system_type must be one of {valid_types}")
+        
+        if self.call_system_type == "ZONED_DCS":
+            if self.dcs_floors is None or len(self.dcs_floors) == 0:
+                raise ValueError("dcs_floors must be provided for ZONED_DCS")
+            if not all(isinstance(f, int) and f > 0 for f in self.dcs_floors):
+                raise ValueError("dcs_floors must contain positive integers")
+        
+        if self.call_system_type == "LOBBY_DCS":
+            if self.lobby_floor is None:
+                raise ValueError("lobby_floor must be provided for LOBBY_DCS")
+            if not isinstance(self.lobby_floor, int) or self.lobby_floor <= 0:
+                raise ValueError("lobby_floor must be a positive integer")
+
+
+@dataclass
 class DoorConfig:
     """Door specifications"""
     open_time: float = 2.0  # seconds
@@ -134,12 +159,13 @@ class SimulationConfig:
     Complete simulation configuration
     
     This configuration is used only in simulation environment.
-    Combines building, elevator, door, and traffic settings.
+    Combines building, elevator, door, traffic, and call system settings.
     """
     building: BuildingConfig
     elevator: ElevatorConfig
     door: DoorConfig
     traffic: TrafficConfig
+    call_system: Optional[CallSystemConfig] = None  # Optional: defaults to TRADITIONAL if not specified
     
     # Simulation control
     random_seed: Optional[int] = None
@@ -194,14 +220,26 @@ class SimulationConfig:
             passenger_generation_rate=traffic_data.get('passenger_generation_rate', 0.1),
             od_matrix=traffic_data.get('od_matrix'),
             avg_boarding_time=traffic_data.get('avg_boarding_time', 1.0),
-            avg_alighting_time=traffic_data.get('avg_alighting_time', 0.8)
+            avg_alighting_time=traffic_data.get('avg_alighting_time', 0.8),
+            passenger_move_speed=traffic_data.get('passenger_move_speed', 1.0)
         )
+        
+        # Parse call system config (optional, defaults to TRADITIONAL)
+        call_system_data = sim_data.get('call_system')
+        call_system = None
+        if call_system_data is not None:
+            call_system = CallSystemConfig(
+                call_system_type=call_system_data.get('call_system_type', 'TRADITIONAL'),
+                dcs_floors=call_system_data.get('dcs_floors'),
+                lobby_floor=call_system_data.get('lobby_floor')
+            )
         
         return cls(
             building=building,
             elevator=elevator,
             door=door,
             traffic=traffic,
+            call_system=call_system,
             random_seed=sim_data.get('random_seed'),
             realtime_factor=sim_data.get('realtime_factor', 1.0)
         )

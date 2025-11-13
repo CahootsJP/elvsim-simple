@@ -1,0 +1,68 @@
+# Simulation Configuration: Zoned DCS Test Scenario
+# Floors 1-3 use DCS, floors 4-10 use traditional UP/DOWN buttons
+# Tests flexible zoned DCS configuration
+
+simulation:
+  # Building specifications
+  building:
+    num_floors: 10
+    floor_height: 3.5  # meters
+    lobby_floor: 1
+    floors: null  # Auto-generate simple floors
+  
+  # Elevator specifications
+  elevator:
+    num_elevators: 4
+    max_capacity: 10  # persons
+    rated_speed: 2.5  # m/s
+    acceleration: 1.0  # m/s²
+    jerk: 2.0  # m/s³
+    full_load_bypass: true
+    home_floor: 1
+    main_direction: "UP"
+    service_floors: null  # All elevators service all floors
+  
+  # Door specifications
+  door:
+    open_time: 2.0  # seconds
+    close_time: 2.0  # seconds
+    reopen_delay: 0.5  # seconds
+  
+  # Call System Configuration
+  call_system:
+    call_system_type: "ZONED_DCS"  # Specific floors use DCS
+    dcs_floors: [1, 2, 3]  # Floors 1, 2, 3 have DCS panels
+  
+  # Traffic pattern
+  traffic:
+    pattern: "uniform"
+    simulation_duration: 180.0  # seconds (3 minutes) - shorter for testing
+    passenger_generation_rate: 0.15  # passengers per second
+    
+    # Origin-Destination matrix for testing zoned DCS
+    # Traffic from DCS floors (1-3) and traditional floors (4-10)
+    od_matrix:
+      # Floor 1 (DCS): Heavy upward traffic
+      - [0.00, 0.20, 0.20, 0.25, 0.20, 0.15, 0.10, 0.08, 0.05, 0.02]
+      # Floor 2 (DCS): Upward traffic
+      - [0.15, 0.00, 0.15, 0.25, 0.20, 0.15, 0.10, 0.08, 0.05, 0.02]
+      # Floor 3 (DCS): Upward traffic
+      - [0.15, 0.15, 0.00, 0.25, 0.20, 0.15, 0.10, 0.08, 0.05, 0.02]
+      # Floor 4-10 (Traditional): Mixed traffic
+      - [0.20, 0.10, 0.10, 0.00, 0.15, 0.15, 0.12, 0.10, 0.08, 0.05]
+      - [0.20, 0.10, 0.10, 0.15, 0.00, 0.15, 0.12, 0.10, 0.08, 0.05]
+      - [0.15, 0.08, 0.08, 0.12, 0.12, 0.00, 0.15, 0.12, 0.10, 0.08]
+      - [0.10, 0.05, 0.05, 0.10, 0.10, 0.12, 0.00, 0.15, 0.12, 0.10]
+      - [0.08, 0.04, 0.04, 0.08, 0.08, 0.10, 0.12, 0.00, 0.15, 0.12]
+      - [0.05, 0.02, 0.02, 0.05, 0.05, 0.08, 0.10, 0.12, 0.00, 0.15]
+      - [0.02, 0.01, 0.01, 0.02, 0.02, 0.05, 0.08, 0.10, 0.12, 0.00]
+    
+    # Passenger behavior
+    avg_boarding_time: 1.0  # seconds per passenger
+    avg_alighting_time: 0.8  # seconds per passenger
+    passenger_move_speed: 1.0  # Fixed value for consistent testing
+  
+  # Simulation control
+  random_seed: 42  # For reproducibility
+  realtime_factor: 0.0  # 0.0 = as fast as possible
+

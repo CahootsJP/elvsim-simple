@@ -1,5 +1,6 @@
 import simpy
 import random
+import sys
 
 # Configuration
 from config import load_group_control_config, load_simulation_config
@@ -15,6 +16,9 @@ from simulator.physics.physics_engine import PhysicsEngine
 
 # Call system and behavior interfaces
 from simulator.implementations.traditional.call_system import TraditionalCallSystem
+from simulator.implementations.dcs.call_system import FullDCSCallSystem
+from simulator.implementations.hybrid.call_system import LobbyDCSCallSystem, ZonedCallSystem
+from simulator.interfaces.call_system import ICallSystem
 from simulator.implementations.traditional.passenger_behavior import AdaptivePassengerBehavior
 
 # Controller and allocation strategy
@@ -78,7 +82,25 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     env.process(sim_stats.start_listening())
     
     # --- Call system configuration ---
-    call_system = TraditionalCallSystem(num_floors=NUM_FLOORS)
+    # Create call system based on configuration
+    if sim_config.call_system is None or sim_config.call_system.call_system_type == "TRADITIONAL":
+        call_system: ICallSystem = TraditionalCallSystem(num_floors=NUM_FLOORS)
+        print(f"Using Traditional call system (all floors have UP/DOWN buttons)")
+    elif sim_config.call_system.call_system_type == "FULL_DCS":
+        call_system = FullDCSCallSystem(num_floors=NUM_FLOORS)
+        print(f"Using FULL DCS call system (all floors have destination panels)")
+    elif sim_config.call_system.call_system_type == "LOBBY_DCS":
+        lobby_floor = sim_config.call_system.lobby_floor or sim_config.building.lobby_floor
+        call_system = LobbyDCSCallSystem(num_floors=NUM_FLOORS, lobby_floor=lobby_floor)
+        print(f"Using Lobby DCS call system (floor {lobby_floor} has DCS panel, others have UP/DOWN buttons)")
+    elif sim_config.call_system.call_system_type == "ZONED_DCS":
+        if sim_config.call_system.dcs_floors is None:
+            raise ValueError("dcs_floors must be specified for ZONED_DCS")
+        call_system = ZonedCallSystem(num_floors=NUM_FLOORS, dcs_floors=sim_config.call_system.dcs_floors)
+        print(f"Using Zoned DCS call system (DCS floors: {sim_config.call_system.dcs_floors})")
+    else:
+        raise ValueError(f"Unknown call system type: {sim_config.call_system.call_system_type}")
+    
     passenger_behavior = AdaptivePassengerBehavior()
     
     # --- Create strategies from config ---
@@ -202,7 +224,8 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
                 home_floor=elev_home_floor,
                 main_direction=elev_main_dir,
                 service_floors=elev_service_floors,
-                building=building
+                building=building,
+                call_system=call_system
             )
             gcs.register_elevator(elevator)
             elevators.append(elevator)
@@ -224,7 +247,8 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
                 home_floor=HOME_FLOOR,
                 main_direction=MAIN_DIRECTION,
                 service_floors=common_service_floors,
-                building=building
+                building=building,
+                call_system=call_system
             )
             gcs.register_elevator(elevator)
             elevators.append(elevator)
@@ -387,5 +411,8 @@ def passenger_generator(env, broker, hall_buttons, floor_queues):
               arrival_floor=5, destination_floor=3, move_speed=0.8)
 
 if __name__ == '__main__':
-    run_simulation()
+    # Accept command line arguments for config files
+    sim_config_path = sys.argv[1] if len(sys.argv) > 1 else "scenarios/simulation/office_morning_rush.yaml"
+    gc_config_path = sys.argv[2] if len(sys.argv) > 2 else "scenarios/group_control/test_forced_move.yaml"
+    run_simulation(sim_config_path=sim_config_path, gc_config_path=gc_config_path)
 

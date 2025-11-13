@@ -152,12 +152,28 @@ class GroupControlSystem:
 
             # Select the best elevator for this hall call using strategy
             if self.elevators:
+                # Determine call type from message (default to TRADITIONAL for backward compatibility)
+                call_type = message.get('call_type', 'TRADITIONAL')
+                
+                # For DCS calls, determine direction from destination
+                if call_type == 'DCS':
+                    destination = message.get('destination')
+                    call_floor = message['floor']
+                    if destination is not None:
+                        # Calculate direction based on destination
+                        direction = "UP" if destination > call_floor else "DOWN"
+                    else:
+                        direction = message.get('direction', 'UP')  # Fallback
+                else:
+                    direction = message.get('direction')
+                    destination = message.get('destination')
+                
                 # Prepare call_data with additional context
                 call_data = {
                     'floor': message['floor'],
-                    'direction': message.get('direction'),
-                    'destination': message.get('destination'),  # For DCS (future)
-                    'call_type': 'TRADITIONAL',  # TODO: get from ICallSystem
+                    'direction': direction,
+                    'destination': destination,  # For DCS
+                    'call_type': call_type,
                     'timestamp': self.broker.get_current_time()
                 }
                 
@@ -169,28 +185,49 @@ class GroupControlSystem:
                     if call_floor in status.get('service_floors', [])
                 }
                 
+                # For DCS, also filter by destination floor
+                if call_type == 'DCS' and destination is not None:
+                    serviceable_statuses = {
+                        elev_name: status 
+                        for elev_name, status in serviceable_statuses.items()
+                        if destination in status.get('service_floors', [])
+                    }
+                
                 if not serviceable_statuses:
-                    print(f"{self.broker.get_current_time():.2f} [GCS] WARNING: No elevator can service floor {call_floor}. Hall call dropped.")
+                    print(f"{self.broker.get_current_time():.2f} [GCS] WARNING: No elevator can service floor {call_floor}" + 
+                          (f" -> {destination}" if call_type == 'DCS' else "") + ". Hall call dropped.")
                     continue
                 
                 # Delegate selection to strategy (only with serviceable elevators)
                 selected_elevator = self.strategy.select_elevator(call_data, serviceable_statuses)
                 
+                # Prepare task message (include direction for elevator processing)
+                task_details = message.copy()
+                if call_type == 'DCS' and 'direction' not in task_details:
+                    task_details['direction'] = direction  # Add direction for elevator compatibility
+                
                 task_message = {
                     "task_type": "ASSIGN_HALL_CALL",
-                    "details": message
+                    "details": task_details
                 }
                 
                 task_topic = f"elevator/{selected_elevator}/task"
                 self.broker.put(task_topic, task_message)
-                print(f"{self.broker.get_current_time():.2f} [GCS] Assigned hall call to {selected_elevator}")
+                print(f"{self.broker.get_current_time():.2f} [GCS] Assigned {'DCS' if call_type == 'DCS' else 'hall'} call to {selected_elevator}: Floor {call_floor}" + 
+                      (f" -> {destination}" if call_type == 'DCS' else f" {direction}"))
                 
-                # Broadcast assignment information for visualization
+                # Broadcast assignment information for visualization and passenger notification
                 assignment_message = {
                     "timestamp": self.broker.get_current_time(),
                     "floor": message['floor'],
-                    "direction": message['direction'],
-                    "assigned_elevator": selected_elevator
+                    "direction": direction,
+                    "assigned_elevator": selected_elevator,
+                    "call_type": call_type
                 }
+                
+                # Include passenger_name for DCS (so passenger can identify their assignment)
+                if call_type == 'DCS' and 'passenger_name' in message:
+                    assignment_message['passenger_name'] = message['passenger_name']
+                
                 self.broker.put('gcs/hall_call_assignment', assignment_message)
 

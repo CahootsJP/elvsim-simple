@@ -14,7 +14,7 @@ class Elevator(Entity):
     # Physics constants
     MIN_BRAKE_TIME_THRESHOLD = 0.05  # Minimum brake time to trigger DECELERATING state (seconds)
 
-    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10, full_load_bypass: bool = True, home_floor: int = 1, main_direction: str = "UP", service_floors=None, building=None):
+    def __init__(self, env: simpy.Environment, name: str, broker: MessageBroker, num_floors: int, floor_queues, door: Door, flight_profiles: dict, physics_engine=None, hall_buttons=None, max_capacity: int = 10, full_load_bypass: bool = True, home_floor: int = 1, main_direction: str = "UP", service_floors=None, building=None, call_system=None):
         # Initialize direction before calling super().__init__
         self.direction = "NO_DIRECTION"
         
@@ -33,6 +33,7 @@ class Elevator(Entity):
         self.home_floor = home_floor  # Home floor (typically lobby where elevator returns when idle)
         self.main_direction = main_direction  # Main traffic direction ("UP" or "DOWN", typically "UP" for office buildings)
         self.building = building  # Building object for floor name mapping
+        self.call_system = call_system  # Call system (ICallSystem) for DCS detection
         
         # Service floors: floors this elevator can stop at
         # If None, elevator services all floors
@@ -53,6 +54,9 @@ class Elevator(Entity):
         # Set current floor to Door object
         if hasattr(self.door, 'set_current_floor'):
             self.door.set_current_floor(self.current_floor)
+        # Set call_system to Door object (for DCS auto-registration)
+        if hasattr(self.door, 'set_call_system'):
+            self.door.set_call_system(self.call_system)
         self.advanced_position = 1
         self.current_destination = None  # Current final destination
         self.last_advanced_position = None  # Previous advanced_position
@@ -672,10 +676,15 @@ class Elevator(Entity):
         # Check if current floor has a car call (for door to send OFF message at opening complete)
         has_car_call_here = self.current_floor in self.car_calls
         
+        # Check if current floor is DCS floor (for automatic car call registration)
+        is_dcs_floor = False
+        if self.call_system:
+            is_dcs_floor = self.call_system.is_dcs_floor(self.current_floor)
+        
         # Call door boarding and alighting process
         # Door will get capacity information from elevator via getters
         boarding_process = self.env.process(self.door.handle_boarding_and_alighting_process(
-            passengers_to_exit, boarding_queues, has_car_call_here))
+            passengers_to_exit, boarding_queues, has_car_call_here, is_dcs_floor=is_dcs_floor))
         report = yield boarding_process
         
         # Passengers are already removed/added by Door in real-time
