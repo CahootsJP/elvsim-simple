@@ -139,12 +139,11 @@ class DCSWorkflow(IPassengerWorkflow):
                 passenger.broker.put('passenger/boarding', {
                     'passenger_name': passenger.name,
                     'floor': arrival_floor,
-                    'direction': direction,
+                    'destination': destination_floor,  # DCS: include destination instead of direction
                     'elevator_name': elevator_name,
                     'timestamp': passenger.env.now,
                     'wait_time': passenger.get_waiting_time_to_door_open(),
-                    'wait_time_to_boarding': passenger.get_waiting_time_to_boarding(),
-                    'destination': destination_floor
+                    'wait_time_to_boarding': passenger.get_waiting_time_to_boarding()
                 })
                 
                 yield passenger.env.timeout(passenger.move_speed)

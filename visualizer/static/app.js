@@ -481,6 +481,9 @@ class ElevatorVisualizer {
         // Clear waiting passengers
         this.waitingPassengers = {};
         
+        // Update waiting passengers display (clear all indicators)
+        this.updateWaitingPassengers(this.waitingPassengers);
+        
         // Clear metrics
         this.resetMetrics();
         
@@ -542,15 +545,25 @@ class ElevatorVisualizer {
                 // Handle passenger waiting event for visualization
                 // Update waiting passengers count
                 const waitFloor = data.floor;
-                const waitDirection = data.direction;
+                let waitDirection = data.direction;
+                
+                // DCS: Calculate direction from destination if not provided
+                if (!waitDirection && data.destination !== undefined) {
+                    waitDirection = data.destination > waitFloor ? 'UP' : 'DOWN';
+                }
                 
                 if (!this.waitingPassengers[waitFloor]) {
                     this.waitingPassengers[waitFloor] = { UP: 0, DOWN: 0 };
                 }
-                this.waitingPassengers[waitFloor][waitDirection]++;
+                
+                // Only increment if we have a valid direction
+                if (waitDirection === 'UP' || waitDirection === 'DOWN') {
+                    this.waitingPassengers[waitFloor][waitDirection]++;
+                }
                 
                 // Add to event log
-                this.addLog('info', `${data.passenger} waiting at floor ${waitFloor} ${waitDirection}`, message.time);
+                const logDirection = waitDirection || `→${data.destination}`;
+                this.addLog('info', `${data.passenger_name || data.passenger} waiting at floor ${waitFloor} ${logDirection}`, message.time);
                 
                 // Trigger visualization update
                 this.updateWaitingPassengers(this.waitingPassengers);
@@ -560,9 +573,15 @@ class ElevatorVisualizer {
                 // Handle passenger boarding event for visualization
                 // Decrement waiting passengers count
                 const boardFloor = data.floor;
-                const boardDirection = data.direction;
+                let boardDirection = data.direction;
+                
+                // DCS: Calculate direction from destination if not provided
+                if (!boardDirection && data.destination !== undefined) {
+                    boardDirection = data.destination > boardFloor ? 'UP' : 'DOWN';
+                }
                 
                 if (this.waitingPassengers[boardFloor] && 
+                    (boardDirection === 'UP' || boardDirection === 'DOWN') &&
                     this.waitingPassengers[boardFloor][boardDirection] > 0) {
                     this.waitingPassengers[boardFloor][boardDirection]--;
                 }
@@ -1118,6 +1137,27 @@ class ElevatorVisualizer {
         }
     }
     
+    updateWaitingPassengersFromDoorEvent(floor, waitingPassengerNames) {
+        // Update waiting passengers based on actual queue state from door event
+        // waitingPassengerNames is an array of passenger names waiting at this floor
+        
+        if (!this.waitingPassengers[floor]) {
+            this.waitingPassengers[floor] = { UP: 0, DOWN: 0 };
+        }
+        
+        // Set the count directly from the queue (this is the ground truth)
+        // Note: We don't know the direction split from door event alone,
+        // so we'll just show total count in UP direction for now
+        const totalWaiting = waitingPassengerNames ? waitingPassengerNames.length : 0;
+        
+        // For now, show all waiting passengers as "waiting" (use UP direction for display)
+        this.waitingPassengers[floor].UP = totalWaiting;
+        this.waitingPassengers[floor].DOWN = 0;
+        
+        // Trigger visual update
+        this.updateWaitingPassengers(this.waitingPassengers);
+    }
+    
     updateWaitingPassengers(waitingData) {
         console.log('[DEBUG] updateWaitingPassengers called with data:', JSON.stringify(waitingData));
         this.waitingPassengers = waitingData;
@@ -1204,6 +1244,7 @@ class ElevatorVisualizer {
                         case 'DOOR_OPENING_START':
                             elevatorCar.classList.add('door-opening');
                             elevatorCar.classList.remove('door-closed', 'door-closing');
+                            // Note: Waiting passengers are managed by passenger/waiting and passenger/boarding events
                             break;
                             
                         case 'DOOR_OPENING_COMPLETE':
@@ -1940,6 +1981,7 @@ class ElevatorVisualizer {
                         event_type: event.data.event,
                         elevator_name: event.data.elevator,
                         floor: event.data.floor,
+                        waiting_passengers: event.data.waiting_passengers,  // Include waiting passengers for queue-based display
                         timestamp: event.time
                     }
                 };

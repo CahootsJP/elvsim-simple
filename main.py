@@ -383,9 +383,11 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
             # Fixed value
             move_speed = move_speed_config
         
-        # Create passenger (using call_system and behavior)
+        # Create passenger (using call_system and unique behavior instance)
+        # Each passenger needs their own behavior instance to avoid state sharing
+        passenger_behavior_instance = AdaptivePassengerBehavior()
         passenger = Passenger(env, name, broker, hall_buttons, floor_queues,
-                             call_system=call_system, behavior=passenger_behavior,
+                             call_system=call_system, behavior=passenger_behavior_instance,
                              arrival_floor=arrival_floor, destination_floor=destination_floor, 
                              move_speed=move_speed)
         

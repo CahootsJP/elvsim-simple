@@ -354,19 +354,39 @@ class Statistics:
             if topic == 'passenger/waiting':
                 floor = message.get('floor')
                 direction = message.get('direction')
+                destination = message.get('destination')
                 passenger_name = message.get('passenger_name')
                 
-                if floor is not None and direction is not None:
-                    # Increment waiting passengers when they join the queue
-                    self._update_waiting_passengers(floor, direction, 1)
-                    print(f"[Statistics] {passenger_name} started waiting at floor {floor} ({direction}).")
+                # Traditional: direction is provided
+                # DCS: direction is None, but destination is provided
+                if floor is not None:
+                    # Calculate direction for waiting passenger tracking (Traditional or DCS)
+                    if direction is not None:
+                        # Traditional system
+                        wait_direction = direction
+                    elif destination is not None:
+                        # DCS system: calculate direction from destination
+                        wait_direction = 'UP' if destination > floor else 'DOWN'
+                    else:
+                        # Unknown system, skip
+                        wait_direction = None
                     
-                    # Log event for JSON Lines
-                    self._add_event_log('passenger_waiting', {
-                        'passenger': passenger_name,
-                        'floor': floor,
-                        'direction': direction
-                    })
+                    if wait_direction is not None:
+                        # Increment waiting passengers when they join the queue
+                        self._update_waiting_passengers(floor, wait_direction, 1)
+                        print(f"[Statistics] {passenger_name} started waiting at floor {floor} ({wait_direction}).")
+                    
+                    # Log event for JSON Lines (include both direction and destination for flexibility)
+                    event_data = {
+                        'passenger_name': passenger_name,
+                        'floor': floor
+                    }
+                    if direction is not None:
+                        event_data['direction'] = direction
+                    if destination is not None:
+                        event_data['destination'] = destination
+                    
+                    self._add_event_log('passenger_waiting', event_data)
             
             # Track car_calls status for real-time display
             car_calls_match = re.search(r'elevator/(.*?)/car_calls', topic)
@@ -485,26 +505,48 @@ class Statistics:
             if topic == 'passenger/boarding':
                 floor = message.get('floor')
                 direction = message.get('direction')
+                destination = message.get('destination')
                 passenger_name = message.get('passenger_name')
                 elevator_name = message.get('elevator_name')
                 wait_time = message.get('wait_time')
                 wait_time_to_boarding = message.get('wait_time_to_boarding')
                 
-                if floor is not None and direction is not None:
-                    # Remove one waiting passenger when someone boards
-                    self._update_waiting_passengers(floor, direction, -1)
-                    wait_time_str = f"{wait_time:.2f}s" if wait_time is not None else "N/A"
-                    print(f"[Statistics] {passenger_name} boarded at floor {floor} ({direction}). Wait time: {wait_time_str}. Waiting passengers decreased.")
+                # Traditional: direction is provided
+                # DCS: direction is None, but destination is provided
+                if floor is not None:
+                    # Calculate direction for waiting passenger tracking (Traditional or DCS)
+                    if direction is not None:
+                        # Traditional system
+                        board_direction = direction
+                    elif destination is not None:
+                        # DCS system: calculate direction from destination
+                        board_direction = 'UP' if destination > floor else 'DOWN'
+                    else:
+                        # Unknown system, skip
+                        board_direction = None
                     
-                    # Log event for JSON Lines (include wait_time for metrics)
-                    self._add_event_log('passenger_boarding', {
-                        'passenger': passenger_name,
+                    if board_direction is not None:
+                        # Remove one waiting passenger when someone boards
+                        self._update_waiting_passengers(floor, board_direction, -1)
+                        wait_time_str = f"{wait_time:.2f}s" if wait_time is not None else "N/A"
+                        print(f"[Statistics] {passenger_name} boarded at floor {floor} ({board_direction}). Wait time: {wait_time_str}. Waiting passengers decreased.")
+                    
+                    # Log event for JSON Lines (include both direction and destination for flexibility)
+                    event_data = {
+                        'passenger_name': passenger_name,
                         'floor': floor,
-                        'direction': direction,
-                        'elevator': elevator_name,
-                        'wait_time': wait_time,
-                        'wait_time_to_boarding': wait_time_to_boarding
-                    })
+                        'elevator_name': elevator_name
+                    }
+                    if direction is not None:
+                        event_data['direction'] = direction
+                    if destination is not None:
+                        event_data['destination'] = destination
+                    if wait_time is not None:
+                        event_data['wait_time'] = wait_time
+                    if wait_time_to_boarding is not None:
+                        event_data['wait_time_to_boarding'] = wait_time_to_boarding
+                    
+                    self._add_event_log('passenger_boarding', event_data)
             
             # Record door events (for visualization)
             door_events_match = re.search(r'elevator/(.*?)/door_events', topic)
@@ -517,6 +559,7 @@ class Statistics:
                 event_type = message.get('event_type')
                 floor = message.get('floor')
                 door_id = message.get('door_id')
+                waiting_passengers = message.get('waiting_passengers')  # List of passenger names waiting at this floor
                 
                 if timestamp is not None and event_type is not None:
                     self.door_events_history[elevator_name].append({
@@ -526,12 +569,16 @@ class Statistics:
                         'door_id': door_id
                     })
                     
-                    # Log event for JSON Lines
-                    self._add_event_log('door_event', {
+                    # Log event for JSON Lines (include waiting_passengers for DOOR_OPENING_START)
+                    event_data = {
                         'elevator': elevator_name,
                         'event': event_type,
                         'floor': floor
-                    })
+                    }
+                    if waiting_passengers is not None and event_type == 'DOOR_OPENING_START':
+                        event_data['waiting_passengers'] = waiting_passengers
+                    
+                    self._add_event_log('door_event', event_data)
                     
                     # Send door event to WebSocket for real-time animation
                     self._send_to_websocket({
