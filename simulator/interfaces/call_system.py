@@ -93,7 +93,7 @@ class ICallSystem(ABC):
             Total number of floors
         """
         pass
-    
+
     def is_dcs_floor(self, floor: int) -> bool:
         """
         Check if a floor uses DCS (Destination Control System)
@@ -122,6 +122,22 @@ class ICallSystem(ABC):
         
         Returns:
             True if elevators have car buttons, False otherwise
+        """
+        return True
+    
+    def has_physical_buttons(self) -> bool:
+        """
+        Check if the system has physical hall buttons (UP/DOWN buttons).
+        
+        FULL DCS: No physical hall buttons (all floors use destination panels)
+        Hybrid DCS: Has physical hall buttons (on traditional floors)
+        Traditional: Has physical hall buttons (all floors)
+        
+        Default implementation: Returns True (assumes traditional buttons exist)
+        Override in FullDCSCallSystem to return False
+        
+        Returns:
+            True if physical hall buttons exist, False if DCS-only
         """
         return True
 

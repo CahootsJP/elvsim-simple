@@ -392,7 +392,7 @@ See [`config/README.md`](config/README.md) for full configuration options.
    ```python
    from main import run_simulation
    run_simulation('scenarios/simulation/my_scenario.yaml')
-   ```
+```
 
 ---
 

@@ -118,7 +118,7 @@ class Passenger(Entity):
             
             if len(self.journeys) > 1:
                 print(f"{self.env.now:.2f} [{self.name}] Starting journey {journey_idx + 1}/{len(self.journeys)}: {arrival_floor}F -> {destination_floor}F")
-            
+        
             # Get appropriate workflow for arrival floor
             workflow = self.workflow_factory.create_workflow(arrival_floor)
             

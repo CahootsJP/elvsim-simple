@@ -63,12 +63,12 @@ class Door(Entity):
     def set_current_floor(self, floor: int):
         """Set current floor number."""
         self._current_floor = floor
-    
+
     def set_call_system(self, call_system):
         """Set call system (ICallSystem) for DCS detection"""
         self.call_system = call_system
 
-    def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues, has_car_call_here=False, is_dcs_floor=False):
+    def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues, has_car_call_here=False, is_dcs_floor=False, current_floor=None):
         """
         Main boarding and alighting process called directly by the elevator operator
         
@@ -76,6 +76,8 @@ class Door(Entity):
             passengers_to_exit: List of passengers exiting
             boarding_queues: Queues of passengers waiting to board
             has_car_call_here: Whether current floor has a car call (for OFF message timing)
+            is_dcs_floor: Whether current floor is a DCS floor
+            current_floor: Current floor number (to prevent registering car call for current floor)
         
         Returns:
             dict: Report containing boarded and failed_to_board passengers
@@ -87,6 +89,10 @@ class Door(Entity):
         current_capacity = self.elevator.get_current_capacity() if self.elevator else 0
         max_capacity = self.elevator.get_max_capacity() if self.elevator else None
         elevator_name = self.elevator_name or "Unknown"
+        
+        # Get current floor from elevator if not provided
+        if current_floor is None and self.elevator:
+            current_floor = self.elevator.current_floor
 
         # 1. Open the door
         print(f"{self.env.now:.2f} [{elevator_name}] Door Opening...")
@@ -182,7 +188,7 @@ class Door(Entity):
                         # 2. All other waiting passengers that were in queues when door opened
                         # Note: We use waiting_passengers_for_dcs which was captured before door opened
                         self._register_dcs_car_calls_for_waiting_passengers(
-                            waiting_passengers_for_dcs, elevator_name, first_passenger=passenger
+                            waiting_passengers_for_dcs, elevator_name, first_passenger=passenger, current_floor=current_floor
                         )
                     
                     # Real-time update: add passenger to elevator immediately and report status
@@ -222,7 +228,7 @@ class Door(Entity):
             "failed_to_board": failed_to_board_passengers
         }
     
-    def _register_dcs_car_calls_for_waiting_passengers(self, waiting_passengers_list, elevator_name: str, first_passenger=None):
+    def _register_dcs_car_calls_for_waiting_passengers(self, waiting_passengers_list, elevator_name: str, first_passenger=None, current_floor=None):
         """
         Register car calls automatically for all waiting passengers at DCS floor
         
@@ -233,6 +239,7 @@ class Door(Entity):
             waiting_passengers_list: List of passenger objects that were waiting when door opened
             elevator_name: Name of the elevator
             first_passenger: The first passenger who just boarded (to include their destination)
+            current_floor: Current floor number (to prevent registering car call for current floor)
         """
         if not self.broker or not self.elevator:
             return
@@ -247,10 +254,22 @@ class Door(Entity):
         if not waiting_passengers:
             return
         
+        # Get current floor from elevator if not provided
+        if current_floor is None:
+            current_floor = self.elevator.current_floor if self.elevator else None
+        
         # Register car calls for all waiting passengers (including first passenger)
         destinations_registered = set()
+        skipped_current_floor = 0
         for passenger in waiting_passengers:
             destination = passenger.destination_floor
+            
+            # Skip registering car call for current floor (passenger is already at destination)
+            if current_floor is not None and destination == current_floor:
+                skipped_current_floor += 1
+                print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Skipping car call for current floor {destination} (passenger: {passenger.name} is already at destination)")
+                continue
+            
             if destination not in destinations_registered:
                 # Register car call
                 car_call_topic = f"elevator/{elevator_name}/car_call"
@@ -263,5 +282,7 @@ class Door(Entity):
                 destinations_registered.add(destination)
                 print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Auto-registered car call for floor {destination} (passenger: {passenger.name})")
         
+        if skipped_current_floor > 0:
+            print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Skipped {skipped_current_floor} car call(s) for current floor")
         print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Auto-registered {len(destinations_registered)} car call(s) for {len(waiting_passengers)} passenger(s) at DCS floor")
 

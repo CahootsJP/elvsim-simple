@@ -50,13 +50,19 @@ class FullDCSCallSystem(ICallSystem):
     def get_num_floors(self) -> int:
         """Return total number of floors"""
         return self.num_floors
-    
+
     def has_car_buttons(self) -> bool:
         """
         FULL DCS: No car buttons
         
         In FULL DCS, destinations are registered at hall panels,
         and car calls are automatically registered by photoelectric sensor.
+        """
+        return False
+    
+    def has_physical_buttons(self) -> bool:
+        """
+        FULL DCS: No physical hall buttons (all floors use destination panels)
         """
         return False
 

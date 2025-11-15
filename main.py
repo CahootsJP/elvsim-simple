@@ -194,11 +194,16 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     # --- Entity creation ---
     gcs = GroupControlSystem("GCS", broker, allocation_strategy, repositioning_strategy)
     
-    hall_buttons = [
-        {'UP': HallButton(env, floor, "UP", broker), 
-         'DOWN': HallButton(env, floor, "DOWN", broker)}
-        for floor in range(NUM_FLOORS + 1)
-    ]
+    # Create hall buttons only for Traditional system (not for DCS)
+    if call_system.has_physical_buttons():
+        hall_buttons = [
+            {'UP': HallButton(env, floor, "UP", broker), 
+             'DOWN': HallButton(env, floor, "DOWN", broker)}
+            for floor in range(NUM_FLOORS + 1)
+        ]
+    else:
+        # DCS system: no physical hall buttons
+        hall_buttons = None
 
     # Create elevators dynamically based on config
     elevators = []
