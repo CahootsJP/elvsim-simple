@@ -795,7 +795,7 @@ body.dark-mode .elevator-column[data-elevator="Hall"] .floor:nth-child(even) {
     font-size: 8px; /* Even smaller size */
     display: inline-block;
     line-height: 1;
-    margin-bottom: 4px; /* Push away from center, towards top */
+    margin-bottom: 6px; /* Push away from center, towards top (increased from 4px) */
 }
 
 /* Spacer for maintaining position when only one indicator is present */
