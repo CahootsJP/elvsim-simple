@@ -307,12 +307,23 @@ class Statistics:
                     }
                     self.hall_calls_history[assigned_elevator].append(assignment_data)
                     
-                    # Log event for JSON Lines
-                    self._add_event_log('hall_call_assignment', {
+                    # Include destination and call_type for DCS (for car call preview visualization)
+                    event_data = {
                         'floor': floor,
                         'direction': direction,
                         'elevator': assigned_elevator
-                    })
+                    }
+                    # Add call_type if present (DCS or Traditional)
+                    if 'call_type' in message:
+                        event_data['call_type'] = message['call_type']
+                    # Add destination if present (DCS calls)
+                    if 'destination' in message:
+                        event_data['destination'] = message['destination']
+                    if 'passenger_name' in message:
+                        event_data['passenger_name'] = message['passenger_name']
+                    
+                    # Log event for JSON Lines
+                    self._add_event_log('hall_call_assignment', event_data)
             
             # Record new hall_call registrations (for visualization)
             new_hall_call_match = re.search(r'hall_button/floor_(.*?)/new_hall_call', topic)
@@ -372,7 +383,7 @@ class Statistics:
                         wait_direction = None
                     
                     if wait_direction is not None:
-                        # Increment waiting passengers when they join the queue
+                    # Increment waiting passengers when they join the queue
                         self._update_waiting_passengers(floor, wait_direction, 1)
                         print(f"[Statistics] {passenger_name} started waiting at floor {floor} ({wait_direction}).")
                     
@@ -526,9 +537,9 @@ class Statistics:
                         board_direction = None
                     
                     if board_direction is not None:
-                        # Remove one waiting passenger when someone boards
+                    # Remove one waiting passenger when someone boards
                         self._update_waiting_passengers(floor, board_direction, -1)
-                        wait_time_str = f"{wait_time:.2f}s" if wait_time is not None else "N/A"
+                    wait_time_str = f"{wait_time:.2f}s" if wait_time is not None else "N/A"
                         print(f"[Statistics] {passenger_name} boarded at floor {floor} ({board_direction}). Wait time: {wait_time_str}. Waiting passengers decreased.")
                     
                     # Log event for JSON Lines (include both direction and destination for flexibility)

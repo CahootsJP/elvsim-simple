@@ -85,13 +85,24 @@ class DCSWorkflow(IPassengerWorkflow):
                 # a more sophisticated message routing mechanism.
                 passenger.broker.put(assignment_topic, message)
         
-        # 3. Join the queue (DCS uses direction-based queues for compatibility)
-        # Determine direction based on destination
-        direction = "UP" if destination_floor > arrival_floor else "DOWN"
-        current_queue = passenger.floor_queues[arrival_floor][direction]
-        print(f"{passenger.env.now:.2f} [{passenger.name}] Now waiting in '{direction}' queue at floor {arrival_floor} for {assigned_elevator}.")
+        # 3. Join the queue (DCS: queue per elevator)
+        # Use floor_queue_manager to get the correct queue structure
+        if passenger.floor_queue_manager:
+            current_queue = passenger.floor_queue_manager.get_queue(
+                floor=arrival_floor,
+                elevator_name=assigned_elevator
+            )
+        else:
+            # Fallback to old structure (backward compatibility)
+            direction = "UP" if destination_floor > arrival_floor else "DOWN"
+            current_queue = passenger.floor_queues[arrival_floor][direction]
+        
+        print(f"{passenger.env.now:.2f} [{passenger.name}] Now waiting in {assigned_elevator} queue at floor {arrival_floor}.")
         
         yield current_queue.put(passenger)
+        
+        # Track current assigned elevator for re-registration if left behind
+        current_assigned_elevator = assigned_elevator
         
         # 4. Wait for assigned elevator to arrive and open door
         boarded_successfully = False
@@ -115,13 +126,13 @@ class DCSWorkflow(IPassengerWorkflow):
                     # Assigned elevator not available - reject all and continue waiting
                     for perm in available_permissions:
                         perm['completion_event'].succeed()
-                    print(f"{passenger.env.now:.2f} [{passenger.name}] Assigned elevator {assigned_elevator} not available. Continuing to wait...")
+                    print(f"{passenger.env.now:.2f} [{passenger.name}] Assigned elevator {current_assigned_elevator} not available. Continuing to wait...")
                     continue
                 
                 # Reject other elevators
                 for perm in available_permissions:
                     if perm != selected_permission:
-                        print(f"{passenger.env.now:.2f} [{passenger.name}] Rejecting elevator {perm.get('elevator_name')} (waiting for {assigned_elevator}).")
+                        print(f"{passenger.env.now:.2f} [{passenger.name}] Rejecting elevator {perm.get('elevator_name')} (waiting for {current_assigned_elevator}).")
                         perm['completion_event'].succeed()
                 
                 # Board the assigned elevator
@@ -162,10 +173,64 @@ class DCSWorkflow(IPassengerWorkflow):
                 
                 boarded_successfully = True
             
-            # Check if boarding failed
+            # Check if boarding failed (elevator full - left behind)
             elif len(passenger.boarding_failed_event.items) > 0:
-                yield passenger.boarding_failed_event.get()
-                print(f"{passenger.env.now:.2f} [{passenger.name}] Failed to board (capacity full). Will keep waiting for {assigned_elevator}...")
+                failed_event = yield passenger.boarding_failed_event.get()
+                print(f"{passenger.env.now:.2f} [{passenger.name}] Failed to board {current_assigned_elevator} (capacity full). Re-registering at DCS panel...")
+                
+                # Passenger was left behind - must re-register at DCS panel
+                # This is the correct DCS behavior: GCS cannot detect left-behind passengers
+                # Passenger must manually re-register
+                
+                # Remove from current queue
+                if passenger.floor_queue_manager:
+                    # Passenger will be removed from queue by Door when it detects no boarding
+                    # But we need to ensure we're in the right queue for re-assignment
+                    pass
+                
+                # Re-register at DCS panel (same as initial registration)
+                dcs_call_message = {
+                    'floor': arrival_floor,
+                    'destination': destination_floor,
+                    'passenger_name': passenger.name,
+                    'call_type': 'DCS',
+                    'reason': 'LEFT_BEHIND'
+                }
+                passenger.broker.put("gcs/hall_call", dcs_call_message)
+                print(f"{passenger.env.now:.2f} [{passenger.name}] Re-registered at DCS panel: Floor {arrival_floor} -> {destination_floor}")
+                
+                # Wait for new assignment
+                new_assigned_elevator = None
+                assignment_topic = 'gcs/hall_call_assignment'
+                
+                while new_assigned_elevator is None:
+                    message = yield passenger.broker.get(assignment_topic)
+                    
+                    # Check if this assignment is for this passenger
+                    if (message.get('floor') == arrival_floor and 
+                        message.get('passenger_name') == passenger.name):
+                        new_assigned_elevator = message.get('assigned_elevator')
+                        print(f"{passenger.env.now:.2f} [{passenger.name}] Re-assigned to {new_assigned_elevator} by GCS.")
+                        
+                        # Move to new elevator's queue if different
+                        if passenger.floor_queue_manager and new_assigned_elevator != current_assigned_elevator:
+                            passenger.floor_queue_manager.move_passenger(
+                                passenger,
+                                floor=arrival_floor,
+                                from_elevator=current_assigned_elevator,
+                                to_elevator=new_assigned_elevator
+                            )
+                        
+                        # Update assigned elevator
+                        current_assigned_elevator = new_assigned_elevator
+                        passenger.behavior.on_elevator_assigned(passenger, new_assigned_elevator)
+                        break
+                    else:
+                        # This message is for another passenger - put it back
+                        passenger.broker.put(assignment_topic, message)
+                
+                # Continue waiting for new assigned elevator
+                print(f"{passenger.env.now:.2f} [{passenger.name}] Now waiting for {new_assigned_elevator} after re-registration...")
 
         # 5. Wait for "please exit" permission from Door at destination
         permission_data = yield passenger.exit_permission_event.get()

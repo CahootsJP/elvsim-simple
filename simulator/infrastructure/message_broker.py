@@ -46,7 +46,7 @@ class MessageBroker:
         Returns the global broadcast pipe
         """
         return self.broadcast_pipe
-    
+
     def get_current_time(self) -> float:
         """
         Get current simulation time

@@ -164,6 +164,18 @@ class Door(Entity):
                         if available_space <= 0:
                             # Capacity reached - stop boarding from this queue
                             print(f"{self.env.now:.2f} [{elevator_name}] Capacity reached ({max_capacity} passengers). Cannot board more passengers.")
+                            
+                            # Notify remaining passengers in queue that they were left behind
+                            # (Important for DCS: passengers must re-register)
+                            remaining_passengers = list(queue.items)  # Copy list to avoid modification during iteration
+                            for passenger in remaining_passengers:
+                                if passenger not in boarded_passengers:
+                                    print(f"{self.env.now:.2f} [{elevator_name}] Notifying {passenger.name} that boarding failed (capacity full).")
+                                    failed_notification = self.env.event()
+                                    failed_notification.succeed()
+                                    yield passenger.boarding_failed_event.put(failed_notification)
+                                    failed_to_board_passengers.append(passenger)
+                            
                             break
                     
                     # Board the passenger

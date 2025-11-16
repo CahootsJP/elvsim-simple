@@ -225,9 +225,11 @@ class GroupControlSystem:
                     "call_type": call_type
                 }
                 
-                # Include passenger_name for DCS (so passenger can identify their assignment)
+                # Include passenger_name and destination for DCS (so passenger can identify their assignment)
                 if call_type == 'DCS' and 'passenger_name' in message:
                     assignment_message['passenger_name'] = message['passenger_name']
+                if call_type == 'DCS' and 'destination' in message:
+                    assignment_message['destination'] = message['destination']
                 
                 self.broker.put('gcs/hall_call_assignment', assignment_message)
 

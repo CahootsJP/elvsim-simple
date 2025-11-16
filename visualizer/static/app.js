@@ -23,6 +23,7 @@ class ElevatorVisualizer {
         this.replayState = {
             hallCalls: {},  // {elevatorName: {up: Set(), down: Set()}}
             carCalls: {},    // {elevatorName: Set()}
+            carCallPreviews: {}, // {elevatorName: Set()} - DCS destination previews
             forcedCalls: {}, // {elevatorName: {up: Set(), down: Set()}}
             moveCommands: {} // {elevatorName: targetFloor}
         };
@@ -474,6 +475,7 @@ class ElevatorVisualizer {
         this.replayState = {
             hallCalls: {},
             carCalls: {},
+            carCallPreviews: {},
             forcedCalls: {},
             moveCommands: {}
         };
@@ -558,7 +560,7 @@ class ElevatorVisualizer {
                 
                 // Only increment if we have a valid direction
                 if (waitDirection === 'UP' || waitDirection === 'DOWN') {
-                    this.waitingPassengers[waitFloor][waitDirection]++;
+                this.waitingPassengers[waitFloor][waitDirection]++;
                 }
                 
                 // Add to event log
@@ -586,11 +588,29 @@ class ElevatorVisualizer {
                     this.waitingPassengers[boardFloor][boardDirection]--;
                 }
                 
+                // DCS: Remove car call preview when passenger boards (DCS destination preview should be removed)
+                if (data.destination && data.elevator_name && this.replayState.carCallPreviews[data.elevator_name]) {
+                    this.replayState.carCallPreviews[data.elevator_name].delete(data.destination);
+                }
+                
                 // Add to event log
                 this.addLog('success', `${data.passenger_name} boarded ${data.elevator_name} at floor ${boardFloor}`, message.time);
                 
                 // Trigger visualization update
                 this.updateWaitingPassengers(this.waitingPassengers);
+                
+                // Update call indicators to reflect removed preview
+                if (data.elevator_name) {
+                    this.updateCallsOnly({
+                        elevator_name: data.elevator_name,
+                        car_calls: this.getCarCallsForElevator(data.elevator_name),
+                        hall_calls_up: this.getHallCallsUp(data.elevator_name),
+                        hall_calls_down: this.getHallCallsDown(data.elevator_name),
+                        move_command_target_floor: this.replayState?.moveCommands?.[data.elevator_name],
+                        forced_calls_up: this.replayState?.forcedCalls?.[data.elevator_name] ? Array.from(this.replayState.forcedCalls[data.elevator_name].up) : [],
+                        forced_calls_down: this.replayState?.forcedCalls?.[data.elevator_name] ? Array.from(this.replayState.forcedCalls[data.elevator_name].down) : []
+                    });
+                }
                 break;
                 
             case 'passenger_alighting':
@@ -605,7 +625,19 @@ class ElevatorVisualizer {
             
             case 'hall_call_assignment':
                 // Handle hall call assignment
-                this.addLog('info', `Hall call ${data.floor} ${data.direction} assigned to ${data.elevator}`, message.time);
+                const assignmentMsg = data.destination 
+                    ? `Hall call ${data.floor} ${data.direction} → ${data.destination}F assigned to ${data.elevator}`
+                    : `Hall call ${data.floor} ${data.direction} assigned to ${data.elevator}`;
+                this.addLog('info', assignmentMsg, message.time);
+                
+                // DCS: Add car call preview for destination floor
+                if (data.destination && data.call_type === 'DCS') {
+                    if (!this.replayState.carCallPreviews[data.elevator]) {
+                        this.replayState.carCallPreviews[data.elevator] = new Set();
+                    }
+                    this.replayState.carCallPreviews[data.elevator].add(data.destination);
+                }
+                
                 // Update call indicators (trigger calls_update)
                 this.updateCallsOnly({
                     elevator_name: data.elevator,
@@ -636,6 +668,12 @@ class ElevatorVisualizer {
             case 'car_call_registered':
                 // Handle car call registration
                 this.addLog('info', `[${data.elevator_name}] Car call to floor ${data.floor}`, message.time);
+                
+                // DCS: Remove preview when actual car call is registered
+                if (this.replayState.carCallPreviews[data.elevator_name]) {
+                    this.replayState.carCallPreviews[data.elevator_name].delete(data.floor);
+                }
+                
                 // Update call indicators
                 this.updateCallsOnly({
                     elevator_name: data.elevator_name,
@@ -710,9 +748,14 @@ class ElevatorVisualizer {
     updateCallsOnly(data) {
         const { elevator_name, car_calls, hall_calls_up, hall_calls_down } = data;
         
+        // Get num_floors from elevator state if not provided
+        const elevatorState = this.elevators.get(elevator_name);
+        const num_floors = data.num_floors || elevatorState?.num_floors || this.numFloors || 10;
+        
         // Update call indicators using new grid layout
         const callData = {
             ...data,
+            num_floors: num_floors,
             car_calls: car_calls || [],
             hall_calls_up: hall_calls_up || [],
             hall_calls_down: hall_calls_down || []
@@ -869,19 +912,55 @@ class ElevatorVisualizer {
             }
         }
         
-        // Add car call indicators (RIGHT side)
-        if (data.car_calls && data.car_calls.length > 0) {
-            data.car_calls.forEach(floor => {
-                const rightContainer = document.getElementById(`floor-icons-right-${elevatorName}-${floor}`);
-                if (rightContainer) {
-                    const indicator = document.createElement('span');
-                    indicator.className = 'call-indicator car-call-indicator';
-                    indicator.textContent = '●';
-                    indicator.title = `Car call: ${floor}F`;
-                    rightContainer.appendChild(indicator);
+        // Build a map of which floors have which indicators on the RIGHT side
+        const rightIndicators = {}; // {floor: {preview: bool, carCall: bool}}
+        
+        // Check for car call previews (DCS destination previews)
+        if (this.replayState.carCallPreviews[elevatorName]) {
+            const previews = Array.from(this.replayState.carCallPreviews[elevatorName]);
+            previews.forEach(floor => {
+                // Skip if already registered as regular car call
+                if (data.car_calls && data.car_calls.includes(floor)) {
+                    return;
                 }
+                if (!rightIndicators[floor]) rightIndicators[floor] = {};
+                rightIndicators[floor].preview = true;
             });
         }
+        
+        // Check for car calls
+        if (data.car_calls && data.car_calls.length > 0) {
+            data.car_calls.forEach(floor => {
+                if (!rightIndicators[floor]) rightIndicators[floor] = {};
+                rightIndicators[floor].carCall = true;
+            });
+        }
+        
+        // Add indicators with absolute positioning (no spacers needed)
+        Object.keys(rightIndicators).forEach(floor => {
+                const rightContainer = document.getElementById(`floor-icons-right-${elevatorName}-${floor}`);
+            if (!rightContainer) return;
+            
+            const indicators = rightIndicators[floor];
+            
+            // Top position: Car call preview (■)
+            if (indicators.preview) {
+                const previewIndicator = document.createElement('span');
+                previewIndicator.className = 'call-indicator car-call-preview-indicator';
+                previewIndicator.textContent = '■';
+                previewIndicator.title = `Car call preview (DCS destination): ${floor}F`;
+                rightContainer.appendChild(previewIndicator);
+                }
+            
+            // Bottom position: Car call (●)
+            if (indicators.carCall) {
+                const carCallIndicator = document.createElement('span');
+                carCallIndicator.className = 'call-indicator car-call-indicator';
+                carCallIndicator.textContent = '●';
+                carCallIndicator.title = `Car call: ${floor}F`;
+                rightContainer.appendChild(carCallIndicator);
+        }
+        });
     }
     
     createElevatorElement(elevatorName) {
@@ -996,8 +1075,8 @@ class ElevatorVisualizer {
             elevatorCar.style.bottom = `${positionPercent}%`;
         }
         
-        // Render car call indicators (◎ purple, small)
-        this.renderCarCalls(elevatorShaft, car_calls || [], num_floors);
+        // Render car call indicators (◎ purple, small) and previews (■ orange, DCS)
+        this.renderCarCalls(elevatorShaft, car_calls || [], num_floors, elevatorName);
         
         // Render hall call indicators (△ UP green, ▽ DOWN orange)
         this.renderHallCalls(elevatorShaft, hall_calls_up || [], hall_calls_down || [], num_floors);
@@ -1009,14 +1088,17 @@ class ElevatorVisualizer {
         this.renderWaitingPassengers(element, num_floors);
     }
     
-    renderCarCalls(shaftElement, carCalls, numFloors) {
-        // Remove existing car call indicators
-        const existing = shaftElement.querySelectorAll('.car-call-indicator');
+    renderCarCalls(shaftElement, carCalls, numFloors, elevatorName = null) {
+        // Remove existing car call indicators (both regular and preview)
+        const existing = shaftElement.querySelectorAll('.car-call-indicator, .car-call-preview-indicator');
         existing.forEach(el => el.remove());
         
-        // Add car call indicators for each floor
-        if (!numFloors || !carCalls || carCalls.length === 0) return;
+        if (!numFloors) return;
         
+        const floorHeight = 100 / numFloors; // Height of each floor slot (%)
+        
+        // Add regular car call indicators
+        if (carCalls && carCalls.length > 0) {
         carCalls.forEach(targetFloor => {
             const indicator = document.createElement('div');
             indicator.className = 'car-call-indicator';
@@ -1024,12 +1106,15 @@ class ElevatorVisualizer {
             indicator.title = `Car call to floor ${targetFloor}`;
             
             // Position indicator at the CENTER of the target floor
-            const floorHeight = 100 / numFloors; // Height of each floor slot (%)
             const bottomPercent = ((targetFloor - 1) / numFloors) * 100 + (floorHeight / 2);
             indicator.style.bottom = `${bottomPercent}%`;
             
             shaftElement.appendChild(indicator);
         });
+        }
+        
+        // Note: Preview car call indicators are handled by updateCallIndicators (grid layout)
+        // This renderCarCalls is for old layout only, so we don't render previews here
     }
     
     renderHallCalls(shaftElement, hallCallsUp, hallCallsDown, numFloors) {
@@ -1869,11 +1954,14 @@ class ElevatorVisualizer {
                 const elevator = event.data.elevator;
                 const floor = event.data.floor;
                 const direction = event.data.direction;
+                const destination = event.data.destination; // DCS destination
+                const call_type = event.data.call_type; // DCS or Traditional
                 
                 if (!this.replayState) {
                     this.replayState = {
                         hallCalls: {},
-                        carCalls: {}
+                        carCalls: {},
+                        carCallPreviews: {}
                     };
                 }
                 
@@ -1890,13 +1978,23 @@ class ElevatorVisualizer {
                     this.replayState.hallCalls[elevator].down.add(floor);
                 }
                 
+                // DCS: Add car call preview for destination floor
+                if (destination && call_type === 'DCS') {
+                    if (!this.replayState.carCallPreviews[elevator]) {
+                        this.replayState.carCallPreviews[elevator] = new Set();
+                    }
+                    this.replayState.carCallPreviews[elevator].add(destination);
+                }
+                
                 // Return hall_call_assignment event for event log
                 return {
                     type: 'hall_call_assignment',
                     data: {
                         elevator: elevator,
                         floor: floor,
-                        direction: direction
+                        direction: direction,
+                        destination: destination,
+                        call_type: call_type
                     },
                     time: event.time
                 };
@@ -1934,7 +2032,8 @@ class ElevatorVisualizer {
                 if (!this.replayState) {
                     this.replayState = {
                         hallCalls: {},
-                        carCalls: {}
+                        carCalls: {},
+                        carCallPreviews: {}
                     };
                 }
                 
@@ -1943,6 +2042,11 @@ class ElevatorVisualizer {
                 }
                 
                 this.replayState.carCalls[carElevator].add(carFloor);
+                
+                // DCS: Remove preview when actual car call is registered
+                if (this.replayState.carCallPreviews[carElevator]) {
+                    this.replayState.carCallPreviews[carElevator].delete(carFloor);
+                }
                 
                 // Return car_call_registered event for event log
                 return {

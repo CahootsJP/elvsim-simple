@@ -12,6 +12,7 @@ from simulator.core.hall_button import HallButton
 from simulator.core.passenger import Passenger
 from simulator.core.door import Door
 from simulator.core.building import Building, FloorDefinition
+from simulator.core.floor_queue_manager import FloorQueueManager
 from simulator.physics.physics_engine import PhysicsEngine
 
 # Call system and behavior interfaces
@@ -107,7 +108,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     # Allocation strategy
     alloc_strategy_name = gc_config.allocation_strategy.name
     if alloc_strategy_name == "NearestCar":
-        allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
+    allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
     else:
         raise ValueError(f"Unknown allocation strategy: {alloc_strategy_name}")
     
@@ -173,7 +174,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
             ]
         }
     })
-    
+
     # --- Physics engine preparation ---
     # Use actual floor heights from building definition
     floor_heights = [0]  # Ground level
@@ -186,21 +187,25 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     flight_profiles = physics_engine.precompute_flight_profiles()
 
     # --- Shared resource creation ---
-    floor_queues = [
-        {"UP": simpy.Store(env), "DOWN": simpy.Store(env)}
-        for _ in range(NUM_FLOORS + 1)
-    ]
+    # Create FloorQueueManager for unified queue handling
+    # Traditional floors: queue[floor][direction]
+    # DCS floors: queue[floor][elevator_name]
+    floor_queue_manager = FloorQueueManager(env, NUM_FLOORS, NUM_ELEVATORS, call_system)
+    
+    # Backward compatibility: Create old-style floor_queues structure for existing code
+    # This will be gradually replaced with floor_queue_manager
+    floor_queues = floor_queue_manager._queues
 
     # --- Entity creation ---
     gcs = GroupControlSystem("GCS", broker, allocation_strategy, repositioning_strategy)
     
     # Create hall buttons only for Traditional system (not for DCS)
     if call_system.has_physical_buttons():
-        hall_buttons = [
-            {'UP': HallButton(env, floor, "UP", broker), 
-             'DOWN': HallButton(env, floor, "DOWN", broker)}
-            for floor in range(NUM_FLOORS + 1)
-        ]
+    hall_buttons = [
+        {'UP': HallButton(env, floor, "UP", broker), 
+         'DOWN': HallButton(env, floor, "DOWN", broker)}
+        for floor in range(NUM_FLOORS + 1)
+    ]
     else:
         # DCS system: no physical hall buttons
         hall_buttons = None
@@ -230,7 +235,8 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
                 main_direction=elev_main_dir,
                 service_floors=elev_service_floors,
                 building=building,
-                call_system=call_system
+                call_system=call_system,
+                floor_queue_manager=floor_queue_manager
             )
             gcs.register_elevator(elevator)
             elevators.append(elevator)
@@ -250,6 +256,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
                 max_capacity=MAX_CAPACITY,
                 full_load_bypass=FULL_LOAD_BYPASS,
                 home_floor=HOME_FLOOR,
+                floor_queue_manager=floor_queue_manager,
                 main_direction=MAIN_DIRECTION,
                 service_floors=common_service_floors,
                 building=building,
@@ -280,7 +287,8 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
         num_floors=NUM_FLOORS,
         od_matrix=sim_config.traffic.od_matrix,
         elevators=elevators,  # Pass elevators for service floor validation
-        move_speed_config=sim_config.traffic.passenger_move_speed
+        move_speed_config=sim_config.traffic.passenger_move_speed,
+        floor_queue_manager=floor_queue_manager
     ))
 
     print("\n--- Simulation Start ---")
@@ -302,7 +310,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
 def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues, 
                                        call_system, passenger_behavior, statistics,
                                        generation_rate=0.1, num_floors=10, od_matrix=None, elevators=None,
-                                       move_speed_config=1.0):
+                                       move_speed_config=1.0, floor_queue_manager=None):
     """
     Continuous passenger generation for extended simulation
     
@@ -361,7 +369,7 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
             # Fallback: Uniform random distribution
             arrival_floor = random.randint(1, num_floors)
             destination_floor = random.randint(1, num_floors)
-            while destination_floor == arrival_floor:
+        while destination_floor == arrival_floor:
                 destination_floor = random.randint(1, num_floors)
         
         # Service floor validation: ensure at least one elevator can serve both floors
@@ -389,7 +397,7 @@ def passenger_generator_integrated_test(env, broker, hall_buttons, floor_queues,
         passenger = Passenger(env, name, broker, hall_buttons, floor_queues,
                              call_system=call_system, behavior=passenger_behavior_instance,
                              arrival_floor=arrival_floor, destination_floor=destination_floor, 
-                             move_speed=move_speed)
+                             move_speed=move_speed, floor_queue_manager=floor_queue_manager)
         
         # Register passenger with Statistics for metrics collection
         statistics.register_passenger(passenger)

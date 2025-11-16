@@ -5,6 +5,7 @@ from .hall_button import HallButton
 from ..interfaces.call_system import ICallSystem
 from ..interfaces.passenger_behavior import IPassengerBehavior
 from .workflow_factory import WorkflowFactory
+from .floor_queue_manager import FloorQueueManager
 
 class Passenger(Entity):
     """
@@ -24,7 +25,7 @@ class Passenger(Entity):
                  hall_buttons, floor_queues, 
                  call_system: ICallSystem, behavior: IPassengerBehavior,
                  arrival_floor: int = None, destination_floor: int = None, move_speed: float = 1.0,
-                 journeys: list = None):
+                 journeys: list = None, floor_queue_manager: FloorQueueManager = None):
         """
         Initialize passenger
         
@@ -45,7 +46,8 @@ class Passenger(Entity):
         super().__init__(env, name)
         self.broker = broker
         self.hall_buttons = hall_buttons
-        self.floor_queues = floor_queues
+        self.floor_queues = floor_queues  # Backward compatibility
+        self.floor_queue_manager = floor_queue_manager  # New unified queue manager
         self.call_system = call_system  # Building's call system configuration
         self.behavior = behavior        # Passenger's decision logic
         
@@ -65,12 +67,12 @@ class Passenger(Entity):
         if arrival_floor is None:
             self.arrival_floor = self.journeys[0]['arrival_floor']
         else:
-            self.arrival_floor = arrival_floor
+        self.arrival_floor = arrival_floor
         
         if destination_floor is None:
             self.destination_floor = self.journeys[-1]['destination_floor']  # Final destination
         else:
-            self.destination_floor = destination_floor
+        self.destination_floor = destination_floor
         
         self.move_speed = move_speed
 
@@ -91,7 +93,7 @@ class Passenger(Entity):
         
         # Print journey information
         if len(self.journeys) == 1:
-            print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor} (Move time: {self.move_speed:.1f}s).")
+        print(f"{self.env.now:.2f} [{self.name}] Arrived at floor {self.arrival_floor}. Wants to go to {self.destination_floor} (Move time: {self.move_speed:.1f}s).")
         else:
             journey_str = " -> ".join([f"{j['arrival_floor']}F" for j in self.journeys] + [f"{self.journeys[-1]['destination_floor']}F"])
             print(f"{self.env.now:.2f} [{self.name}] Multi-stop journey: {journey_str} (Move time: {self.move_speed:.1f}s).")

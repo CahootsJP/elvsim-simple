@@ -728,15 +728,18 @@ body.dark-mode .floor:nth-child(even) {
     overflow: hidden; /* Hide overflow if too wide */
 }
 
-/* Right side: Car calls (horizontal layout) */
+/* Right side: Car calls (vertical layout - preview on top, car call on bottom) */
 .floor-icons-right {
     display: flex;
-    gap: 4px;
+    flex-direction: column; /* Vertical stacking */
+    gap: 2px; /* Small gap between indicators */
     align-items: center;
-    justify-content: center;
+    justify-content: space-around; /* Distribute evenly with space around */
     z-index: 2;
     min-width: 12px; /* Smaller reserve space */
     flex-shrink: 0;
+    height: 100%; /* Take full height of floor cell */
+    padding: 3px 0; /* Small padding top and bottom */
 }
 
 /* Elevator car layer (absolute positioning for animation) */
@@ -782,6 +785,26 @@ body.dark-mode .elevator-column[data-elevator="Hall"] .floor:nth-child(even) {
 .car-call-indicator {
     color: #c084fc; /* Brighter purple */
     text-shadow: 0 0 3px rgba(192, 132, 252, 0.6);
+}
+
+/* Car call preview indicator (DCS destination preview) */
+.car-call-preview-indicator {
+    color: #f59e0b; /* Orange */
+    text-shadow: 0 0 3px rgba(245, 158, 11, 0.6);
+    opacity: 0.8; /* Slightly transparent to distinguish from actual car calls */
+    font-size: 8px; /* Even smaller size */
+    display: inline-block;
+    line-height: 1;
+    margin-bottom: 4px; /* Push away from center, towards top */
+}
+
+/* Spacer for maintaining position when only one indicator is present */
+.call-indicator-spacer {
+    font-size: 11px;
+    display: inline-block;
+    line-height: 1;
+    pointer-events: none;
+    opacity: 0; /* Invisible but takes up space in flexbox */
 }
 
 .hall-call-up-indicator {
