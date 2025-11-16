@@ -108,7 +108,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     # Allocation strategy
     alloc_strategy_name = gc_config.allocation_strategy.name
     if alloc_strategy_name == "NearestCar":
-    allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
+        allocation_strategy = NearestCarStrategy(num_floors=NUM_FLOORS)
     else:
         raise ValueError(f"Unknown allocation strategy: {alloc_strategy_name}")
     
@@ -201,11 +201,11 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     
     # Create hall buttons only for Traditional system (not for DCS)
     if call_system.has_physical_buttons():
-    hall_buttons = [
-        {'UP': HallButton(env, floor, "UP", broker), 
-         'DOWN': HallButton(env, floor, "DOWN", broker)}
-        for floor in range(NUM_FLOORS + 1)
-    ]
+        hall_buttons = [
+            {'UP': HallButton(env, floor, "UP", broker), 
+             'DOWN': HallButton(env, floor, "DOWN", broker)}
+            for floor in range(NUM_FLOORS + 1)
+        ]
     else:
         # DCS system: no physical hall buttons
         hall_buttons = None

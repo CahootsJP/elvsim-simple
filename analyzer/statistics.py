@@ -450,6 +450,7 @@ class Statistics:
                 direction = message.get('direction')
                 action = message.get('action')
                 serviced_by = message.get('serviced_by')  # Get elevator name that serviced this call
+                destinations = message.get('destinations', [])  # Get destinations for DCS system
                 
                 if timestamp is not None and direction is not None and action == 'OFF' and serviced_by is not None:
                     # Store hall call OFF events under the elevator that serviced it
@@ -461,16 +462,20 @@ class Statistics:
                         'floor': floor,
                         'direction': direction,
                         'action': 'OFF',
-                        'serviced_by': serviced_by
+                        'serviced_by': serviced_by,
+                        'destinations': destinations  # Include destinations for DCS
                     }
                     self.hall_call_off_history[serviced_by].append(hall_call_off_data)
                     
-                    # Log event for JSON Lines
-                    self._add_event_log('hall_call_off', {
+                    # Log event for JSON Lines (include destinations if available)
+                    event_data = {
                         'floor': floor,
                         'direction': direction,
                         'elevator': serviced_by
-                    })
+                    }
+                    if destinations:
+                        event_data['destinations'] = destinations
+                    self._add_event_log('hall_call_off', event_data)
                     
                     # Note: Waiting passengers are now removed individually when each passenger boards
                     # (see 'passenger/boarding' event handler above)
@@ -537,9 +542,9 @@ class Statistics:
                         board_direction = None
                     
                     if board_direction is not None:
-                    # Remove one waiting passenger when someone boards
+                        # Remove one waiting passenger when someone boards
                         self._update_waiting_passengers(floor, board_direction, -1)
-                    wait_time_str = f"{wait_time:.2f}s" if wait_time is not None else "N/A"
+                        wait_time_str = f"{wait_time:.2f}s" if wait_time is not None else "N/A"
                         print(f"[Statistics] {passenger_name} boarded at floor {floor} ({board_direction}). Wait time: {wait_time_str}. Waiting passengers decreased.")
                     
                     # Log event for JSON Lines (include both direction and destination for flexibility)

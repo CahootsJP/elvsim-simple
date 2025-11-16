@@ -72,6 +72,10 @@ class Elevator(Entity):
         self.hall_calls_down = set()
         self.passengers_onboard = []
         
+        # DCS: Hall call destination mapping {source_floor: {dest_floor1, dest_floor2, ...}}
+        # For Traditional system, this remains empty
+        self.hall_call_destinations = {}
+        
         # Move command support (repositioning when idle)
         self.move_command_target_floor = None  # Target floor for move command
         
@@ -237,6 +241,7 @@ class Elevator(Entity):
             task = yield self.broker.get(task_topic)
             details = task['details']
             floor, direction = details['floor'], details['direction']
+            destination = details.get('destination')  # DCS: destination floor (None for Traditional)
             
             # Reject hall calls for non-service floors
             if not self.can_serve_floor(floor):
@@ -245,7 +250,15 @@ class Elevator(Entity):
             
             if direction == "UP": self.hall_calls_up.add(floor)
             else: self.hall_calls_down.add(floor)
-            print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction}.")
+            
+            # DCS: Store destination information
+            if destination is not None:
+                if floor not in self.hall_call_destinations:
+                    self.hall_call_destinations[floor] = set()
+                self.hall_call_destinations[floor].add(destination)
+                print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction} → {destination}F (DCS).")
+            else:
+                print(f"{self.env.now:.2f} [{self.name}] Hall call registered: Floor {floor} {direction} (Traditional).")
             
             # Cancel move command when real hall call is assigned
             if self.move_command_target_floor is not None:
@@ -372,9 +385,9 @@ class Elevator(Entity):
                 print(f"{self.env.now:.2f} [{self.name}] Forced move command on the way! INTERRUPTING.")
                 self.process.interrupt()
             else:
-            if not self.new_call_event.triggered:
-                self.new_call_event.succeed()
-                self.new_call_event = self.env.event()
+                if not self.new_call_event.triggered:
+                    self.new_call_event.succeed()
+                    self.new_call_event = self.env.event()
 
 
     def run(self):
@@ -666,7 +679,7 @@ class Elevator(Entity):
             is_dcs_floor = self.call_system.is_dcs_floor(self.current_floor)
         
         if is_dcs_floor and self.floor_queue_manager:
-            # DCS floor: use queue per elevator
+            # DCS floor: use queue per elevator (already added above)
             try:
                 queue = self.floor_queue_manager.get_queue(
                     floor=self.current_floor,
@@ -677,43 +690,43 @@ class Elevator(Entity):
                 print(f"{self.env.now:.2f} [{self.name}] Warning: Could not get DCS queue: {e}")
         else:
             # Traditional floor: use direction-based queues
-            # Check if there are calls (hall or forced) at current floor
+            # Get all hall calls (for traditional systems only)
             all_up_calls = self._get_all_up_calls()
             all_down_calls = self._get_all_down_calls()
-        
-        # Determine which direction to serve based on current direction
-        if self.direction == "UP":
+            
+            # Determine which direction to serve based on current direction
+            if self.direction == "UP":
                 # Moving UP: serve UP passengers first (hall calls or forced calls)
                 if self.current_floor in all_up_calls:
-                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
-            # Only serve DOWN passengers if no more calls above (direction change)
+                    boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+                # Only serve DOWN passengers if no more calls above (direction change)
                 elif self.current_floor in all_down_calls and not self._has_any_calls_above():
-                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
-        
-        elif self.direction == "DOWN":
+                    boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+            
+            elif self.direction == "DOWN":
                 # Moving DOWN: serve DOWN passengers first (hall calls or forced calls)
                 if self.current_floor in all_down_calls:
-                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
-            # Only serve UP passengers if no more calls below (direction change)
+                    boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+                # Only serve UP passengers if no more calls below (direction change)
                 elif self.current_floor in all_up_calls and not self._has_any_calls_below():
-                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
-        
-        elif self.direction == "NO_DIRECTION":
-            # NO_DIRECTION state: determine direction based on calls
-            has_calls_above = self._has_any_calls_above()
-            has_calls_below = self._has_any_calls_below()
+                    boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
             
-            # Prefer UP if there are calls above
+            elif self.direction == "NO_DIRECTION":
+                # NO_DIRECTION state: determine direction based on calls
+                has_calls_above = self._has_any_calls_above()
+                has_calls_below = self._has_any_calls_below()
+                
+                # Prefer UP if there are calls above
                 if has_calls_above and self.current_floor in all_up_calls:
-                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
-            # If only calls below, serve DOWN
+                    boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+                # If only calls below, serve DOWN
                 elif has_calls_below and self.current_floor in all_down_calls:
-                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
-            # If no calls above/below, serve whichever is available at current floor
+                    boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+                # If no calls above/below, serve whichever is available at current floor
                 elif self.current_floor in all_up_calls:
-                boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
+                    boarding_queues.append(self.floor_queues[self.current_floor]["UP"])
                 elif self.current_floor in all_down_calls:
-                boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
+                    boarding_queues.append(self.floor_queues[self.current_floor]["DOWN"])
 
         # Check if current floor has a car call (for door to send OFF message at opening complete)
         has_car_call_here = self.current_floor in self.car_calls
@@ -767,8 +780,22 @@ class Elevator(Entity):
                     if self.current_floor in self.forced_calls_up:
                         self.forced_calls_up.discard(self.current_floor)
                         forced_calls_changed = True
-            if len(boarded_passengers) > 0:
+                    if len(boarded_passengers) > 0:
                         serviced_directions.append("UP")
+                    
+                    # DCS: Auto-register car calls for destinations from this floor
+                    if self.current_floor in self.hall_call_destinations:
+                        destinations = self.hall_call_destinations[self.current_floor]
+                        for dest in destinations:
+                            if dest not in self.car_calls and dest != self.current_floor:
+                                self.car_calls.add(dest)
+                                car_calls_changed = True
+                                print(f"{self.env.now:.2f} [{self.name}] DCS: Auto-registered car call for floor {dest}")
+                                # Broadcast car call registration
+                                self.env.process(self._broadcast_new_car_call_registration(dest, f"DCS_auto_{self.current_floor}"))
+                        # Clear destination mapping for this floor after auto-registration
+                        del self.hall_call_destinations[self.current_floor]
+                
                 elif self.direction == "DOWN" or (self.direction == "NO_DIRECTION" and self.current_floor in self._get_all_down_calls()):
                     if self.current_floor in self.hall_calls_down:
                         self.hall_calls_down.discard(self.current_floor)
@@ -778,31 +805,44 @@ class Elevator(Entity):
                         forced_calls_changed = True
                     if len(boarded_passengers) > 0:
                         serviced_directions.append("DOWN")
+                    
+                    # DCS: Auto-register car calls for destinations from this floor
+                    if self.current_floor in self.hall_call_destinations:
+                        destinations = self.hall_call_destinations[self.current_floor]
+                        for dest in destinations:
+                            if dest not in self.car_calls and dest != self.current_floor:
+                                self.car_calls.add(dest)
+                                car_calls_changed = True
+                                print(f"{self.env.now:.2f} [{self.name}] DCS: Auto-registered car call for floor {dest}")
+                                # Broadcast car call registration
+                                self.env.process(self._broadcast_new_car_call_registration(dest, f"DCS_auto_{self.current_floor}"))
+                        # Clear destination mapping for this floor after auto-registration
+                        del self.hall_call_destinations[self.current_floor]
         elif not is_dcs_floor:
             # Traditional floor: check direction queues
             if "UP" in self.floor_queues[self.current_floor] and any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
                 # Door was opened for UP direction - clear hall calls and forced calls
                 if self.current_floor in self.hall_calls_up:
-                self.hall_calls_up.discard(self.current_floor)
-                hall_calls_changed = True
+                    self.hall_calls_up.discard(self.current_floor)
+                    hall_calls_changed = True
                 if self.current_floor in self.forced_calls_up:
                     self.forced_calls_up.discard(self.current_floor)
                     forced_calls_changed = True
                 if len(boarded_passengers) > 0:
-                serviced_directions.append("UP")
+                    serviced_directions.append("UP")
                 elif len(boarded_passengers) == 0:
                     print(f"{self.env.now:.2f} [{self.name}] No one boarded from UP queue (full or empty). Hall call cleared anyway.")
-        
+            
             if "DOWN" in self.floor_queues[self.current_floor] and any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
                 # Door was opened for DOWN direction - clear hall calls and forced calls
                 if self.current_floor in self.hall_calls_down:
-                self.hall_calls_down.discard(self.current_floor)
-                hall_calls_changed = True
+                    self.hall_calls_down.discard(self.current_floor)
+                    hall_calls_changed = True
                 if self.current_floor in self.forced_calls_down:
                     self.forced_calls_down.discard(self.current_floor)
                     forced_calls_changed = True
                 if len(boarded_passengers) > 0:
-                serviced_directions.append("DOWN")
+                    serviced_directions.append("DOWN")
                 elif len(boarded_passengers) == 0:
                     print(f"{self.env.now:.2f} [{self.name}] No one boarded from DOWN queue (full or empty). Hall call cleared anyway.")
         
@@ -811,9 +851,9 @@ class Elevator(Entity):
         if serviced_directions:
             if self.hall_buttons:
                 # Traditional system: turn off physical buttons
-            for direction in serviced_directions:
-                button = self.hall_buttons[self.current_floor][direction]
-                button.serve(elevator_name=self.name)  # Turn off button with elevator name
+                for direction in serviced_directions:
+                    button = self.hall_buttons[self.current_floor][direction]
+                    button.serve(elevator_name=self.name)  # Turn off button with elevator name
             else:
                 # DCS system: send hall_call_off event directly (no physical buttons)
                 for direction in serviced_directions:
@@ -823,7 +863,8 @@ class Elevator(Entity):
                         "direction": direction,
                         "action": "OFF",
                         "serviced_by": self.name,
-                        "elevator": self.name  # For visualizer compatibility
+                        "elevator": self.name,  # For visualizer compatibility
+                        "destinations": list(self.hall_call_destinations.get(self.current_floor, set()))  # DCS: include destinations
                     }
                     hall_call_off_topic = f"hall_button/floor_{self.current_floor}/call_off"
                     self.broker.put(hall_call_off_topic, hall_call_off_message)
@@ -1032,19 +1073,19 @@ class Elevator(Entity):
         
         # If past the farthest call, reverse to DOWN
         if self._is_past_farthest_call("UP"):
-                    self._update_direction("DOWN")
+            self._update_direction("DOWN")
     
     def _decide_from_down_direction(self):
         """Decide direction when currently moving DOWN"""
         # If there are calls below, keep going DOWN
         if self._has_any_calls_below():
-                    return
+            return
         
         # If at the bottom call, handle direction reversal
         if self._is_at_bottom_call():
             self._handle_bottom_call_reversal()
-                    return
-                
+            return
+        
         # If past the farthest call, reverse to UP
         if self._is_past_farthest_call("DOWN"):
             self._update_direction("UP")
@@ -1095,18 +1136,18 @@ class Elevator(Entity):
         
         # No call at current floor, check where other calls are
         all_hall_calls = all_up_calls | all_down_calls
-                if all_hall_calls:
+        if all_hall_calls:
             # Determine direction based on call positions
-                    has_calls_above = any(f > self.current_floor for f in all_hall_calls)
-                    has_calls_below = any(f < self.current_floor for f in all_hall_calls)
-                    
-                    if has_calls_below:
-                        self._update_direction("DOWN")
-                    elif has_calls_above:
-                        self._update_direction("UP")
-                else:
-                    # No hall calls anywhere - set to NO_DIRECTION
-                    self._update_direction("NO_DIRECTION")
+            has_calls_above = any(f > self.current_floor for f in all_hall_calls)
+            has_calls_below = any(f < self.current_floor for f in all_hall_calls)
+            
+            if has_calls_below:
+                self._update_direction("DOWN")
+            elif has_calls_above:
+                self._update_direction("UP")
+        else:
+            # No hall calls anywhere - set to NO_DIRECTION
+            self._update_direction("NO_DIRECTION")
     
     def _handle_bottom_call_reversal(self):
         """Handle direction decision when at the bottom call (during DOWN movement)"""
@@ -1115,26 +1156,26 @@ class Elevator(Entity):
         
         # First, check if there's a call at current floor
         if self.current_floor in all_up_calls:
-                    self._update_direction("UP")
-                    return
+            self._update_direction("UP")
+            return
         elif self.current_floor in all_down_calls:
             # DOWN call at current floor - keep DOWN direction
-                    return
-                
+            return
+        
         # No call at current floor, check where other calls are
         all_hall_calls = all_up_calls | all_down_calls
-                if all_hall_calls:
+        if all_hall_calls:
             # Determine direction based on call positions
-                    has_calls_above = any(f > self.current_floor for f in all_hall_calls)
-                    has_calls_below = any(f < self.current_floor for f in all_hall_calls)
-                    
-                    if has_calls_above:
-                        self._update_direction("UP")
-                    elif has_calls_below:
-                        self._update_direction("DOWN")
-                else:
-                    # No hall calls anywhere - set to NO_DIRECTION
-                    self._update_direction("NO_DIRECTION")
+            has_calls_above = any(f > self.current_floor for f in all_hall_calls)
+            has_calls_below = any(f < self.current_floor for f in all_hall_calls)
+            
+            if has_calls_above:
+                self._update_direction("UP")
+            elif has_calls_below:
+                self._update_direction("DOWN")
+        else:
+            # No hall calls anywhere - set to NO_DIRECTION
+            self._update_direction("NO_DIRECTION")
 
     def _has_any_calls(self):
         return bool(self.car_calls or self.hall_calls_up or self.hall_calls_down or self.forced_calls_up or self.forced_calls_down)
