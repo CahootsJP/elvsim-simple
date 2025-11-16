@@ -148,6 +148,13 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     building = Building(floor_defs)
     print(f"Building created with {building.num_floors} floors: {building.all_floors}")
     
+    # Determine call system type for metadata
+    call_system_type = "TRADITIONAL"
+    if isinstance(call_system, FullDCSCallSystem):
+        call_system_type = "FULL_DCS"
+    elif isinstance(call_system, (LobbyDCSCallSystem, ZonedCallSystem)):
+        call_system_type = "HYBRID_DCS"
+    
     # Set simulation metadata for JSON Lines log (after building is created)
     sim_stats.set_simulation_metadata({
         'num_floors': NUM_FLOORS,
@@ -160,6 +167,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
         'jerk': JERK,
         'sim_duration': SIM_DURATION,
         'random_seed': sim_config.random_seed,
+        'call_system_type': call_system_type,
         'config_files': {
             'simulation': sim_config_path,
             'group_control': gc_config_path

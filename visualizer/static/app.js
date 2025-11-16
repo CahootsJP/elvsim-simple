@@ -1834,6 +1834,9 @@ class ElevatorVisualizer {
     
     async loadReplayFile(filename) {
         try {
+            // Initialize badge with default value (will be updated when metadata is loaded)
+            this.updateCallSystemBadge('TRADITIONAL');
+            
             await this.switchToReplayMode(filename);
             
             // Create file event source
@@ -1861,8 +1864,11 @@ class ElevatorVisualizer {
     handleReplayEvent(event) {
         // Convert FileEventSource events to the format expected by handleMessage
         if (event.type === 'metadata') {
-            // Handle metadata
+            // Handle metadata and update call system badge
             console.log('[Replay] Metadata:', event.data);
+            if (event.data && event.data.config && event.data.config.call_system_type) {
+                this.updateCallSystemBadge(event.data.config.call_system_type);
+            }
             return;
         }
         
@@ -1891,6 +1897,16 @@ class ElevatorVisualizer {
     convertJSONLToMessage(event) {
         // Convert JSONL event format to WebSocket message format
         switch (event.type) {
+            case 'metadata':
+                // Handle metadata event (simulation configuration)
+                if (event.data && event.data.config) {
+                    // Use setTimeout to ensure DOM is ready
+                    setTimeout(() => {
+                        this.updateCallSystemBadge(event.data.config.call_system_type);
+                    }, 100);
+                }
+                return null; // Don't pass metadata as a regular message
+            
             case 'elevator_status':
                 // Track forced_calls and move_commands in replay state
                 const elevatorName = event.data.elevator;
@@ -2778,6 +2794,53 @@ class ElevatorVisualizer {
         });
         
         console.log('[Chart] Wait time chart initialized');
+    }
+    
+    updateCallSystemBadge(callSystemType) {
+        const badge = document.getElementById('call-system-badge');
+        const badgeText = document.getElementById('call-system-type');
+        const badgeIcon = badge.querySelector('.badge-icon');
+        
+        if (!badge || !badgeText) {
+            console.warn('[CallSystem] Badge elements not found in DOM');
+            return;
+        }
+        
+        // Remove existing type classes
+        badge.classList.remove('traditional', 'dcs-full', 'dcs-hybrid');
+        
+        // Define display names and configurations
+        const systemConfigs = {
+            'TRADITIONAL': {
+                displayName: 'Conventional Up-Down System',
+                icon: '🔼🔽',
+                className: 'traditional'
+            },
+            'FULL_DCS': {
+                displayName: 'Full Destination Control System',
+                icon: '🎯',
+                className: 'dcs-full'
+            },
+            'HYBRID_DCS': {
+                displayName: 'Hybrid Destination Control System',
+                icon: '🔀',
+                className: 'dcs-hybrid'
+            },
+            'UNKNOWN': {
+                displayName: 'Unknown System',
+                icon: '❓',
+                className: 'traditional'
+            }
+        };
+        
+        // If no callSystemType provided, default to TRADITIONAL
+        const config = systemConfigs[callSystemType] || systemConfigs['TRADITIONAL'];
+        
+        badgeText.textContent = config.displayName;
+        badgeIcon.textContent = config.icon;
+        badge.classList.add(config.className);
+        
+        console.log(`[CallSystem] Updated badge: ${config.displayName} (type: ${callSystemType})`);
     }
 }
 

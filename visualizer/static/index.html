@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VTS Control Suite - Real-time Visualization</title>
-    <link rel="stylesheet" href="style.css?v=39">
+    <link rel="stylesheet" href="style.css?v=41">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 </head>
 <body>
@@ -91,7 +91,13 @@
                     <div class="operation-right">
                         <section class="visualization">
                             <div class="visualization-header">
-                                <h2>🏢 Elevator Status Monitor</h2>
+                                <div class="header-left-group">
+                                    <h2>🏢 Elevator Status Monitor</h2>
+                                    <div id="call-system-badge" class="call-system-badge">
+                                        <span class="badge-icon">📞</span>
+                                        <span id="call-system-type" class="badge-text">Loading...</span>
+                                    </div>
+                                </div>
                                 <div class="simulation-time">
                                     <label>Simulation Time:</label>
                                     <span id="sim-time">0.00s</span>
@@ -274,6 +280,6 @@
     </div>
 
     <script src="eventSource.js?v=2"></script>
-    <script src="app.js?v=46"></script>
+    <script src="app.js?v=47"></script>
 </body>
 </html>

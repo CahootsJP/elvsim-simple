@@ -62,6 +62,7 @@ SimPy-based discrete event simulation system with web visualization support.
 ### Web Visualization (`visualizer/`)
 - [x] Live Mode (Real-time Display)
 - [x] Replay Mode (Playback Controls with speed adjustment)
+- [x] Call System Type Badge (Automatic detection of Traditional/DCS/Hybrid systems)
 - [x] Call Status Indicators (hall calls ●, car calls ○, forced calls ◆, move commands ▲)
 - [x] Performance Monitor Tab (Real-world compatible metrics)
   - Response times (avg, max, long response count)
@@ -160,6 +161,7 @@ http://localhost:5000
 **Features:**
 - **Live**: Observe in real-time
 - **Replay**: Replay after execution (with speed control and seeking)
+- **Call System Badge**: Displays the call system type (Conventional Up-Down, Full DCS, or Hybrid DCS) with automatic detection
 - **Performance Monitor**: Real-world compatible metrics (response times, trips, door operations, distances)
 - **Event Log**: Filterable by category (door, hall calls, car calls, passengers, elevator status, commands)
 - **Call Indicators**: Visual display of hall calls (●), car calls (○), forced calls (◆), and move commands (▲)
@@ -276,6 +278,7 @@ elvsim-simple/
 ### Web Visualization (`visualizer/`)
 - ✅ Unified Live/Replay viewer
 - ✅ Multi-elevator display (scalable)
+- ✅ Call system type badge (auto-detects Traditional/Full DCS/Hybrid DCS)
 - ✅ Elevator hall panel (waiting passenger display)
 - ✅ Color-coded by elevator
 - ✅ Call status indicators (hall calls ●, car calls ○, forced calls ◆, move commands ▲)
