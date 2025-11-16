@@ -272,6 +272,20 @@ class Elevator(Entity):
             if self.direction == "NO_DIRECTION":
                 self._decide_direction_on_hall_call_assigned()
             
+            # Check if door should be reopened (if stopping at current floor with door closing)
+            if floor == self.current_floor and self.state == "STOPPING":
+                # Check if elevator is not at full capacity
+                if not self._is_at_full_capacity():
+                    # Request door to reopen
+                    if self.door:
+                        reopen_result = self.door.request_reopen()
+                        if reopen_result:
+                            print(f"{self.env.now:.2f} [{self.name}] Door reopen requested for new hall call at floor {floor}")
+                        else:
+                            print(f"{self.env.now:.2f} [{self.name}] Door reopen denied (limit reached or not closing)")
+                else:
+                    print(f"{self.env.now:.2f} [{self.name}] Door reopen denied: elevator at full capacity")
+            
             # Determine if emergency button should be pressed
             if self._should_interrupt(floor, direction):
                 print(f"{self.env.now:.2f} [{self.name}] New valid call on the way! INTERRUPTING.")
@@ -669,6 +683,11 @@ class Elevator(Entity):
 
     def _handle_boarding_and_alighting(self):
         print(f"{self.env.now:.2f} [{self.name}] Handling boarding and alighting at floor {self.current_floor}.")
+        
+        # Reset door reopen count for this stop
+        if self.door:
+            self.door.reset_reopen_count()
+        
         passengers_to_exit = sorted([p for p in self.passengers_onboard if p.destination_floor == self.current_floor], key=lambda p: p.entity_id, reverse=True)
 
         boarding_queues = []
@@ -679,13 +698,42 @@ class Elevator(Entity):
             is_dcs_floor = self.call_system.is_dcs_floor(self.current_floor)
         
         if is_dcs_floor and self.floor_queue_manager:
-            # DCS floor: use queue per elevator (already added above)
+            # DCS floor: use queue per elevator per direction (3D structure)
+            # Only get the queue that matches the elevator's current direction
             try:
-                queue = self.floor_queue_manager.get_queue(
-                    floor=self.current_floor,
-                    elevator_name=self.name
-                )
-                boarding_queues.append(queue)
+                if self.direction == "UP":
+                    queue = self.floor_queue_manager.get_queue(
+                        floor=self.current_floor,
+                        elevator_name=self.name,
+                        direction="UP"
+                    )
+                    boarding_queues.append(queue)
+                elif self.direction == "DOWN":
+                    queue = self.floor_queue_manager.get_queue(
+                        floor=self.current_floor,
+                        elevator_name=self.name,
+                        direction="DOWN"
+                    )
+                    boarding_queues.append(queue)
+                elif self.direction == "NO_DIRECTION":
+                    # NO_DIRECTION: check which direction has passengers
+                    all_up_calls = self._get_all_up_calls()
+                    all_down_calls = self._get_all_down_calls()
+                    
+                    if self.current_floor in all_up_calls:
+                        queue = self.floor_queue_manager.get_queue(
+                            floor=self.current_floor,
+                            elevator_name=self.name,
+                            direction="UP"
+                        )
+                        boarding_queues.append(queue)
+                    elif self.current_floor in all_down_calls:
+                        queue = self.floor_queue_manager.get_queue(
+                            floor=self.current_floor,
+                            elevator_name=self.name,
+                            direction="DOWN"
+                        )
+                        boarding_queues.append(queue)
             except (ValueError, KeyError) as e:
                 print(f"{self.env.now:.2f} [{self.name}] Warning: Could not get DCS queue: {e}")
         else:
@@ -742,6 +790,7 @@ class Elevator(Entity):
         # Passengers are already removed/added by Door in real-time
         # No need to process them again here
         boarded_passengers = report.get("boarded", [])
+        reopen_limit_reached = report.get("reopen_limit_reached", False)
         
         # Send failure notification to passengers who couldn't board
         failed_to_board_passengers = report.get("failed_to_board", [])
@@ -763,15 +812,20 @@ class Elevator(Entity):
         forced_calls_changed = False
         serviced_directions = []  # Record directions that should be turned off
         
+        # Determine if we should clear hall calls
+        # If reopen limit was reached and no one boarded, keep hall calls (passengers are still waiting)
+        should_clear_hall_calls = True
+        if reopen_limit_reached and len(boarded_passengers) == 0:
+            should_clear_hall_calls = False
+            print(f"{self.env.now:.2f} [{self.name}] Reopen limit reached with no boarding - keeping hall calls at floor {self.current_floor}")
+        
         # Clear hall calls and forced calls for directions that were serviced
-        # IMPORTANT: Always clear hall calls when door was opened, regardless of whether passengers boarded
-        # This prevents infinite loops where _should_stop_at_current_floor() returns True again
-        # after _decide_next_direction() sets direction to NO_DIRECTION
+        # IMPORTANT: Only clear if should_clear_hall_calls is True
         # For DCS floors, check if this elevator's queue was serviced
         if is_dcs_floor:
             # DCS floor: clear hall calls if this elevator's queue was serviced
             # (hall calls are per-elevator in DCS, but we still track them per direction for compatibility)
-            if boarding_queues:
+            if boarding_queues and should_clear_hall_calls:
                 # Determine direction from elevator's current direction or calls
                 if self.direction == "UP" or (self.direction == "NO_DIRECTION" and self.current_floor in self._get_all_up_calls()):
                     if self.current_floor in self.hall_calls_up:
@@ -797,12 +851,13 @@ class Elevator(Entity):
                         del self.hall_call_destinations[self.current_floor]
                 
                 elif self.direction == "DOWN" or (self.direction == "NO_DIRECTION" and self.current_floor in self._get_all_down_calls()):
-                    if self.current_floor in self.hall_calls_down:
-                        self.hall_calls_down.discard(self.current_floor)
-                        hall_calls_changed = True
-                    if self.current_floor in self.forced_calls_down:
-                        self.forced_calls_down.discard(self.current_floor)
-                        forced_calls_changed = True
+                    if should_clear_hall_calls:
+                        if self.current_floor in self.hall_calls_down:
+                            self.hall_calls_down.discard(self.current_floor)
+                            hall_calls_changed = True
+                        if self.current_floor in self.forced_calls_down:
+                            self.forced_calls_down.discard(self.current_floor)
+                            forced_calls_changed = True
                     if len(boarded_passengers) > 0:
                         serviced_directions.append("DOWN")
                     
@@ -822,29 +877,51 @@ class Elevator(Entity):
             # Traditional floor: check direction queues
             if "UP" in self.floor_queues[self.current_floor] and any(q == self.floor_queues[self.current_floor]["UP"] for q in boarding_queues):
                 # Door was opened for UP direction - clear hall calls and forced calls
-                if self.current_floor in self.hall_calls_up:
-                    self.hall_calls_up.discard(self.current_floor)
-                    hall_calls_changed = True
-                if self.current_floor in self.forced_calls_up:
-                    self.forced_calls_up.discard(self.current_floor)
-                    forced_calls_changed = True
-                if len(boarded_passengers) > 0:
+                # BUT only turn off button if THIS elevator was assigned this HALL CALL (not forced call)
+                # Forced calls are management commands, not passenger button presses
+                hall_call_was_assigned_to_me = self.current_floor in self.hall_calls_up
+                
+                if should_clear_hall_calls:
+                    if self.current_floor in self.hall_calls_up:
+                        self.hall_calls_up.discard(self.current_floor)
+                        hall_calls_changed = True
+                    if self.current_floor in self.forced_calls_up:
+                        self.forced_calls_up.discard(self.current_floor)
+                        forced_calls_changed = True
+                
+                # Only add to serviced_directions if we actually had this hall call assigned
+                if len(boarded_passengers) > 0 and hall_call_was_assigned_to_me:
                     serviced_directions.append("UP")
                 elif len(boarded_passengers) == 0:
-                    print(f"{self.env.now:.2f} [{self.name}] No one boarded from UP queue (full or empty). Hall call cleared anyway.")
+                    if should_clear_hall_calls and hall_call_was_assigned_to_me:
+                        serviced_directions.append("UP")  # Turn off button even if no one boarded
+                        print(f"{self.env.now:.2f} [{self.name}] No one boarded from UP queue (full or empty). Hall call cleared anyway.")
+                    elif hall_call_was_assigned_to_me:
+                        print(f"{self.env.now:.2f} [{self.name}] No one boarded from UP queue. Hall call kept (reopen limit reached).")
             
             if "DOWN" in self.floor_queues[self.current_floor] and any(q == self.floor_queues[self.current_floor]["DOWN"] for q in boarding_queues):
                 # Door was opened for DOWN direction - clear hall calls and forced calls
-                if self.current_floor in self.hall_calls_down:
-                    self.hall_calls_down.discard(self.current_floor)
-                    hall_calls_changed = True
-                if self.current_floor in self.forced_calls_down:
-                    self.forced_calls_down.discard(self.current_floor)
-                    forced_calls_changed = True
-                if len(boarded_passengers) > 0:
+                # BUT only turn off button if THIS elevator was assigned this HALL CALL (not forced call)
+                # Forced calls are management commands, not passenger button presses
+                hall_call_was_assigned_to_me = self.current_floor in self.hall_calls_down
+                
+                if should_clear_hall_calls:
+                    if self.current_floor in self.hall_calls_down:
+                        self.hall_calls_down.discard(self.current_floor)
+                        hall_calls_changed = True
+                    if self.current_floor in self.forced_calls_down:
+                        self.forced_calls_down.discard(self.current_floor)
+                        forced_calls_changed = True
+                
+                # Only add to serviced_directions if we actually had this hall call assigned
+                if len(boarded_passengers) > 0 and hall_call_was_assigned_to_me:
                     serviced_directions.append("DOWN")
                 elif len(boarded_passengers) == 0:
-                    print(f"{self.env.now:.2f} [{self.name}] No one boarded from DOWN queue (full or empty). Hall call cleared anyway.")
+                    if should_clear_hall_calls and hall_call_was_assigned_to_me:
+                        serviced_directions.append("DOWN")  # Turn off button even if no one boarded
+                        print(f"{self.env.now:.2f} [{self.name}] No one boarded from DOWN queue (full or empty). Hall call cleared anyway.")
+                    elif hall_call_was_assigned_to_me:
+                        print(f"{self.env.now:.2f} [{self.name}] No one boarded from DOWN queue. Hall call kept (reopen limit reached).")
         
         # Turn off hall buttons for serviced directions (Traditional system)
         # OR send hall_call_off event for DCS system (no physical buttons)

@@ -1,0 +1,64 @@
+# Test Scenario: Door Reopen Feature with Limit (1 Elevator)
+# Tests door reopening with a maximum reopen limit
+
+simulation:
+  # Building specifications
+  building:
+    num_floors: 10
+    floor_height: 3.5  # meters
+    lobby_floor: 1
+    floors: null  # Auto-generate simple floors
+  
+  # Elevator specifications
+  elevator:
+    num_elevators: 1  # Single elevator for simple testing
+    max_capacity: 10  # persons
+    rated_speed: 2.5  # m/s
+    acceleration: 1.0  # m/s²
+    jerk: 2.0  # m/s³
+    full_load_bypass: true
+    home_floor: 1
+    main_direction: "UP"
+    service_floors: null  # All elevators service all floors
+  
+  # Door specifications
+  door:
+    open_time: 1.5  # seconds
+    close_time: 1.5  # seconds
+    reopen_delay: 0.5  # seconds
+    max_reopens_per_stop: 2  # Limit: maximum 2 reopens per stop
+  
+  # Call System Configuration
+  call_system:
+    call_system_type: "FULL_DCS"  # Use DCS for testing
+  
+  # Traffic pattern
+  traffic:
+    pattern: "uniform"
+    simulation_duration: 120.0  # seconds (2 minutes) - short for testing
+    passenger_generation_rate: 0.08  # Slightly higher rate to test reopen limit
+    
+    # Origin-Destination matrix
+    od_matrix:
+      # Floor 1 (Lobby): Main entry point
+      - [0.00, 0.40, 0.30, 0.20, 0.10, 0.00, 0.00, 0.00, 0.00, 0.00]
+      # Other floors: minimal traffic
+      - [0.50, 0.00, 0.10, 0.10, 0.10, 0.10, 0.05, 0.03, 0.01, 0.01]
+      - [0.50, 0.10, 0.00, 0.10, 0.10, 0.10, 0.05, 0.03, 0.01, 0.01]
+      - [0.50, 0.10, 0.10, 0.00, 0.10, 0.10, 0.05, 0.03, 0.01, 0.01]
+      - [0.50, 0.10, 0.10, 0.10, 0.00, 0.10, 0.05, 0.03, 0.01, 0.01]
+      - [0.50, 0.10, 0.10, 0.10, 0.10, 0.00, 0.05, 0.03, 0.01, 0.01]
+      - [0.50, 0.10, 0.10, 0.10, 0.10, 0.05, 0.00, 0.03, 0.01, 0.01]
+      - [0.50, 0.10, 0.10, 0.10, 0.10, 0.05, 0.03, 0.00, 0.01, 0.01]
+      - [0.50, 0.10, 0.10, 0.10, 0.10, 0.05, 0.03, 0.01, 0.00, 0.01]
+      - [0.50, 0.10, 0.10, 0.10, 0.10, 0.05, 0.03, 0.01, 0.01, 0.00]
+    
+    # Passenger behavior
+    avg_boarding_time: 1.0  # seconds per passenger
+    avg_alighting_time: 0.8  # seconds per passenger
+    passenger_move_speed: 1.0  # Fixed value for consistent testing
+  
+  # Simulation control
+  random_seed: 42  # For reproducibility
+  realtime_factor: 0.0  # 0.0 = as fast as possible
+

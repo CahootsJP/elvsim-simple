@@ -35,7 +35,7 @@ simulation:
   # Traffic pattern
   traffic:
     pattern: "uniform"
-    simulation_duration: 180.0  # seconds (3 minutes) - shorter for testing
+    simulation_duration: 600.0  # seconds (10 minutes) - extended for comprehensive testing
     passenger_generation_rate: 0.15  # passengers per second
     
     # Origin-Destination matrix for testing DCS

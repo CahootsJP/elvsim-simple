@@ -62,6 +62,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
     
     DOOR_OPEN_TIME = sim_config.door.open_time
     DOOR_CLOSE_TIME = sim_config.door.close_time
+    MAX_REOPENS_PER_STOP = sim_config.door.max_reopens_per_stop if hasattr(sim_config.door, 'max_reopens_per_stop') else None
     
     SIM_DURATION = sim_config.traffic.simulation_duration
     PASSENGER_GENERATION_RATE = sim_config.traffic.passenger_generation_rate
@@ -222,7 +223,7 @@ def run_simulation(sim_config_path="scenarios/simulation/office_morning_rush.yam
             elev_home_floor = elev_config.get('home_floor', HOME_FLOOR)
             elev_main_dir = elev_config.get('main_direction', MAIN_DIRECTION)
             
-            door = Door(env, f"{elev_name}_Door")
+            door = Door(env, f"{elev_name}_Door", open_time=DOOR_OPEN_TIME, close_time=DOOR_CLOSE_TIME, max_reopens_per_stop=MAX_REOPENS_PER_STOP)
             elevator = Elevator(
                 env, elev_name, broker, NUM_FLOORS, floor_queues,
                 door=door,

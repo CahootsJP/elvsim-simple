@@ -5,7 +5,7 @@ class Door(Entity):
     """
     Door that operates via direct communication from the elevator operator
     """
-    def __init__(self, env: simpy.Environment, name: str, open_time=1.5, close_time=1.5, broker=None, elevator_name: str = None, elevator=None):
+    def __init__(self, env: simpy.Environment, name: str, open_time=1.5, close_time=1.5, broker=None, elevator_name: str = None, elevator=None, max_reopens_per_stop=None):
         super().__init__(env, name)
         self.open_time = open_time
         self.close_time = close_time
@@ -16,6 +16,12 @@ class Door(Entity):
         self.call_system = None  # Call system (ICallSystem) for DCS detection
         self.set_state('IDLE')  # Door state: IDLE, OPENING, OPEN, CLOSING, CLOSED
         self.sensor_timeout = 1.0  # Photoelectric sensor timeout (seconds to wait after queue becomes empty)
+        
+        # Reopen control
+        self.max_reopens_per_stop = max_reopens_per_stop  # None = unlimited, number = limit
+        self.reopen_count_this_stop = 0
+        self.closing_process = None  # Handle to current closing process (for interruption)
+        
         print(f"{self.env.now:.2f} [{self.name}] Door entity created.")
 
     def run(self):
@@ -67,6 +73,37 @@ class Door(Entity):
     def set_call_system(self, call_system):
         """Set call system (ICallSystem) for DCS detection"""
         self.call_system = call_system
+    
+    def reset_reopen_count(self):
+        """Reset reopen count (called when starting a new stop)"""
+        self.reopen_count_this_stop = 0
+    
+    def request_reopen(self) -> bool:
+        """
+        Request door to reopen during closing (called by Elevator)
+        
+        Returns:
+            bool: True if reopen request accepted, False if denied
+        """
+        # Only reopen if currently closing
+        if self.state != "CLOSING":
+            return False
+        
+        # Check reopen limit
+        if self.max_reopens_per_stop is not None:
+            if self.reopen_count_this_stop >= self.max_reopens_per_stop:
+                print(f"{self.env.now:.2f} [{self.elevator_name}Door] Reopen limit reached ({self.max_reopens_per_stop}), request denied")
+                return False
+        
+        # Accept reopen request
+        print(f"{self.env.now:.2f} [{self.elevator_name}Door] Reopen request accepted (reopen count: {self.reopen_count_this_stop + 1})")
+        self.reopen_count_this_stop += 1
+        
+        # Interrupt closing process
+        if self.closing_process and self.closing_process.is_alive:
+            self.closing_process.interrupt()
+        
+        return True
 
     def handle_boarding_and_alighting_process(self, passengers_to_exit, boarding_queues, has_car_call_here=False, is_dcs_floor=False, current_floor=None):
         """
@@ -80,10 +117,11 @@ class Door(Entity):
             current_floor: Current floor number (to prevent registering car call for current floor)
         
         Returns:
-            dict: Report containing boarded and failed_to_board passengers
+            dict: Report containing boarded, failed_to_board passengers, and reopen_limit_reached flag
         """
         boarded_passengers = []
         failed_to_board_passengers = []  # List of passengers who failed to board
+        reopen_limit_reached = False  # Flag to indicate if reopen limit was reached
         
         # Get capacity information from elevator
         current_capacity = self.elevator.get_current_capacity() if self.elevator else 0
@@ -222,22 +260,65 @@ class Door(Entity):
                         # Someone arrived during timeout - continue boarding
                         print(f"{self.env.now:.2f} [{elevator_name}] New passenger detected! Continuing boarding...")
 
-        # 4. Close the door
-        print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")
-        self.set_state('CLOSING')
-        # Send door closing start event
-        yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_START"))
-        
-        yield self.env.timeout(self.close_time)
-        print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
-        self.set_state('CLOSED')
-        # Send door closing complete event
-        yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
+        # 4. Close the door (with reopen capability)
+        try:
+            print(f"{self.env.now:.2f} [{elevator_name}] Door Closing...")
+            self.set_state('CLOSING')
+            # Send door closing start event
+            yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_START"))
+            
+            # Store closing process handle for potential interruption
+            self.closing_process = self.env.process(self._do_closing(elevator_name))
+            yield self.closing_process
+            
+            print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
+            self.set_state('CLOSED')
+            # Send door closing complete event
+            yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
+            
+        except simpy.Interrupt:
+            # Door closing was interrupted for reopen
+            print(f"{self.env.now:.2f} [{elevator_name}Door] Door closing interrupted for reopen")
+            
+            # Check if reopen limit has been reached
+            if self.max_reopens_per_stop is not None and self.reopen_count_this_stop > self.max_reopens_per_stop:
+                # This shouldn't happen (request_reopen should prevent it), but just in case
+                reopen_limit_reached = True
+                print(f"{self.env.now:.2f} [{elevator_name}Door] Reopen limit exceeded, completing closing")
+                
+                # Complete the closing
+                self.set_state('CLOSED')
+                yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
+            else:
+                # Reopen the door
+                print(f"{self.env.now:.2f} [{elevator_name}Door] Reopening door...")
+                yield self.env.process(self._do_reopening(elevator_name))
+                
+                # Continue boarding process (recursive call to handle additional passengers)
+                # Note: We don't exit passengers again, only continue boarding
+                additional_report = yield self.env.process(
+                    self._continue_boarding_after_reopen(boarding_queues, boarded_passengers, 
+                                                         failed_to_board_passengers, is_dcs_floor, 
+                                                         current_floor, elevator_name, max_capacity)
+                )
+                
+                # Merge reports
+                boarded_passengers = additional_report["boarded"]
+                failed_to_board_passengers = additional_report["failed_to_board"]
+                reopen_limit_reached = additional_report.get("reopen_limit_reached", False)
+                
+                # Return after successful reopen handling
+                return {
+                    "boarded": boarded_passengers,
+                    "failed_to_board": failed_to_board_passengers,
+                    "reopen_limit_reached": reopen_limit_reached
+                }
 
         # 5. Return completion report directly to the elevator operator
         return {
             "boarded": boarded_passengers,
-            "failed_to_board": failed_to_board_passengers
+            "failed_to_board": failed_to_board_passengers,
+            "reopen_limit_reached": reopen_limit_reached
         }
     
     def _register_dcs_car_calls_for_waiting_passengers(self, waiting_passengers_list, elevator_name: str, first_passenger=None, current_floor=None):
@@ -296,5 +377,139 @@ class Door(Entity):
         
         if skipped_current_floor > 0:
             print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Skipped {skipped_current_floor} car call(s) for current floor")
-        print(f"{self.env.now:.2f} [{elevator_name}] Photoelectric sensor: Auto-registered {len(destinations_registered)} car call(s) for {len(waiting_passengers)} passenger(s) at DCS floor")
-
+    
+    def _do_closing(self, elevator_name):
+        """
+        Door closing process (can be interrupted for reopen)
+        
+        Args:
+            elevator_name: Name of elevator for logging
+        """
+        yield self.env.timeout(self.close_time)
+    
+    def _do_reopening(self, elevator_name):
+        """
+        Door reopening process (after interruption during closing)
+        
+        Args:
+            elevator_name: Name of elevator for logging
+        """
+        self.set_state('OPENING')
+        yield self.env.process(self._broadcast_door_event("DOOR_REOPENING"))
+        yield self.env.timeout(self.open_time)
+        self.set_state('OPEN')
+        print(f"{self.env.now:.2f} [{elevator_name}Door] Door reopened")
+        yield self.env.process(self._broadcast_door_event("DOOR_REOPEN_COMPLETE"))
+    
+    def _continue_boarding_after_reopen(self, boarding_queues, boarded_passengers, 
+                                       failed_to_board_passengers, is_dcs_floor, 
+                                       current_floor, elevator_name, max_capacity):
+        """
+        Continue boarding process after door reopen
+        
+        Args:
+            boarding_queues: Queues of passengers waiting to board
+            boarded_passengers: List of already boarded passengers (will be updated)
+            failed_to_board_passengers: List of passengers who failed to board (will be updated)
+            is_dcs_floor: Whether current floor is a DCS floor
+            current_floor: Current floor number
+            elevator_name: Name of elevator for logging
+            max_capacity: Maximum capacity of elevator
+        
+        Returns:
+            dict: Updated report with boarded, failed_to_board, and reopen_limit_reached
+        """
+        # Continue boarding process (similar to step 3 in main process)
+        actual_current_capacity = len(self.elevator.passengers_onboard) if self.elevator else 0
+        
+        for queue in boarding_queues:
+            # Continuously monitor queue while door is open
+            while True:
+                if len(queue.items) > 0:
+                    # Check capacity
+                    if max_capacity is not None:
+                        available_space = max_capacity - actual_current_capacity
+                        if available_space <= 0:
+                            print(f"{self.env.now:.2f} [{elevator_name}] Capacity reached after reopen. Cannot board more.")
+                            remaining_passengers = list(queue.items)
+                            for p in remaining_passengers:
+                                failed_notification = self.env.event()
+                                failed_notification.succeed()
+                                yield p.boarding_failed_event.put(failed_notification)
+                                failed_to_board_passengers.append(p)
+                            break
+                    
+                    # Board next passenger
+                    passenger = yield queue.get()
+                    boarding_permission_event = self.env.event()
+                    permission_data = {
+                        'completion_event': boarding_permission_event,
+                        'elevator_name': self.elevator_name
+                    }
+                    yield passenger.board_permission_event.put(permission_data)
+                    yield boarding_permission_event
+                    
+                    boarded_passengers.append(passenger)
+                    
+                    # Real-time update
+                    if self.elevator:
+                        self.elevator.passengers_onboard.append(passenger)
+                        yield self.env.process(self.elevator._report_status())
+                        actual_current_capacity = len(self.elevator.passengers_onboard)
+                else:
+                    # Queue empty - wait for sensor timeout
+                    print(f"{self.env.now:.2f} [{elevator_name}] Queue empty after reopen, waiting {self.sensor_timeout}s...")
+                    yield self.env.timeout(self.sensor_timeout)
+                    
+                    if len(queue.items) == 0:
+                        print(f"{self.env.now:.2f} [{elevator_name}] No more passengers after reopen. Closing door.")
+                        break
+                    else:
+                        print(f"{self.env.now:.2f} [{elevator_name}] New passenger detected after reopen! Continuing...")
+        
+        # Now try to close door again (with possibility of another reopen)
+        try:
+            print(f"{self.env.now:.2f} [{elevator_name}] Door Closing after reopen...")
+            self.set_state('CLOSING')
+            yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_START"))
+            
+            self.closing_process = self.env.process(self._do_closing(elevator_name))
+            yield self.closing_process
+            
+            print(f"{self.env.now:.2f} [{elevator_name}] Door Closed.")
+            self.set_state('CLOSED')
+            yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
+            
+            return {
+                "boarded": boarded_passengers,
+                "failed_to_board": failed_to_board_passengers,
+                "reopen_limit_reached": False
+            }
+            
+        except simpy.Interrupt:
+            # Another reopen requested
+            print(f"{self.env.now:.2f} [{elevator_name}Door] Door closing interrupted again for reopen")
+            
+            # Check reopen limit
+            if self.max_reopens_per_stop is not None and self.reopen_count_this_stop > self.max_reopens_per_stop:
+                print(f"{self.env.now:.2f} [{elevator_name}Door] Reopen limit exceeded, completing closing")
+                self.set_state('CLOSED')
+                yield self.env.process(self._broadcast_door_event("DOOR_CLOSING_COMPLETE"))
+                
+                return {
+                    "boarded": boarded_passengers,
+                    "failed_to_board": failed_to_board_passengers,
+                    "reopen_limit_reached": True
+                }
+            else:
+                # Reopen again (recursive)
+                print(f"{self.env.now:.2f} [{elevator_name}Door] Reopening door again...")
+                yield self.env.process(self._do_reopening(elevator_name))
+                
+                # Continue boarding recursively
+                report = yield self.env.process(
+                    self._continue_boarding_after_reopen(boarding_queues, boarded_passengers,
+                                                        failed_to_board_passengers, is_dcs_floor,
+                                                        current_floor, elevator_name, max_capacity)
+                )
+                return report

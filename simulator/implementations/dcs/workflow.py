@@ -85,16 +85,19 @@ class DCSWorkflow(IPassengerWorkflow):
                 # a more sophisticated message routing mechanism.
                 passenger.broker.put(assignment_topic, message)
         
-        # 3. Join the queue (DCS: queue per elevator)
+        # 3. Join the queue (DCS: queue per elevator per direction - 3D structure)
+        # Calculate direction based on destination
+        direction = "UP" if destination_floor > arrival_floor else "DOWN"
+        
         # Use floor_queue_manager to get the correct queue structure
         if passenger.floor_queue_manager:
             current_queue = passenger.floor_queue_manager.get_queue(
                 floor=arrival_floor,
-                elevator_name=assigned_elevator
+                elevator_name=assigned_elevator,
+                direction=direction
             )
         else:
             # Fallback to old structure (backward compatibility)
-            direction = "UP" if destination_floor > arrival_floor else "DOWN"
             current_queue = passenger.floor_queues[arrival_floor][direction]
         
         print(f"{passenger.env.now:.2f} [{passenger.name}] Now waiting in {assigned_elevator} queue at floor {arrival_floor}.")

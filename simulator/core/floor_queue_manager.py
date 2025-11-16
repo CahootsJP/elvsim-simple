@@ -44,11 +44,14 @@ class FloorQueueManager:
             self._queues[floor] = {}
             
             if call_system.is_dcs_floor(floor):
-                # DCS floor: queue per elevator
+                # DCS floor: queue per elevator per direction (3D structure)
                 for elev_name in self.elevator_names:
-                    self._queues[floor][elev_name] = simpy.Store(env)
+                    self._queues[floor][elev_name] = {
+                        "UP": simpy.Store(env),
+                        "DOWN": simpy.Store(env)
+                    }
             else:
-                # Traditional floor: queue per direction
+                # Traditional floor: queue per direction (2D structure)
                 self._queues[floor]["UP"] = simpy.Store(env)
                 self._queues[floor]["DOWN"] = simpy.Store(env)
     
@@ -59,7 +62,7 @@ class FloorQueueManager:
         Args:
             floor: Floor number (1-indexed)
             elevator_name: Elevator name (required for DCS floors)
-            direction: Direction "UP" or "DOWN" (required for Traditional floors)
+            direction: Direction "UP" or "DOWN" (required for both DCS and Traditional floors)
         
         Returns:
             SimPy Store queue
@@ -70,19 +73,23 @@ class FloorQueueManager:
         if floor < 1 or floor > self.num_floors:
             raise ValueError(f"Floor {floor} is out of range (1-{self.num_floors})")
         
+        # Direction is required for both DCS and Traditional floors
+        if direction is None:
+            raise ValueError(f"Floor {floor} requires direction parameter (UP or DOWN)")
+        if direction not in ["UP", "DOWN"]:
+            raise ValueError(f"Direction must be 'UP' or 'DOWN', got '{direction}'")
+        
         if self.call_system.is_dcs_floor(floor):
-            # DCS floor: elevator_name is required
+            # DCS floor: both elevator_name and direction are required (3D structure)
             if elevator_name is None:
                 raise ValueError(f"DCS floor {floor} requires elevator_name parameter")
             if elevator_name not in self._queues[floor]:
                 raise ValueError(f"Elevator {elevator_name} not found in queues for floor {floor}")
-            return self._queues[floor][elevator_name]
+            if direction not in self._queues[floor][elevator_name]:
+                raise ValueError(f"Direction {direction} not found for elevator {elevator_name} at floor {floor}")
+            return self._queues[floor][elevator_name][direction]
         else:
-            # Traditional floor: direction is required
-            if direction is None:
-                raise ValueError(f"Traditional floor {floor} requires direction parameter (UP or DOWN)")
-            if direction not in ["UP", "DOWN"]:
-                raise ValueError(f"Direction must be 'UP' or 'DOWN', got '{direction}'")
+            # Traditional floor: only direction is required (2D structure)
             if direction not in self._queues[floor]:
                 raise ValueError(f"Direction {direction} not found in queues for floor {floor}")
             return self._queues[floor][direction]
@@ -108,12 +115,15 @@ class FloorQueueManager:
         if to_elevator not in self._queues[floor]:
             raise ValueError(f"Destination elevator {to_elevator} not found in queues for floor {floor}")
         
-        from_queue = self._queues[floor][from_elevator]
-        to_queue = self._queues[floor][to_elevator]
+        # Calculate direction based on passenger's destination
+        direction = "UP" if passenger.destination_floor > floor else "DOWN"
+        
+        from_queue = self._queues[floor][from_elevator][direction]
+        to_queue = self._queues[floor][to_elevator][direction]
         
         # Remove passenger from source queue
         if passenger not in from_queue.items:
-            raise ValueError(f"Passenger {passenger.name} not found in source queue {from_elevator} at floor {floor}")
+            raise ValueError(f"Passenger {passenger.name} not found in source queue {from_elevator}[{direction}] at floor {floor}")
         
         from_queue.items.remove(passenger)
         
@@ -140,10 +150,11 @@ class FloorQueueManager:
         all_passengers = []
         
         if self.call_system.is_dcs_floor(floor):
-            # DCS floor: collect from all elevator queues
+            # DCS floor: collect from all elevator queues (both directions)
             for elev_name in self.elevator_names:
                 if elev_name in self._queues[floor]:
-                    all_passengers.extend(self._queues[floor][elev_name].items)
+                    all_passengers.extend(self._queues[floor][elev_name]["UP"].items)
+                    all_passengers.extend(self._queues[floor][elev_name]["DOWN"].items)
         else:
             # Traditional floor: collect from UP and DOWN queues
             if "UP" in self._queues[floor]:
