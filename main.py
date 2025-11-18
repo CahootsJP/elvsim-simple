@@ -22,10 +22,10 @@ from simulator.implementations.hybrid.call_system import LobbyDCSCallSystem, Zon
 from simulator.interfaces.call_system import ICallSystem
 from simulator.implementations.traditional.passenger_behavior import AdaptivePassengerBehavior
 
-# Controller and allocation strategy
-from controller.group_control import GroupControlSystem
-from controller.algorithms.nearest_car import NearestCarStrategy
-from controller.algorithms.test_forced_move import TestForcedMoveStrategy
+# Group Control System and allocation strategy
+from group_control.system import GroupControlSystem
+from group_control.algorithms.nearest_car import NearestCarStrategy
+from group_control.algorithms.test_forced_move import TestForcedMoveStrategy
 
 # Analyzer
 from analyzer.simulation_statistics import SimulationStatistics

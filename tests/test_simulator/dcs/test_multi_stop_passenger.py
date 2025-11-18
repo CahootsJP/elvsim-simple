@@ -27,8 +27,8 @@ from simulator.core.building import Building, FloorDefinition
 from simulator.physics.physics_engine import PhysicsEngine
 from simulator.implementations.hybrid.call_system import LobbyDCSCallSystem
 from simulator.implementations.traditional.passenger_behavior import AdaptivePassengerBehavior
-from controller.group_control import GroupControlSystem
-from controller.algorithms.nearest_car import NearestCarStrategy
+from group_control.system import GroupControlSystem
+from group_control.algorithms.nearest_car import NearestCarStrategy
 
 def test_multi_stop_passenger():
     """Test passenger with multiple journeys using both DCS and traditional systems"""
