@@ -42,7 +42,7 @@ SimPy-based discrete event simulation system with web visualization support.
 - [x] Message Broker for Event-Driven Architecture
 - [x] Selective-Collective Operation Logic
 
-### Group Control System (`controller/`)
+### Group Control System (`group_control/`)
 - [x] Multi-elevator Group Control
 - [x] Nearest Car Strategy (Circular Distance-based)
 - [x] Real-time Status Monitoring
@@ -52,6 +52,8 @@ SimPy-based discrete event simulation system with web visualization support.
 - [x] Repositioning Strategy Interface (`IRepositioningStrategy`)
 - [x] Move Commands (Idle repositioning)
 - [x] Forced Move Commands (Predictive hall call equivalent)
+- [x] Arrival Time Predictor (Physics-based prediction with learning capability)
+- [ ] Waiting Time Strategy (Prediction-based allocation, planned)
 
 ### Data Analysis (`analyzer/`)
 - [x] JSON Lines Format Logging
