@@ -38,6 +38,7 @@ class ElevatorState:
     safe_to_assign: bool  # Safe to assign new calls
     remaining_time_at_current: float  # Remaining time at current floor (seconds)
     current_floor: int
+    advanced_position: int # The floor the elevator can stop at if it brakes immediately
     direction: str
     is_moving: bool
     assigned_calls_count: int  # Number of assigned calls
@@ -55,6 +56,26 @@ class TravelTimeProvider(ABC):
     @abstractmethod
     def get_travel_time(self, elevator_name: str, from_floor: int, to_floor: int) -> float:
         """Get travel time between two floors (seconds)"""
+        pass
+    
+    @abstractmethod
+    def get_position_transition_time(self, elevator_name: str, start_floor: int, target_advanced_pos: int) -> float:
+        """
+        Get time until the elevator's leading position reaches target_advanced_pos.
+        
+        This represents the time from departure at start_floor until the elevator
+        is committed to reaching (or passing) target_advanced_pos.
+        This is crucial for determining if an elevator can still stop at a floor
+        or if it's too late (committed to next floor).
+        
+        Args:
+            elevator_name: Name of elevator
+            start_floor: Floor where movement starts
+            target_advanced_pos: The target leading position (floor)
+            
+        Returns:
+            Time in seconds
+        """
         pass
     
     @abstractmethod
@@ -130,6 +151,18 @@ class PhysicsBasedProvider(TravelTimeProvider):
         if from_floor not in self.travel_time_table:
             return abs(to_floor - from_floor) * 3.0
         return self.travel_time_table[from_floor].get(to_floor, abs(to_floor - from_floor) * 3.0)
+    
+    def get_position_transition_time(self, elevator_name: str, start_floor: int, target_advanced_pos: int) -> float:
+        """
+        Get time to reach a specific advanced position.
+        
+        Phase 1 Implementation:
+        Currently approximates using travel time.
+        TODO: Retrieve precise transition times from PhysicsEngine's acceleration profile.
+        """
+        # For now, use the travel time as a conservative estimate
+        # In reality, the leading position advances faster than the physical position
+        return self.get_travel_time(elevator_name, start_floor, target_advanced_pos)
     
     def get_stop_time(self, floor: int, direction: str) -> float:
         """Get estimated stop duration"""
@@ -255,6 +288,7 @@ class ArrivalTimePredictor:
                 safe_to_assign=False,
                 remaining_time_at_current=float('inf'),
                 current_floor=1,
+                advanced_position=1,
                 direction="NO_DIRECTION",
                 is_moving=False,
                 assigned_calls_count=0
@@ -287,10 +321,15 @@ class ArrivalTimePredictor:
         # TODO: Add door state check (if door.closing_process exists, not safe)
         safe_to_assign = not is_moving and remaining_time > self.safety_margin
         
+        # TODO: Calculate actual advanced position based on speed and braking distance
+        # For now, assume advanced position is same as current (safe default)
+        advanced_position = elev.current_floor
+        
         return ElevatorState(
             safe_to_assign=safe_to_assign,
             remaining_time_at_current=remaining_time,
             current_floor=elev.current_floor,
+            advanced_position=advanced_position,
             direction=elev.direction,
             is_moving=is_moving,
             assigned_calls_count=assigned_calls_count
